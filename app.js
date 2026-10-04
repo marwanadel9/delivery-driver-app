@@ -1,6 +1,4 @@
 javascript
-"use strict";
-
 var SESSION_KEY = "driver_session";
 
 var session = null;
