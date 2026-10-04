@@ -4,134 +4,220 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
+  <meta name="color-scheme" content="light">
   <title>تطبيق المندوب</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 
 <body>
 
-  <main id="login-view" class="view login">
+  <div class="app-shell">
 
-    <div class="login-card">
+    <main id="login-view" class="view login">
 
-      <div class="brand">
-        <div class="brand-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 7h11v9H3z"/>
-            <path d="M14 10h4l3 3v3h-7z"/>
-            <circle cx="7" cy="17.5" r="1.8"/>
-            <circle cx="17" cy="17.5" r="1.8"/>
-          </svg>
+      <section class="login-card">
+
+        <div class="brand">
+
+          <div class="brand-icon">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7h11v9H3z"/>
+              <path d="M14 10h4l3 3v3h-7z"/>
+              <circle cx="7" cy="17.5" r="1.8"/>
+              <circle cx="17" cy="17.5" r="1.8"/>
+            </svg>
+          </div>
+
+          <h1>تطبيق المندوب</h1>
+          <p>إدارة طلبات التوصيل بسهولة</p>
+
         </div>
 
-        <h1>تطبيق المندوب</h1>
-        <p>سجّل الدخول لعرض طلبات التوصيل الخاصة بك</p>
-      </div>
+        <div class="login-title">
+          <h2>تسجيل الدخول</h2>
+          <p>أدخل بيانات الحساب للمتابعة</p>
+        </div>
 
-      <form id="login-form" novalidate>
+        <form id="login-form" novalidate>
 
-        <label for="username">اسم المستخدم</label>
+          <div class="field">
 
-        <input
-          id="username"
-          name="username"
-          type="text"
-          autocomplete="username"
-          autocapitalize="none"
-          spellcheck="false"
-          dir="ltr"
-          placeholder="zain"
-          required
-        >
+            <label for="username">اسم المستخدم</label>
 
-        <label for="password">كلمة المرور</label>
+            <div class="input-wrap">
 
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autocomplete="current-password"
-          dir="ltr"
-          required
-        >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="8" r="3.5"/>
+                <path d="M5 20c.8-3.2 3.1-5 7-5s6.2 1.8 7 5"/>
+              </svg>
 
-        <p id="login-error" class="error" role="alert" hidden></p>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                dir="ltr"
+                placeholder="zain"
+                required
+              >
 
-        <button id="login-btn" type="submit" class="btn btn-primary">
-          تسجيل الدخول
+            </div>
+
+          </div>
+
+          <div class="field">
+
+            <label for="password">كلمة المرور</label>
+
+            <div class="input-wrap">
+
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="5" y="10" width="14" height="10" rx="2"/>
+                <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+              </svg>
+
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                dir="ltr"
+                required
+              >
+
+            </div>
+
+          </div>
+
+          <p id="login-error" class="error" role="alert" hidden></p>
+
+          <button id="login-btn" type="submit" class="btn btn-primary">
+            <span>تسجيل الدخول</span>
+          </button>
+
+        </form>
+
+      </section>
+
+    </main>
+
+    <div id="orders-view" class="view dashboard" hidden>
+
+      <header class="topbar">
+
+        <div class="driver-info">
+
+          <div class="driver-avatar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="8" r="3.5"/>
+              <path d="M5 20c.8-3.2 3.1-5 7-5s6.2 1.8 7 5"/>
+            </svg>
+          </div>
+
+          <div>
+            <span class="welcome">مرحبًا بك</span>
+            <strong id="driver-name"></strong>
+            <small id="sheet-name"></small>
+          </div>
+
+        </div>
+
+        <div class="top-actions">
+
+          <button id="refresh-btn" class="icon-btn" type="button" aria-label="تحديث الطلبات">
+
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 11a8 8 0 1 0-2.3 5.7"/>
+              <path d="M20 4v7h-7"/>
+            </svg>
+
+          </button>
+
+          <button id="logout-btn" class="icon-btn logout-icon" type="button" aria-label="تسجيل الخروج">
+
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 4h4v16h-4"/>
+              <path d="M10 8l-4 4 4 4"/>
+              <path d="M6 12h10"/>
+            </svg>
+
+          </button>
+
+        </div>
+
+      </header>
+
+      <section class="dashboard-title">
+
+        <div>
+          <span>الطلبات</span>
+          <h1>طلبات التوصيل</h1>
+        </div>
+
+        <div class="orders-badge">
+          <span id="stat-pending">0</span>
+          <small>قيد التوصيل</small>
+        </div>
+
+      </section>
+
+      <section class="stats">
+
+        <div class="stat pending-stat">
+
+          <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="8"/>
+              <path d="M12 8v4l2.5 2"/>
+            </svg>
+          </div>
+
+          <div>
+            <span id="stat-pending">0</span>
+            <small>قيد التوصيل</small>
+          </div>
+
+        </div>
+
+        <div class="stat done-stat">
+
+          <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="m7 12 3 3 7-7"/>
+              <circle cx="12" cy="12" r="9"/>
+            </svg>
+          </div>
+
+          <div>
+            <span id="stat-done">0</span>
+            <small>تم التسليم</small>
+          </div>
+
+        </div>
+
+      </section>
+
+      <nav class="tabs" role="tablist">
+
+        <button class="tab active" data-filter="pending" type="button" role="tab">
+          قيد التوصيل
         </button>
 
-      </form>
+        <button class="tab" data-filter="done" type="button" role="tab">
+          تم التسليم
+        </button>
+
+        <button class="tab" data-filter="all" type="button" role="tab">
+          كل الطلبات
+        </button>
+
+      </nav>
+
+      <main id="orders-list" class="orders" aria-live="polite"></main>
 
     </div>
-
-  </main>
-
-  <div id="orders-view" class="view" hidden>
-
-    <header class="topbar">
-
-      <div>
-        <p class="hello">
-          مرحبًا،
-          <strong id="driver-name"></strong>
-        </p>
-
-        <p class="sheet" id="sheet-name"></p>
-      </div>
-
-      <div class="top-actions">
-
-        <button id="refresh-btn" class="icon-btn" type="button" aria-label="تحديث">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M20 11a8 8 0 1 0-2.3 5.7"/>
-            <path d="M20 4v7h-7"/>
-          </svg>
-        </button>
-
-        <button id="logout-btn" class="icon-btn" type="button" aria-label="تسجيل الخروج">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M15 4h4v16h-4"/>
-            <path d="M10 8l-4 4 4 4"/>
-            <path d="M6 12h10"/>
-          </svg>
-        </button>
-
-      </div>
-
-    </header>
-
-    <section class="stats">
-
-      <div class="stat">
-        <span id="stat-pending">0</span>
-        <small>قيد التوصيل</small>
-      </div>
-
-      <div class="stat done">
-        <span id="stat-done">0</span>
-        <small>تم التسليم</small>
-      </div>
-
-    </section>
-
-    <nav class="tabs" role="tablist">
-
-      <button class="tab active" data-filter="pending" type="button" role="tab">
-        قيد التوصيل
-      </button>
-
-      <button class="tab" data-filter="done" type="button" role="tab">
-        تم التسليم
-      </button>
-
-      <button class="tab" data-filter="all" type="button" role="tab">
-        الكل
-      </button>
-
-    </nav>
-
-    <main id="orders-list" class="orders" aria-live="polite"></main>
 
   </div>
 
@@ -143,39 +229,60 @@
 
       <div class="order-head">
 
-        <span class="order-no">
-          فاتورة #
-          <b data-f="order_number"></b>
-        </span>
+        <div class="invoice-info">
+
+          <span class="invoice-label">فاتورة</span>
+
+          <strong class="order-no" data-f="order_number"></strong>
+
+        </div>
 
         <span class="status" data-f="delivery_status"></span>
 
       </div>
 
-      <h2 class="customer" data-f="customer_name"></h2>
+      <div class="customer-box">
+
+        <span class="customer-label">العميل</span>
+
+        <h2 class="customer" data-f="customer_name"></h2>
+
+      </div>
 
       <dl class="meta">
 
-        <div>
+        <div class="meta-item">
+
           <dt>الهاتف</dt>
+
           <dd>
             <a class="phone" data-f="phone" dir="ltr"></a>
           </dd>
+
         </div>
 
-        <div>
+        <div class="meta-item">
+
           <dt>المنطقة</dt>
+
           <dd data-f="area"></dd>
+
         </div>
 
-        <div class="full">
+        <div class="meta-item full">
+
           <dt>تفاصيل الطلب</dt>
+
           <dd class="details" data-f="order_details"></dd>
+
         </div>
 
-        <div class="full location-row">
+        <div class="meta-item full location-row">
+
           <dt>موقع العميل</dt>
+
           <dd>
+
             <a
               class="location-link"
               data-f="location_url"
@@ -183,19 +290,33 @@
               target="_blank"
               rel="noopener noreferrer"
             >
-              فتح الموقع
+              <span>فتح الموقع</span>
+
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 21s7-5.2 7-11a7 7 0 0 0-14 0c0 5.8 7 11 7 11Z"/>
+                <circle cx="12" cy="10" r="2.5"/>
+              </svg>
+
             </a>
+
           </dd>
+
         </div>
 
-        <div class="full">
+        <div class="meta-item full">
+
           <dt>منسق الموعد</dt>
+
           <dd data-f="appointment_coordinator"></dd>
+
         </div>
 
-        <div class="full">
+        <div class="meta-item full">
+
           <dt>ملاحظات</dt>
-          <dd data-f="note"></dd>
+
+          <dd class="note" data-f="note"></dd>
+
         </div>
 
       </dl>
@@ -203,8 +324,11 @@
       <div class="order-foot">
 
         <div class="total">
-          <small>الإجمالي</small>
-          <b data-f="total"></b>
+
+          <span>الإجمالي</span>
+
+          <strong data-f="total"></strong>
+
         </div>
 
         <button class="btn btn-deliver" type="button">
