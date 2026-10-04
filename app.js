@@ -1,12 +1,17 @@
+```javascript
 const API_BASE = "";
 
 const SESSION_KEY = "driver_session";
 
 let session = null;
 let currentOrders = [];
+let activeTab = "pending";
+let toastTimer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     session = loadSession();
+
+    setupEvents();
 
     if (session?.access_token) {
         showDashboard();
@@ -15,13 +20,19 @@ document.addEventListener("DOMContentLoaded", () => {
         clearSession();
         showLogin();
     }
+});
 
+function setupEvents() {
     const loginBtn = document.getElementById("login-btn");
+    const passwordInput = document.getElementById("password");
+    const usernameInput = document.getElementById("username");
+    const refreshBtn = document.getElementById("refresh-btn");
+    const logoutBtn = document.getElementById("logout-btn");
+
     if (loginBtn) {
         loginBtn.addEventListener("click", login);
     }
 
-    const passwordInput = document.getElementById("password");
     if (passwordInput) {
         passwordInput.addEventListener("keydown", event => {
             if (event.key === "Enter") {
@@ -30,7 +41,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    const usernameInput = document.getElementById("username");
     if (usernameInput) {
         usernameInput.addEventListener("keydown", event => {
             if (event.key === "Enter") {
@@ -39,42 +49,47 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    const refreshBtn = document.getElementById("refresh-btn");
     if (refreshBtn) {
         refreshBtn.addEventListener("click", loadOrders);
     }
 
-    const logoutBtn = document.getElementById("logout-btn");
     if (logoutBtn) {
         logoutBtn.addEventListener("click", logout);
     }
 
-    document.querySelectorAll(".tab-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll(".tab-btn").forEach(x => {
-                x.classList.remove("active");
+    document.querySelectorAll(".tab-btn").forEach(button => {
+        button.addEventListener("click", () => {
+            document.querySelectorAll(".tab-btn").forEach(item => {
+                item.classList.remove("active");
             });
 
-            btn.classList.add("active");
+            button.classList.add("active");
+
+            activeTab = button.dataset.tab || "pending";
+
             renderOrders();
         });
     });
-});
+}
 
 function loadSession() {
     try {
-        const data = localStorage.getItem(SESSION_KEY);
+        const saved = localStorage.getItem(SESSION_KEY);
 
-        if (!data) {
+        if (!saved) {
             return null;
         }
 
-        const parsed = JSON.parse(data);
+        const parsed = JSON.parse(saved);
 
         if (parsed?.session?.access_token) {
             return {
                 ...parsed,
-                access_token: parsed.session.access_token
+                access_token: parsed.session.access_token,
+                refresh_token:
+                    parsed.refresh_token ||
+                    parsed.session.refresh_token ||
+                    ""
             };
         }
 
@@ -92,24 +107,27 @@ function loadSession() {
 }
 
 function saveSession(data) {
-    let savedData = data;
+    const accessToken =
+        data?.access_token ||
+        data?.token ||
+        data?.session?.access_token ||
+        "";
 
-    if (data?.session?.access_token && !data.access_token) {
-        savedData = {
-            ...data,
-            access_token: data.session.access_token
-        };
-    }
+    const refreshToken =
+        data?.refresh_token ||
+        data?.session?.refresh_token ||
+        "";
 
-    if (data?.token && !data.access_token) {
-        savedData = {
-            ...data,
-            access_token: data.token
-        };
-    }
+    session = {
+        ...(data || {}),
+        access_token: accessToken,
+        refresh_token: refreshToken
+    };
 
-    session = savedData;
-    localStorage.setItem(SESSION_KEY, JSON.stringify(savedData));
+    localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify(session)
+    );
 }
 
 function clearSession() {
@@ -117,9 +135,10 @@ function clearSession() {
     localStorage.removeItem(SESSION_KEY);
 }
 
-function showLogin() {
+function showLogin(message = "") {
     const loginView = document.getElementById("login-view");
     const dashboardView = document.getElementById("dashboard-view");
+    const errorBox = document.getElementById("login-error");
 
     if (loginView) {
         loginView.style.display = "";
@@ -127,6 +146,11 @@ function showLogin() {
 
     if (dashboardView) {
         dashboardView.style.display = "none";
+    }
+
+    if (errorBox) {
+        errorBox.textContent = message;
+        errorBox.style.display = message ? "block" : "none";
     }
 }
 
@@ -165,14 +189,20 @@ async function login() {
     const errorBox = document.getElementById("login-error");
     const loginBtn = document.getElementById("login-btn");
 
-    const username = usernameInput?.value.trim() || "";
-    const password = passwordInput?.value || "";
+    const username =
+        usernameInput?.value.trim().toLowerCase() || "";
+
+    const password =
+        passwordInput?.value || "";
 
     if (!username || !password) {
         if (errorBox) {
-            errorBox.textContent = "اكتب اسم المستخدم وكلمة المرور";
+            errorBox.textContent =
+                "اكتب اسم المستخدم وكلمة المرور";
+
             errorBox.style.display = "block";
         }
+
         return;
     }
 
@@ -187,18 +217,22 @@ async function login() {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/api/login`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                username,
-                password
-            })
-        });
+        const response = await fetch(
+            `${API_BASE}/api/login`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    username,
+                    password
+                })
+            }
+        );
 
-        const data = await response.json().catch(() => ({}));
+        const data =
+            await response.json().catch(() => ({}));
 
         if (!response.ok) {
             throw new Error(
@@ -215,7 +249,9 @@ async function login() {
             "";
 
         if (!accessToken) {
-            throw new Error("تم الدخول لكن لم يتم استلام جلسة الدخول");
+            throw new Error(
+                "تم الدخول لكن لم يتم استلام جلسة الدخول"
+            );
         }
 
         saveSession({
@@ -223,27 +259,129 @@ async function login() {
             access_token: accessToken
         });
 
+        if (passwordInput) {
+            passwordInput.value = "";
+        }
+
         showDashboard();
 
         await loadOrders();
 
     } catch (error) {
         clearSession();
-        showLogin();
-
-        if (errorBox) {
-            errorBox.textContent =
-                error.message ||
-                "حدث خطأ أثناء تسجيل الدخول";
-
-            errorBox.style.display = "block";
-        }
+        showLogin(
+            error.message ||
+            "حدث خطأ أثناء تسجيل الدخول"
+        );
     } finally {
         if (loginBtn) {
             loginBtn.disabled = false;
             loginBtn.textContent = "تسجيل الدخول";
         }
     }
+}
+
+async function refreshSession() {
+    if (!session?.refresh_token) {
+        return false;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_BASE}/api/refresh`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    refresh_token: session.refresh_token
+                })
+            }
+        );
+
+        const data =
+            await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            return false;
+        }
+
+        const accessToken =
+            data.access_token ||
+            data.token ||
+            data.session?.access_token ||
+            "";
+
+        if (!accessToken) {
+            return false;
+        }
+
+        saveSession({
+            ...session,
+            ...data,
+            access_token: accessToken,
+            refresh_token:
+                data.refresh_token ||
+                data.session?.refresh_token ||
+                session.refresh_token
+        });
+
+        return true;
+
+    } catch {
+        return false;
+    }
+}
+
+async function authorizedFetch(
+    url,
+    options = {},
+    retry = true
+) {
+    if (!session?.access_token) {
+        throw new Error("جلسة الدخول غير موجودة");
+    }
+
+    const headers = {
+        ...(options.headers || {}),
+        Authorization:
+            `Bearer ${session.access_token}`
+    };
+
+    if (
+        options.body &&
+        !headers["Content-Type"]
+    ) {
+        headers["Content-Type"] =
+            "application/json";
+    }
+
+    const response = await fetch(
+        url,
+        {
+            ...options,
+            headers
+        }
+    );
+
+    if (
+        response.status === 401 &&
+        retry
+    ) {
+        const refreshed =
+            await refreshSession();
+
+        if (refreshed) {
+            return authorizedFetch(
+                url,
+                options,
+                false
+            );
+        }
+    }
+
+    return response;
 }
 
 async function loadOrders() {
@@ -253,7 +391,11 @@ async function loadOrders() {
         return;
     }
 
-    const ordersList = document.getElementById("orders-list");
+    const ordersList =
+        document.getElementById("orders-list");
+
+    const refreshBtn =
+        document.getElementById("refresh-btn");
 
     if (ordersList) {
         ordersList.innerHTML = `
@@ -263,21 +405,30 @@ async function loadOrders() {
         `;
     }
 
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.classList.add("loading");
+    }
+
     try {
-        const response = await fetch(`${API_BASE}/api/orders`, {
-            method: "GET",
-            headers: {
-                "Authorization": `Bearer ${session.access_token}`
-            }
-        });
+        const response =
+            await authorizedFetch(
+                `${API_BASE}/api/orders`,
+                {
+                    method: "GET"
+                }
+            );
 
         if (response.status === 401) {
             clearSession();
-            showLogin();
+            showLogin(
+                "انتهت جلسة الدخول، يرجى تسجيل الدخول مرة أخرى"
+            );
             return;
         }
 
-        const data = await response.json().catch(() => ({}));
+        const data =
+            await response.json().catch(() => ({}));
 
         if (!response.ok) {
             throw new Error(
@@ -287,18 +438,21 @@ async function loadOrders() {
             );
         }
 
-        currentOrders = Array.isArray(data)
-            ? data
-            : Array.isArray(data.orders)
-                ? data.orders
-                : [];
+        currentOrders =
+            Array.isArray(data)
+                ? data
+                : Array.isArray(data.orders)
+                    ? data.orders
+                    : [];
 
         if (data.sheet) {
-            session.sheet_name = data.sheet;
+            session.sheet_name =
+                data.sheet;
         }
 
         if (data.mandoub_name) {
-            session.mandoub_name = data.mandoub_name;
+            session.mandoub_name =
+                data.mandoub_name;
         }
 
         localStorage.setItem(
@@ -306,6 +460,7 @@ async function loadOrders() {
             JSON.stringify(session)
         );
 
+        showDashboard();
         updateStats();
         renderOrders();
 
@@ -314,78 +469,110 @@ async function loadOrders() {
             ordersList.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">⚠️</div>
-                    <div>${escapeHtml(error.message || "حدث خطأ")}</div>
+                    <div>
+                        ${escapeHtml(
+                            error.message ||
+                            "حدث خطأ أثناء تحميل الطلبات"
+                        )}
+                    </div>
                 </div>
             `;
+        }
+    } finally {
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.classList.remove("loading");
         }
     }
 }
 
 function updateStats() {
-    const pending = currentOrders.filter(order => {
-        return getStatus(order) !== "delivered";
-    }).length;
+    const pending =
+        currentOrders.filter(order =>
+            !isDelivered(order)
+        ).length;
 
-    const delivered = currentOrders.filter(order => {
-        return getStatus(order) === "delivered";
-    }).length;
+    const delivered =
+        currentOrders.filter(order =>
+            isDelivered(order)
+        ).length;
 
-    document.querySelectorAll("#stat-pending").forEach(el => {
-        el.textContent = pending;
+    document.querySelectorAll(
+        "#stat-pending"
+    ).forEach(element => {
+        element.textContent =
+            pending.toLocaleString("ar-EG");
     });
 
-    document.querySelectorAll("#stat-delivered").forEach(el => {
-        el.textContent = delivered;
+    document.querySelectorAll(
+        "#stat-delivered"
+    ).forEach(element => {
+        element.textContent =
+            delivered.toLocaleString("ar-EG");
     });
 }
 
 function renderOrders() {
-    const ordersList = document.getElementById("orders-list");
+    const ordersList =
+        document.getElementById("orders-list");
 
     if (!ordersList) {
         return;
     }
 
-    const activeTab =
-        document.querySelector(".tab-btn.active")?.dataset?.tab ||
-        "pending";
-
-    let orders = currentOrders;
+    let orders =
+        currentOrders;
 
     if (activeTab === "pending") {
-        orders = currentOrders.filter(order => {
-            return getStatus(order) !== "delivered";
-        });
+        orders =
+            currentOrders.filter(order =>
+                !isDelivered(order)
+            );
     }
 
     if (activeTab === "delivered") {
-        orders = currentOrders.filter(order => {
-            return getStatus(order) === "delivered";
-        });
+        orders =
+            currentOrders.filter(order =>
+                isDelivered(order)
+            );
     }
 
     if (!orders.length) {
         ordersList.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">📦</div>
-                <div>لا توجد طلبات</div>
+                <div>
+                    ${
+                        activeTab === "delivered"
+                            ? "لا توجد طلبات مسلّمة"
+                            : "لا توجد طلبات قيد التوصيل"
+                    }
+                </div>
             </div>
         `;
+
         return;
     }
 
-    ordersList.innerHTML = orders
-        .map(order => createOrderCard(order))
-        .join("");
+    ordersList.innerHTML =
+        orders
+            .map(order =>
+                createOrderCard(order)
+            )
+            .join("");
 
-    ordersList.querySelectorAll(".deliver-btn").forEach(button => {
-        button.addEventListener("click", async () => {
-            await markDelivered(
-                button.dataset.id,
-                button
+    ordersList
+        .querySelectorAll(".deliver-btn")
+        .forEach(button => {
+            button.addEventListener(
+                "click",
+                () =>
+                    markDelivered(
+                        button.dataset.id,
+                        button
+                    )
             );
         });
-    });
 }
 
 function createOrderCard(order) {
@@ -433,51 +620,85 @@ function createOrderCard(order) {
         order.total ??
         0;
 
-    const status = getStatus(order);
-    const delivered = status === "delivered";
+    const delivered =
+        isDelivered(order);
 
-    const safePhone = normalizePhone(phone);
+    const safePhone =
+        normalizePhone(phone);
 
-    const callButton = safePhone
-        ? `
-            <a
-                class="call-btn"
-                href="tel:${escapeAttribute(safePhone)}"
-            >
-                📞 اتصال بالعميل
-            </a>
-        `
-        : "";
+    const safeLocation =
+        normalizeLocation(location);
 
-    const locationButton = location
-        ? `
-            <a
-                class="location-btn"
-                href="${escapeAttribute(location)}"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                📍 فتح الموقع
-            </a>
-        `
-        : "";
+    const callButton =
+        safePhone
+            ? `
+                <a
+                    class="call-btn"
+                    href="tel:${escapeAttribute(
+                        safePhone
+                    )}"
+                >
+                    📞 اتصال بالعميل
+                </a>
+            `
+            : "";
+
+    const locationButton =
+        safeLocation
+            ? `
+                <a
+                    class="location-btn"
+                    href="${escapeAttribute(
+                        safeLocation
+                    )}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    📍 فتح الموقع
+                </a>
+            `
+            : "";
 
     return `
-        <div class="order-card ${delivered ? "delivered" : ""}">
+        <article
+            class="order-card ${
+                delivered
+                    ? "delivered"
+                    : ""
+            }"
+        >
+
             <div class="order-header">
+
                 <div class="order-number">
-                    طلب #${escapeHtml(String(orderNumber))}
+                    طلب #${escapeHtml(
+                        String(orderNumber)
+                    )}
                 </div>
 
-                <div class="order-status ${delivered ? "delivered" : "pending"}">
-                    ${delivered ? "تم التسليم" : "قيد التوصيل"}
+                <div
+                    class="order-status ${
+                        delivered
+                            ? "delivered"
+                            : "pending"
+                    }"
+                >
+                    ${
+                        delivered
+                            ? "تم التسليم"
+                            : "قيد التوصيل"
+                    }
                 </div>
+
             </div>
 
             <div class="order-info">
 
                 <div class="info-row">
-                    <span class="info-label">العميل</span>
+                    <span class="info-label">
+                        العميل
+                    </span>
+
                     <span class="info-value">
                         ${escapeHtml(customer)}
                     </span>
@@ -487,8 +708,11 @@ function createOrderCard(order) {
                     phone
                         ? `
                             <div class="info-row">
-                                <span class="info-label">رقم الهاتف</span>
-                                <span class="info-value">
+                                <span class="info-label">
+                                    رقم الهاتف
+                                </span>
+
+                                <span class="info-value phone-value">
                                     ${escapeHtml(phone)}
                                 </span>
                             </div>
@@ -500,7 +724,10 @@ function createOrderCard(order) {
                     area
                         ? `
                             <div class="info-row">
-                                <span class="info-label">المنطقة</span>
+                                <span class="info-label">
+                                    المنطقة
+                                </span>
+
                                 <span class="info-value">
                                     ${escapeHtml(area)}
                                 </span>
@@ -512,8 +739,11 @@ function createOrderCard(order) {
                 ${
                     details
                         ? `
-                            <div class="info-row">
-                                <span class="info-label">الطلب</span>
+                            <div class="info-row details-row">
+                                <span class="info-label">
+                                    الطلب
+                                </span>
+
                                 <span class="info-value">
                                     ${escapeHtml(details)}
                                 </span>
@@ -526,9 +756,14 @@ function createOrderCard(order) {
                     coordinator
                         ? `
                             <div class="info-row">
-                                <span class="info-label">منسق الموعد</span>
+                                <span class="info-label">
+                                    منسق الموعد
+                                </span>
+
                                 <span class="info-value">
-                                    ${escapeHtml(coordinator)}
+                                    ${escapeHtml(
+                                        coordinator
+                                    )}
                                 </span>
                             </div>
                         `
@@ -538,8 +773,11 @@ function createOrderCard(order) {
                 ${
                     note
                         ? `
-                            <div class="info-row">
-                                <span class="info-label">ملاحظات</span>
+                            <div class="info-row note-row">
+                                <span class="info-label">
+                                    ملاحظات
+                                </span>
+
                                 <span class="info-value">
                                     ${escapeHtml(note)}
                                 </span>
@@ -549,7 +787,10 @@ function createOrderCard(order) {
                 }
 
                 <div class="info-row total-row">
-                    <span class="info-label">الإجمالي</span>
+                    <span class="info-label">
+                        الإجمالي
+                    </span>
+
                     <span class="info-value">
                         ${formatTotal(total)}
                     </span>
@@ -572,6 +813,7 @@ function createOrderCard(order) {
                         `
                         : `
                             <button
+                                type="button"
                                 class="deliver-btn"
                                 data-id="${escapeAttribute(
                                     String(
@@ -587,11 +829,15 @@ function createOrderCard(order) {
                 }
 
             </div>
-        </div>
+
+        </article>
     `;
 }
 
-async function markDelivered(orderId, button) {
+async function markDelivered(
+    orderId,
+    button
+) {
     if (!session?.access_token) {
         showLogin();
         return;
@@ -602,33 +848,74 @@ async function markDelivered(orderId, button) {
             "رقم الطلب غير موجود",
             "error"
         );
+
+        return;
+    }
+
+    const order =
+        currentOrders.find(item =>
+            String(
+                item.id ??
+                item.order_number
+            ) === String(orderId)
+        );
+
+    const orderNumber =
+        order?.order_number ??
+        order?.id ??
+        orderId;
+
+    const customer =
+        order?.customer_name ||
+        "";
+
+    const confirmationText =
+        customer
+            ? `هل تريد تأكيد تسليم الطلب #${orderNumber} للعميل ${customer}؟`
+            : `هل تريد تأكيد تسليم الطلب #${orderNumber}؟`;
+
+    if (!window.confirm(
+        confirmationText
+    )) {
         return;
     }
 
     if (button) {
         button.disabled = true;
-        button.textContent = "جاري التسجيل...";
+        button.textContent =
+            "جاري تسجيل التسليم...";
     }
 
     try {
-        const response = await fetch(`${API_BASE}/api/deliver`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${session.access_token}`
-            },
-            body: JSON.stringify({
-                order_id: orderId
-            })
-        });
-
-        const data = await response.json().catch(() => ({}));
+        const response =
+            await authorizedFetch(
+                `${API_BASE}/api/deliver`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body: JSON.stringify({
+                        order_id: orderId,
+                        orderId: orderId
+                    })
+                }
+            );
 
         if (response.status === 401) {
             clearSession();
-            showLogin();
+            showLogin(
+                "انتهت جلسة الدخول، يرجى تسجيل الدخول مرة أخرى"
+            );
+
             return;
         }
+
+        const data =
+            await response.json().catch(
+                () => ({})
+            );
 
         if (!response.ok) {
             throw new Error(
@@ -638,45 +925,68 @@ async function markDelivered(orderId, button) {
             );
         }
 
-        const order = currentOrders.find(item => {
-            return String(
-                item.id ??
-                item.order_number
-            ) === String(orderId);
-        });
+        const target =
+            currentOrders.find(item =>
+                String(
+                    item.id ??
+                    item.order_number
+                ) === String(orderId)
+            );
 
-        if (order) {
-            order.delivery_status = "delivered";
-            order.status = "delivered";
+        if (target) {
+            target.delivery_status =
+                "delivered";
+
+            target.status =
+                "delivered";
         }
 
         updateStats();
         renderOrders();
 
         showToast(
-            "تم تسجيل الطلب كمُسلّم",
+            "تم تسجيل التسليم بنجاح ✓",
             "success"
         );
 
     } catch (error) {
         if (button) {
             button.disabled = false;
-            button.textContent = "✓ تم التسليم";
+            button.textContent =
+                "✓ تم التسليم";
         }
 
         showToast(
-            error.message || "حدث خطأ",
+            error.message ||
+            "حدث خطأ أثناء تسجيل التسليم",
             "error"
         );
     }
 }
 
+function isDelivered(order) {
+    const status =
+        String(
+            order?.delivery_status ??
+            order?.status ??
+            ""
+        )
+            .trim()
+            .toLowerCase();
+
+    return (
+        status === "delivered" ||
+        status === "done" ||
+        status === "تم" ||
+        status.includes("تم التسليم") ||
+        status.includes("مسلم")
+    );
+}
+
 function getStatus(order) {
-    return String(
-        order.delivery_status ??
-        order.status ??
-        "pending"
-    ).toLowerCase();
+    return isDelivered(order)
+        ? "delivered"
+        : "pending";
 }
 
 function normalizePhone(phone) {
@@ -684,69 +994,160 @@ function normalizePhone(phone) {
         return "";
     }
 
-    let value = String(phone).trim();
-
-    value = value.replace(/[^\d+]/g, "");
+    let value =
+        String(phone)
+            .trim()
+            .replace(/[^\d+]/g, "");
 
     if (value.startsWith("00")) {
-        value = "+" + value.substring(2);
+        value =
+            "+" +
+            value.substring(2);
     }
 
     if (value.startsWith("05")) {
-        value = "+971" + value.substring(1);
+        value =
+            "+971" +
+            value.substring(1);
     }
 
-    if (value.startsWith("5") && value.length === 9) {
-        value = "+971" + value;
+    if (
+        value.startsWith("5") &&
+        value.length === 9
+    ) {
+        value =
+            "+971" +
+            value;
+    }
+
+    return value;
+}
+
+function normalizeLocation(location) {
+    if (!location) {
+        return "";
+    }
+
+    const value =
+        String(location).trim();
+
+    if (
+        !/^https?:\/\//i.test(value)
+    ) {
+        return "";
+    }
+
+    if (
+        /open%20location/i.test(value) ||
+        /\/Open%20Location/i.test(value)
+    ) {
+        return "";
     }
 
     return value;
 }
 
 function formatTotal(value) {
-    const number = Number(value);
+    if (
+        value === null ||
+        value === undefined ||
+        String(value).trim() === ""
+    ) {
+        return "0 درهم";
+    }
 
-    if (Number.isNaN(number)) {
+    const number =
+        Number(value);
+
+    if (
+        Number.isFinite(number)
+    ) {
         return (
-            escapeHtml(String(value || "")) +
+            number.toLocaleString(
+                "ar-EG",
+                {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2
+                }
+            ) +
             " درهم"
         );
     }
 
-    return `${number.toFixed(2)} درهم`;
+    return (
+        escapeHtml(
+            String(value)
+        ) +
+        " درهم"
+    );
 }
 
-function showToast(message, type = "success") {
-    const toast = document.getElementById("toast");
+function showToast(
+    message,
+    type = "success"
+) {
+    const toast =
+        document.getElementById(
+            "toast"
+        );
 
     if (!toast) {
         return;
     }
 
-    toast.textContent = message;
-    toast.className = `toast ${type}`;
-    toast.style.display = "block";
+    clearTimeout(toastTimer);
 
-    setTimeout(() => {
-        toast.style.display = "none";
-    }, 3000);
+    toast.textContent =
+        message;
+
+    toast.className =
+        `toast ${type}`;
+
+    toast.style.display =
+        "block";
+
+    toastTimer =
+        setTimeout(() => {
+            toast.style.display =
+                "none";
+        }, 3000);
 }
 
 function logout() {
     clearSession();
+
     currentOrders = [];
+
+    activeTab = "pending";
+
     showLogin();
 }
 
 function escapeHtml(value) {
     return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
 
 function escapeAttribute(value) {
     return escapeHtml(value);
 }
+```
