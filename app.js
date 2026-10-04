@@ -8,16 +8,35 @@ let currentOrders = [];
 document.addEventListener("DOMContentLoaded", () => {
     session = loadSession();
 
-    if (session) {
+    if (session?.access_token) {
         showDashboard();
         loadOrders();
     } else {
+        clearSession();
         showLogin();
     }
 
     const loginBtn = document.getElementById("login-btn");
     if (loginBtn) {
         loginBtn.addEventListener("click", login);
+    }
+
+    const passwordInput = document.getElementById("password");
+    if (passwordInput) {
+        passwordInput.addEventListener("keydown", event => {
+            if (event.key === "Enter") {
+                login();
+            }
+        });
+    }
+
+    const usernameInput = document.getElementById("username");
+    if (usernameInput) {
+        usernameInput.addEventListener("keydown", event => {
+            if (event.key === "Enter") {
+                login();
+            }
+        });
     }
 
     const refreshBtn = document.getElementById("refresh-btn");
@@ -32,7 +51,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.querySelectorAll(".tab-btn").forEach(btn => {
         btn.addEventListener("click", () => {
-            document.querySelectorAll(".tab-btn").forEach(x => x.classList.remove("active"));
+            document.querySelectorAll(".tab-btn").forEach(x => {
+                x.classList.remove("active");
+            });
+
             btn.classList.add("active");
             renderOrders();
         });
@@ -42,15 +64,52 @@ document.addEventListener("DOMContentLoaded", () => {
 function loadSession() {
     try {
         const data = localStorage.getItem(SESSION_KEY);
-        return data ? JSON.parse(data) : null;
+
+        if (!data) {
+            return null;
+        }
+
+        const parsed = JSON.parse(data);
+
+        if (parsed?.session?.access_token) {
+            return {
+                ...parsed,
+                access_token: parsed.session.access_token
+            };
+        }
+
+        if (parsed?.token && !parsed.access_token) {
+            return {
+                ...parsed,
+                access_token: parsed.token
+            };
+        }
+
+        return parsed;
     } catch {
         return null;
     }
 }
 
 function saveSession(data) {
-    session = data;
-    localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+    let savedData = data;
+
+    if (data?.session?.access_token && !data.access_token) {
+        savedData = {
+            ...data,
+            access_token: data.session.access_token
+        };
+    }
+
+    if (data?.token && !data.access_token) {
+        savedData = {
+            ...data,
+            access_token: data.token
+        };
+    }
+
+    session = savedData;
+    localStorage.setItem(SESSION_KEY, JSON.stringify(savedData));
 }
 
 function clearSession() {
@@ -62,16 +121,26 @@ function showLogin() {
     const loginView = document.getElementById("login-view");
     const dashboardView = document.getElementById("dashboard-view");
 
-    if (loginView) loginView.style.display = "";
-    if (dashboardView) dashboardView.style.display = "none";
+    if (loginView) {
+        loginView.style.display = "";
+    }
+
+    if (dashboardView) {
+        dashboardView.style.display = "none";
+    }
 }
 
 function showDashboard() {
     const loginView = document.getElementById("login-view");
     const dashboardView = document.getElementById("dashboard-view");
 
-    if (loginView) loginView.style.display = "none";
-    if (dashboardView) dashboardView.style.display = "";
+    if (loginView) {
+        loginView.style.display = "none";
+    }
+
+    if (dashboardView) {
+        dashboardView.style.display = "";
+    }
 
     const driverName = document.getElementById("driver-name");
     const sheetName = document.getElementById("sheet-name");
@@ -132,17 +201,41 @@ async function login() {
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            throw new Error(data.error || data.message || "بيانات الدخول غير صحيحة");
+            throw new Error(
+                data.error ||
+                data.message ||
+                "بيانات الدخول غير صحيحة"
+            );
         }
 
-        saveSession(data);
+        const accessToken =
+            data.access_token ||
+            data.token ||
+            data.session?.access_token ||
+            "";
+
+        if (!accessToken) {
+            throw new Error("تم الدخول لكن لم يتم استلام جلسة الدخول");
+        }
+
+        saveSession({
+            ...data,
+            access_token: accessToken
+        });
 
         showDashboard();
+
         await loadOrders();
 
     } catch (error) {
+        clearSession();
+        showLogin();
+
         if (errorBox) {
-            errorBox.textContent = error.message || "حدث خطأ أثناء تسجيل الدخول";
+            errorBox.textContent =
+                error.message ||
+                "حدث خطأ أثناء تسجيل الدخول";
+
             errorBox.style.display = "block";
         }
     } finally {
@@ -155,6 +248,7 @@ async function login() {
 
 async function loadOrders() {
     if (!session?.access_token) {
+        clearSession();
         showLogin();
         return;
     }
@@ -186,7 +280,11 @@ async function loadOrders() {
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            throw new Error(data.error || "فشل تحميل الطلبات");
+            throw new Error(
+                data.error ||
+                data.message ||
+                "فشل تحميل الطلبات"
+            );
         }
 
         currentOrders = Array.isArray(data)
@@ -203,7 +301,10 @@ async function loadOrders() {
             session.mandoub_name = data.mandoub_name;
         }
 
-        localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        localStorage.setItem(
+            SESSION_KEY,
+            JSON.stringify(session)
+        );
 
         updateStats();
         renderOrders();
@@ -229,13 +330,11 @@ function updateStats() {
         return getStatus(order) === "delivered";
     }).length;
 
-    const pendingElements = document.querySelectorAll("#stat-pending");
-    pendingElements.forEach(el => {
+    document.querySelectorAll("#stat-pending").forEach(el => {
         el.textContent = pending;
     });
 
-    const deliveredElements = document.querySelectorAll("#stat-delivered");
-    deliveredElements.forEach(el => {
+    document.querySelectorAll("#stat-delivered").forEach(el => {
         el.textContent = delivered;
     });
 }
@@ -254,11 +353,15 @@ function renderOrders() {
     let orders = currentOrders;
 
     if (activeTab === "pending") {
-        orders = currentOrders.filter(order => getStatus(order) !== "delivered");
+        orders = currentOrders.filter(order => {
+            return getStatus(order) !== "delivered";
+        });
     }
 
     if (activeTab === "delivered") {
-        orders = currentOrders.filter(order => getStatus(order) === "delivered");
+        orders = currentOrders.filter(order => {
+            return getStatus(order) === "delivered";
+        });
     }
 
     if (!orders.length) {
@@ -271,12 +374,16 @@ function renderOrders() {
         return;
     }
 
-    ordersList.innerHTML = orders.map(order => createOrderCard(order)).join("");
+    ordersList.innerHTML = orders
+        .map(order => createOrderCard(order))
+        .join("");
 
     ordersList.querySelectorAll(".deliver-btn").forEach(button => {
         button.addEventListener("click", async () => {
-            const orderId = button.dataset.id;
-            await markDelivered(orderId, button);
+            await markDelivered(
+                button.dataset.id,
+                button
+            );
         });
     });
 }
@@ -371,7 +478,9 @@ function createOrderCard(order) {
 
                 <div class="info-row">
                     <span class="info-label">العميل</span>
-                    <span class="info-value">${escapeHtml(customer)}</span>
+                    <span class="info-value">
+                        ${escapeHtml(customer)}
+                    </span>
                 </div>
 
                 ${
@@ -379,7 +488,9 @@ function createOrderCard(order) {
                         ? `
                             <div class="info-row">
                                 <span class="info-label">رقم الهاتف</span>
-                                <span class="info-value">${escapeHtml(phone)}</span>
+                                <span class="info-value">
+                                    ${escapeHtml(phone)}
+                                </span>
                             </div>
                         `
                         : ""
@@ -390,7 +501,9 @@ function createOrderCard(order) {
                         ? `
                             <div class="info-row">
                                 <span class="info-label">المنطقة</span>
-                                <span class="info-value">${escapeHtml(area)}</span>
+                                <span class="info-value">
+                                    ${escapeHtml(area)}
+                                </span>
                             </div>
                         `
                         : ""
@@ -401,7 +514,9 @@ function createOrderCard(order) {
                         ? `
                             <div class="info-row">
                                 <span class="info-label">الطلب</span>
-                                <span class="info-value">${escapeHtml(details)}</span>
+                                <span class="info-value">
+                                    ${escapeHtml(details)}
+                                </span>
                             </div>
                         `
                         : ""
@@ -412,7 +527,9 @@ function createOrderCard(order) {
                         ? `
                             <div class="info-row">
                                 <span class="info-label">منسق الموعد</span>
-                                <span class="info-value">${escapeHtml(coordinator)}</span>
+                                <span class="info-value">
+                                    ${escapeHtml(coordinator)}
+                                </span>
                             </div>
                         `
                         : ""
@@ -423,7 +540,9 @@ function createOrderCard(order) {
                         ? `
                             <div class="info-row">
                                 <span class="info-label">ملاحظات</span>
-                                <span class="info-value">${escapeHtml(note)}</span>
+                                <span class="info-value">
+                                    ${escapeHtml(note)}
+                                </span>
                             </div>
                         `
                         : ""
@@ -431,13 +550,17 @@ function createOrderCard(order) {
 
                 <div class="info-row total-row">
                     <span class="info-label">الإجمالي</span>
-                    <span class="info-value">${formatTotal(total)}</span>
+                    <span class="info-value">
+                        ${formatTotal(total)}
+                    </span>
                 </div>
 
             </div>
 
             <div class="order-actions">
+
                 ${callButton}
+
                 ${locationButton}
 
                 ${
@@ -450,12 +573,19 @@ function createOrderCard(order) {
                         : `
                             <button
                                 class="deliver-btn"
-                                data-id="${escapeAttribute(String(order.id ?? orderNumber))}"
+                                data-id="${escapeAttribute(
+                                    String(
+                                        order.id ??
+                                        order.order_number ??
+                                        ""
+                                    )
+                                )}"
                             >
                                 ✓ تم التسليم
                             </button>
                         `
                 }
+
             </div>
         </div>
     `;
@@ -468,7 +598,10 @@ async function markDelivered(orderId, button) {
     }
 
     if (!orderId) {
-        showToast("رقم الطلب غير موجود", "error");
+        showToast(
+            "رقم الطلب غير موجود",
+            "error"
+        );
         return;
     }
 
@@ -498,11 +631,18 @@ async function markDelivered(orderId, button) {
         }
 
         if (!response.ok) {
-            throw new Error(data.error || "فشل تسجيل التسليم");
+            throw new Error(
+                data.error ||
+                data.message ||
+                "فشل تسجيل التسليم"
+            );
         }
 
         const order = currentOrders.find(item => {
-            return String(item.id ?? item.order_number) === String(orderId);
+            return String(
+                item.id ??
+                item.order_number
+            ) === String(orderId);
         });
 
         if (order) {
@@ -513,7 +653,10 @@ async function markDelivered(orderId, button) {
         updateStats();
         renderOrders();
 
-        showToast("تم تسجيل الطلب كمُسلّم", "success");
+        showToast(
+            "تم تسجيل الطلب كمُسلّم",
+            "success"
+        );
 
     } catch (error) {
         if (button) {
@@ -521,7 +664,10 @@ async function markDelivered(orderId, button) {
             button.textContent = "✓ تم التسليم";
         }
 
-        showToast(error.message || "حدث خطأ", "error");
+        showToast(
+            error.message || "حدث خطأ",
+            "error"
+        );
     }
 }
 
@@ -561,7 +707,10 @@ function formatTotal(value) {
     const number = Number(value);
 
     if (Number.isNaN(number)) {
-        return escapeHtml(String(value || "")) + " درهم";
+        return (
+            escapeHtml(String(value || "")) +
+            " درهم"
+        );
     }
 
     return `${number.toFixed(2)} درهم`;
