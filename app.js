@@ -27,7 +27,6 @@ const statDone = document.getElementById("stat-done");
 const toast = document.getElementById("toast");
 
 const tabs = document.querySelectorAll(".tab");
-
 const orderTemplate = document.getElementById("order-tpl");
 
 function saveSession(data) {
@@ -74,17 +73,22 @@ function showOrders() {
     "";
 
   driverName.textContent = username;
-  sheetName.textContent = sheet ? `مسار المندوب: ${sheet}` : "";
+  sheetName.textContent = sheet
+    ? `مسار المندوب: ${sheet}`
+    : "";
 }
 
 function showLoginError(message) {
-  loginError.textContent = message || "حدث خطأ أثناء تسجيل الدخول";
+  loginError.textContent =
+    message ||
+    "حدث خطأ أثناء تسجيل الدخول";
+
   loginError.hidden = false;
 }
 
 function hideLoginError() {
-  loginError.hidden = true;
   loginError.textContent = "";
+  loginError.hidden = true;
 }
 
 function showToast(message) {
@@ -109,7 +113,9 @@ function normalizeLocationUrl(value) {
     return "";
   }
 
-  if (!/^https?:\/\//i.test(url)) {
+  if (
+    !/^https?:\/\//i.test(url)
+  ) {
     url = "https://" + url;
   }
 
@@ -125,20 +131,28 @@ async function api(path, options = {}, retry = true) {
     ...(options.headers || {})
   };
 
-  if (!headers["Content-Type"] && options.body) {
-    headers["Content-Type"] = "application/json";
+  if (
+    !headers["Content-Type"] &&
+    options.body
+  ) {
+    headers["Content-Type"] =
+      "application/json";
   }
 
   if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`;
+    headers.Authorization =
+      `Bearer ${session.access_token}`;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers
-  });
+  const response = await fetch(
+    `${API_BASE}${path}`,
+    {
+      ...options,
+      headers
+    }
+  );
 
-  let data = null;
+  let data = {};
 
   try {
     data = await response.json();
@@ -151,24 +165,32 @@ async function api(path, options = {}, retry = true) {
     retry &&
     session?.refresh_token
   ) {
-    const refreshed = await refreshSession();
+    const refreshed =
+      await refreshSession();
 
     if (refreshed) {
-      return api(path, options, false);
+      return api(
+        path,
+        options,
+        false
+      );
     }
 
     clearSession();
     showLogin();
-    throw new Error("انتهت جلسة الدخول");
+
+    throw new Error(
+      "انتهت جلسة الدخول"
+    );
   }
 
   if (!response.ok) {
-    const message =
+    throw new Error(
+      data?.details ||
       data?.error ||
       data?.message ||
-      "حدث خطأ في الاتصال بالخادم";
-
-    throw new Error(message);
+      `خطأ من الخادم: ${response.status}`
+    );
   }
 
   return data;
@@ -180,19 +202,34 @@ async function refreshSession() {
   }
 
   try {
-    const response = await fetch(`${API_BASE}/api/refresh`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        refresh_token: session.refresh_token
-      })
-    });
+    const response =
+      await fetch(
+        `${API_BASE}/api/refresh`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+          body: JSON.stringify({
+            refresh_token:
+              session.refresh_token
+          })
+        }
+      );
 
-    const data = await response.json();
+    let data = {};
 
-    if (!response.ok || !data.access_token) {
+    try {
+      data = await response.json();
+    } catch {
+      data = {};
+    }
+
+    if (
+      !response.ok ||
+      !data.access_token
+    ) {
       return false;
     }
 
@@ -211,7 +248,9 @@ async function refreshSession() {
 
     if (data.expires_in) {
       session.expires_at =
-        Math.floor(Date.now() / 1000) +
+        Math.floor(
+          Date.now() / 1000
+        ) +
         Number(data.expires_in);
     }
 
@@ -223,17 +262,25 @@ async function refreshSession() {
   }
 }
 
-async function login(username, password) {
-  const response = await fetch(`${API_BASE}/api/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      username,
-      password
-    })
-  });
+async function login(
+  username,
+  password
+) {
+  const response =
+    await fetch(
+      `${API_BASE}/api/login`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          username,
+          password
+        })
+      }
+    );
 
   let data = {};
 
@@ -244,29 +291,36 @@ async function login(username, password) {
   }
 
   if (!response.ok) {
-    throw new Error(
+    const details =
       data?.details ||
       data?.error ||
-      "اسم المستخدم أو كلمة المرور غير صحيحة"
-    );
+      data?.message ||
+      `خطأ من الخادم: ${response.status}`;
+
+    throw new Error(details);
   }
 
   const newSession = {
     ...data,
+
     username:
       data.username ||
       data.user?.username ||
       username,
+
     email:
       data.email ||
       data.user?.email ||
       "",
+
     user: {
       ...(data.user || {}),
+
       username:
         data.username ||
         data.user?.username ||
         username,
+
       email:
         data.email ||
         data.user?.email ||
@@ -276,7 +330,9 @@ async function login(username, password) {
 
   if (data.expires_in) {
     newSession.expires_at =
-      Math.floor(Date.now() / 1000) +
+      Math.floor(
+        Date.now() / 1000
+      ) +
       Number(data.expires_in);
   }
 
@@ -290,14 +346,18 @@ async function loadOrders() {
     </div>
   `;
 
-  const data = await api("/api/orders");
+  const data =
+    await api("/api/orders");
 
-  orders = Array.isArray(data?.orders)
-    ? data.orders
-    : [];
+  orders =
+    Array.isArray(data?.orders)
+      ? data.orders
+      : [];
 
   if (data?.sheet) {
-    session.sheet = data.sheet;
+    session.sheet =
+      data.sheet;
+
     saveSession(session);
   }
 
@@ -308,51 +368,79 @@ async function loadOrders() {
 }
 
 function updateStats() {
-  const pending = orders.filter(
-    order => order.delivery_status !== "delivered"
-  ).length;
+  const pending =
+    orders.filter(
+      order =>
+        order.delivery_status !==
+        "delivered"
+    ).length;
 
-  const done = orders.filter(
-    order => order.delivery_status === "delivered"
-  ).length;
+  const done =
+    orders.filter(
+      order =>
+        order.delivery_status ===
+        "delivered"
+    ).length;
 
-  statPending.textContent = pending;
-  statDone.textContent = done;
+  statPending.textContent =
+    pending;
+
+  statDone.textContent =
+    done;
 }
 
 function getFilteredOrders() {
-  if (currentFilter === "pending") {
+  if (
+    currentFilter ===
+    "pending"
+  ) {
     return orders.filter(
-      order => order.delivery_status !== "delivered"
+      order =>
+        order.delivery_status !==
+        "delivered"
     );
   }
 
-  if (currentFilter === "done") {
+  if (
+    currentFilter ===
+    "done"
+  ) {
     return orders.filter(
-      order => order.delivery_status === "delivered"
+      order =>
+        order.delivery_status ===
+        "delivered"
     );
   }
 
   return orders;
 }
 
-function setField(element, value) {
+function setField(
+  element,
+  value
+) {
   if (!element) {
     return;
   }
 
-  element.textContent =
+  if (
     value === null ||
     value === undefined ||
     String(value).trim() === ""
-      ? "—"
-      : String(value);
+  ) {
+    element.textContent = "—";
+    return;
+  }
+
+  element.textContent =
+    String(value);
 }
 
 function renderOrders() {
   ordersList.innerHTML = "";
 
-  const filtered = getFilteredOrders();
+  const filtered =
+    getFilteredOrders();
 
   if (!filtered.length) {
     ordersList.innerHTML = `
@@ -368,160 +456,300 @@ function renderOrders() {
 
   filtered.forEach(order => {
     const fragment =
-      orderTemplate.content.cloneNode(true);
+      orderTemplate.content.cloneNode(
+        true
+      );
 
     const article =
-      fragment.querySelector(".order");
+      fragment.querySelector(
+        ".order"
+      );
 
     const orderNumber =
-      fragment.querySelector('[data-f="order_number"]');
+      fragment.querySelector(
+        '[data-f="order_number"]'
+      );
 
     const customerName =
-      fragment.querySelector('[data-f="customer_name"]');
+      fragment.querySelector(
+        '[data-f="customer_name"]'
+      );
 
     const phone =
-      fragment.querySelector('[data-f="phone"]');
+      fragment.querySelector(
+        '[data-f="phone"]'
+      );
 
     const area =
-      fragment.querySelector('[data-f="area"]');
+      fragment.querySelector(
+        '[data-f="area"]'
+      );
 
     const details =
-      fragment.querySelector('[data-f="order_details"]');
+      fragment.querySelector(
+        '[data-f="order_details"]'
+      );
 
     const location =
-      fragment.querySelector('[data-f="location_url"]');
+      fragment.querySelector(
+        '[data-f="location_url"]'
+      );
 
     const coordinator =
-      fragment.querySelector('[data-f="appointment_coordinator"]');
+      fragment.querySelector(
+        '[data-f="appointment_coordinator"]'
+      );
 
     const note =
-      fragment.querySelector('[data-f="note"]');
+      fragment.querySelector(
+        '[data-f="note"]'
+      );
 
     const total =
-      fragment.querySelector('[data-f="total"]');
+      fragment.querySelector(
+        '[data-f="total"]'
+      );
 
     const status =
-      fragment.querySelector('[data-f="delivery_status"]');
+      fragment.querySelector(
+        '[data-f="delivery_status"]'
+      );
 
     const deliverBtn =
-      fragment.querySelector(".btn-deliver");
+      fragment.querySelector(
+        ".btn-deliver"
+      );
 
-    setField(orderNumber, order.order_number);
-    setField(customerName, order.customer_name);
-    setField(area, order.area);
-    setField(details, order.order_details);
-    setField(coordinator, order.appointment_coordinator);
-    setField(note, order.note);
+    setField(
+      orderNumber,
+      order.order_number
+    );
 
-    const totalValue = Number(order.total);
+    setField(
+      customerName,
+      order.customer_name
+    );
 
-    if (Number.isFinite(totalValue)) {
+    setField(
+      area,
+      order.area
+    );
+
+    setField(
+      details,
+      order.order_details
+    );
+
+    setField(
+      coordinator,
+      order.appointment_coordinator
+    );
+
+    setField(
+      note,
+      order.note
+    );
+
+    const totalValue =
+      Number(order.total);
+
+    if (
+      Number.isFinite(
+        totalValue
+      )
+    ) {
       total.textContent =
         `${totalValue.toLocaleString("ar-EG")} درهم`;
     } else {
-      setField(total, order.total);
+      setField(
+        total,
+        order.total
+      );
     }
 
     const phoneValue =
       order.phone === null ||
       order.phone === undefined
         ? ""
-        : String(order.phone).trim();
+        : String(
+            order.phone
+          ).trim();
 
     if (phoneValue) {
-      phone.textContent = phoneValue;
+      phone.textContent =
+        phoneValue;
+
       phone.href =
-        `tel:${phoneValue.replace(/[^\d+]/g, "")}`;
+        `tel:${phoneValue.replace(
+          /[^\d+]/g,
+          ""
+        )}`;
     } else {
-      phone.textContent = "—";
-      phone.removeAttribute("href");
+      phone.textContent =
+        "—";
+
+      phone.removeAttribute(
+        "href"
+      );
     }
+
+    const locationValue =
+      order.location_url ||
+      order.location ||
+      order.map_url ||
+      order.google_maps_url ||
+      order.location_link ||
+      "";
 
     const locationUrl =
       normalizeLocationUrl(
-        order.location_url ||
-        order.location ||
-        order.map_url ||
-        order.google_maps_url
+        locationValue
       );
 
     if (locationUrl) {
-      location.href = locationUrl;
-      location.target = "_blank";
-      location.rel = "noopener noreferrer";
-      location.style.pointerEvents = "auto";
-      location.style.opacity = "1";
+      location.href =
+        locationUrl;
+
+      location.target =
+        "_blank";
+
+      location.rel =
+        "noopener noreferrer";
+
+      location.style.pointerEvents =
+        "auto";
+
+      location.style.opacity =
+        "1";
     } else {
-      location.removeAttribute("href");
-      location.removeAttribute("target");
-      location.removeAttribute("rel");
-      location.style.pointerEvents = "none";
-      location.style.opacity = "0.5";
+      location.removeAttribute(
+        "href"
+      );
+
+      location.removeAttribute(
+        "target"
+      );
+
+      location.removeAttribute(
+        "rel"
+      );
+
+      location.style.pointerEvents =
+        "none";
+
+      location.style.opacity =
+        "0.5";
     }
 
     const delivered =
-      order.delivery_status === "delivered";
+      order.delivery_status ===
+      "delivered";
 
     if (delivered) {
-      status.textContent = "تم التسليم";
-      status.style.background = "#f0fdf4";
-      status.style.color = "#15803d";
+      status.textContent =
+        "تم التسليم";
 
-      deliverBtn.textContent = "تم التسليم";
-      deliverBtn.disabled = true;
+      status.style.background =
+        "#f0fdf4";
+
+      status.style.color =
+        "#15803d";
+
+      deliverBtn.textContent =
+        "تم التسليم";
+
+      deliverBtn.disabled =
+        true;
     } else {
-      status.textContent = "قيد التوصيل";
-      status.style.background = "#fffbeb";
-      status.style.color = "#a16207";
+      status.textContent =
+        "قيد التوصيل";
 
-      deliverBtn.textContent = "تم التسليم";
-      deliverBtn.disabled = false;
+      status.style.background =
+        "#fffbeb";
 
-      deliverBtn.addEventListener("click", () => {
-        markDelivered(order, deliverBtn);
-      });
+      status.style.color =
+        "#a16207";
+
+      deliverBtn.textContent =
+        "تم التسليم";
+
+      deliverBtn.disabled =
+        false;
+
+      deliverBtn.addEventListener(
+        "click",
+        () => {
+          markDelivered(
+            order,
+            deliverBtn
+          );
+        }
+      );
     }
 
-    article.dataset.orderId = order.id;
+    article.dataset.orderId =
+      order.id;
 
-    ordersList.appendChild(fragment);
+    ordersList.appendChild(
+      fragment
+    );
   });
 }
 
-async function markDelivered(order, button) {
+async function markDelivered(
+  order,
+  button
+) {
   if (!order?.id) {
-    showToast("رقم الطلب غير موجود");
+    showToast(
+      "رقم الطلب غير موجود"
+    );
+
     return;
   }
 
-  const confirmed = window.confirm(
-    "هل تريد تأكيد تسليم هذا الطلب؟"
-  );
+  const confirmed =
+    window.confirm(
+      "هل تريد تأكيد تسليم هذا الطلب؟"
+    );
 
   if (!confirmed) {
     return;
   }
 
-  button.disabled = true;
-  button.textContent = "جاري التأكيد...";
+  button.disabled =
+    true;
+
+  button.textContent =
+    "جاري التأكيد...";
 
   try {
-    await api("/api/deliver", {
-      method: "POST",
-      body: JSON.stringify({
-        orderId: order.id
-      })
-    });
+    await api(
+      "/api/deliver",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          orderId:
+            order.id
+        })
+      }
+    );
 
-    order.delivery_status = "delivered";
+    order.delivery_status =
+      "delivered";
 
     updateStats();
     renderOrders();
 
-    showToast("تم تسجيل الطلب كمُسلّم");
+    showToast(
+      "تم تسجيل الطلب كمُسلّم"
+    );
   } catch (error) {
-    button.disabled = false;
-    button.textContent = "تم التسليم";
+    button.disabled =
+      false;
+
+    button.textContent =
+      "تم التسليم";
 
     showToast(
       error?.message ||
@@ -530,98 +758,138 @@ async function markDelivered(order, button) {
   }
 }
 
-loginForm.addEventListener("submit", async event => {
-  event.preventDefault();
+loginForm.addEventListener(
+  "submit",
+  async event => {
+    event.preventDefault();
 
-  hideLoginError();
+    hideLoginError();
 
-  const username =
-    usernameInput.value.trim();
+    const username =
+      usernameInput.value.trim();
 
-  const password =
-    passwordInput.value;
+    const password =
+      passwordInput.value;
 
-  if (!username || !password) {
-    showLoginError(
-      "اكتب اسم المستخدم وكلمة المرور"
-    );
+    if (
+      !username ||
+      !password
+    ) {
+      showLoginError(
+        "اكتب اسم المستخدم وكلمة المرور"
+      );
 
-    return;
+      return;
+    }
+
+    loginBtn.disabled =
+      true;
+
+    loginBtn.textContent =
+      "جاري تسجيل الدخول...";
+
+    try {
+      await login(
+        username,
+        password
+      );
+
+      showOrders();
+
+      await loadOrders();
+    } catch (error) {
+      showLoginError(
+        error?.message ||
+        "حدث خطأ أثناء تسجيل الدخول"
+      );
+    } finally {
+      loginBtn.disabled =
+        false;
+
+      loginBtn.textContent =
+        "تسجيل الدخول";
+    }
   }
+);
 
-  loginBtn.disabled = true;
-  loginBtn.textContent = "جاري تسجيل الدخول...";
+refreshBtn.addEventListener(
+  "click",
+  async () => {
+    refreshBtn.disabled =
+      true;
 
-  try {
-    await login(username, password);
+    try {
+      await loadOrders();
 
-    showOrders();
-
-    await loadOrders();
-  } catch (error) {
-    showLoginError(
-      error?.message ||
-      "اسم المستخدم أو كلمة المرور غير صحيحة"
-    );
-  } finally {
-    loginBtn.disabled = false;
-    loginBtn.textContent = "تسجيل الدخول";
+      showToast(
+        "تم تحديث الطلبات"
+      );
+    } catch (error) {
+      showToast(
+        error?.message ||
+        "تعذر تحديث الطلبات"
+      );
+    } finally {
+      refreshBtn.disabled =
+        false;
+    }
   }
-});
+);
 
-refreshBtn.addEventListener("click", async () => {
-  refreshBtn.disabled = true;
+logoutBtn.addEventListener(
+  "click",
+  () => {
+    clearSession();
 
-  try {
-    await loadOrders();
-    showToast("تم تحديث الطلبات");
-  } catch (error) {
-    showToast(
-      error?.message ||
-      "تعذر تحديث الطلبات"
-    );
-  } finally {
-    refreshBtn.disabled = false;
-  }
-});
+    orders = [];
 
-logoutBtn.addEventListener("click", () => {
-  clearSession();
-  orders = [];
-  currentFilter = "pending";
+    currentFilter =
+      "pending";
 
-  usernameInput.value = "";
-  passwordInput.value = "";
+    usernameInput.value =
+      "";
 
-  tabs.forEach(tab => {
-    tab.classList.toggle(
-      "active",
-      tab.dataset.filter === "pending"
-    );
-  });
+    passwordInput.value =
+      "";
 
-  showLogin();
-});
-
-tabs.forEach(tab => {
-  tab.addEventListener("click", () => {
-    currentFilter = tab.dataset.filter;
-
-    tabs.forEach(item => {
-      item.classList.toggle(
+    tabs.forEach(tab => {
+      tab.classList.toggle(
         "active",
-        item === tab
+        tab.dataset.filter ===
+        "pending"
       );
     });
 
-    renderOrders();
-  });
+    showLogin();
+  }
+);
+
+tabs.forEach(tab => {
+  tab.addEventListener(
+    "click",
+    () => {
+      currentFilter =
+        tab.dataset.filter;
+
+      tabs.forEach(item => {
+        item.classList.toggle(
+          "active",
+          item === tab
+        );
+      });
+
+      renderOrders();
+    }
+  );
 });
 
 async function startApp() {
-  session = loadSession();
+  session =
+    loadSession();
 
-  if (!session?.access_token) {
+  if (
+    !session?.access_token
+  ) {
     showLogin();
     return;
   }
@@ -631,7 +899,8 @@ async function startApp() {
   try {
     await loadOrders();
   } catch {
-    const refreshed = await refreshSession();
+    const refreshed =
+      await refreshSession();
 
     if (refreshed) {
       try {
