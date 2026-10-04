@@ -1,6 +1,7 @@
 ```javascript
-const API_BASE = "";
+"use strict";
 
+const API_BASE = "";
 const SESSION_KEY = "driver_session";
 
 let session = null;
@@ -10,7 +11,6 @@ let toastTimer = null;
 
 document.addEventListener("DOMContentLoaded", function () {
     session = loadSession();
-
     setupEvents();
 
     if (session && session.access_token) {
@@ -64,9 +64,7 @@ function setupEvents() {
             });
 
             button.classList.add("active");
-
             activeTab = button.dataset.tab || "pending";
-
             renderOrders();
         });
     });
@@ -105,7 +103,6 @@ function loadSession() {
         }
 
         return parsed;
-
     } catch {
         return null;
     }
@@ -113,17 +110,21 @@ function loadSession() {
 
 function saveSession(data) {
     const accessToken =
-        data && (
+        data &&
+        (
             data.access_token ||
             data.token ||
             (data.session && data.session.access_token)
-        ) || "";
+        ) ||
+        "";
 
     const refreshToken =
-        data && (
+        data &&
+        (
             data.refresh_token ||
             (data.session && data.session.refresh_token)
-        ) || "";
+        ) ||
+        "";
 
     session = {
         ...(data || {}),
@@ -200,8 +201,7 @@ function showDashboard() {
 
     if (sheetName) {
         sheetName.textContent =
-            session &&
-            session.sheet_name ||
+            (session && session.sheet_name) ||
             "";
     }
 }
@@ -220,16 +220,14 @@ async function login() {
         document.getElementById("login-btn");
 
     const username =
-        usernameInput &&
-        usernameInput.value
-            .trim()
-            .toLowerCase() ||
-        "";
+        usernameInput
+            ? usernameInput.value.trim().toLowerCase()
+            : "";
 
     const password =
-        passwordInput &&
-        passwordInput.value ||
-        "";
+        passwordInput
+            ? passwordInput.value
+            : "";
 
     if (!username || !password) {
         if (errorBox) {
@@ -256,7 +254,7 @@ async function login() {
 
     try {
         const response = await fetch(
-            API_BASE + "/api/login",
+            "/api/login",
             {
                 method: "POST",
                 headers: {
@@ -270,10 +268,9 @@ async function login() {
         );
 
         const data =
-            await response.json()
-                .catch(function () {
-                    return {};
-                });
+            await response.json().catch(function () {
+                return {};
+            });
 
         if (!response.ok) {
             throw new Error(
@@ -306,7 +303,6 @@ async function login() {
         }
 
         showDashboard();
-
         await loadOrders();
 
     } catch (error) {
@@ -333,7 +329,7 @@ async function refreshSession() {
 
     try {
         const response = await fetch(
-            API_BASE + "/api/refresh",
+            "/api/refresh",
             {
                 method: "POST",
                 headers: {
@@ -347,10 +343,9 @@ async function refreshSession() {
         );
 
         const data =
-            await response.json()
-                .catch(function () {
-                    return {};
-                });
+            await response.json().catch(function () {
+                return {};
+            });
 
         if (!response.ok) {
             return false;
@@ -385,11 +380,7 @@ async function refreshSession() {
     }
 }
 
-async function authorizedFetch(
-    url,
-    options,
-    retry
-) {
+async function authorizedFetch(url, options, retry) {
     options = options || {};
     retry = retry !== false;
 
@@ -466,7 +457,7 @@ async function loadOrders() {
     try {
         const response =
             await authorizedFetch(
-                API_BASE + "/api/orders",
+                "/api/orders",
                 {
                     method: "GET"
                 }
@@ -483,10 +474,9 @@ async function loadOrders() {
         }
 
         const data =
-            await response.json()
-                .catch(function () {
-                    return {};
-                });
+            await response.json().catch(function () {
+                return {};
+            });
 
         if (!response.ok) {
             throw new Error(
@@ -833,21 +823,16 @@ function createOrderCard(order) {
         "</div>" +
 
         '<div class="order-actions">' +
-
         callButton +
         locationButton +
         deliveryButton +
-
         "</div>" +
 
         "</article>"
     );
 }
 
-async function markDelivered(
-    orderId,
-    button
-) {
+async function markDelivered(orderId, button) {
     if (!session || !session.access_token) {
         showLogin();
         return;
@@ -905,10 +890,235 @@ async function markDelivered(
     try {
         const response =
             await authorizedFetch(
-                API_BASE + "/api/deliver",
+                "/api/deliver",
                 {
                     method: "POST",
                     headers: {
                         "Content-Type":
                             "application/json"
+                    },
+                    body: JSON.stringify({
+                        order_id: orderId,
+                        orderId: orderId
+                    })
+                }
+            );
+
+        if (response.status === 401) {
+            clearSession();
+
+            showLogin(
+                "انتهت جلسة الدخول، يرجى تسجيل الدخول مرة أخرى"
+            );
+
+            return;
+        }
+
+        const data =
+            await response.json().catch(function () {
+                return {};
+            });
+
+        if (!response.ok) {
+            throw new Error(
+                data.error ||
+                data.message ||
+                "فشل تسجيل التسليم"
+            );
+        }
+
+        const target =
+            currentOrders.find(function (item) {
+                return String(
+                    item.id ??
+                    item.order_number
+                ) === String(orderId);
+            });
+
+        if (target) {
+            target.delivery_status =
+                "delivered";
+
+            target.status =
+                "delivered";
+        }
+
+        updateStats();
+        renderOrders();
+
+        showToast(
+            "تم تسجيل التسليم بنجاح ✓",
+            "success"
+        );
+
+    } catch (error) {
+        if (button) {
+            button.disabled = false;
+            button.textContent =
+                "✓ تم التسليم";
+        }
+
+        showToast(
+            error.message ||
+            "حدث خطأ أثناء تسجيل التسليم",
+            "error"
+        );
+    }
+}
+
+function isDelivered(order) {
+    const status =
+        String(
+            order?.delivery_status ??
+            order?.status ??
+            ""
+        )
+            .trim()
+            .toLowerCase();
+
+    return (
+        status === "delivered" ||
+        status === "done" ||
+        status === "تم" ||
+        status.includes("تم التسليم") ||
+        status.includes("مسلم")
+    );
+}
+
+function normalizePhone(phone) {
+    if (!phone) {
+        return "";
+    }
+
+    let value =
+        String(phone)
+            .trim()
+            .replace(/[^\d+]/g, "");
+
+    if (value.startsWith("00")) {
+        value =
+            "+" +
+            value.substring(2);
+    }
+
+    if (value.startsWith("05")) {
+        value =
+            "+971" +
+            value.substring(1);
+    }
+
+    if (
+        value.startsWith("5") &&
+        value.length === 9
+    ) {
+        value =
+            "+971" +
+            value;
+    }
+
+    return value;
+}
+
+function normalizeLocation(location) {
+    if (!location) {
+        return "";
+    }
+
+    const value =
+        String(location).trim();
+
+    if (
+        !/^https?:\/\//i.test(value)
+    ) {
+        return "";
+    }
+
+    if (
+        /open%20location/i.test(value) ||
+        /\/Open%20Location/i.test(value)
+    ) {
+        return "";
+    }
+
+    return value;
+}
+
+function formatTotal(value) {
+    if (
+        value === null ||
+        value === undefined ||
+        String(value).trim() === ""
+    ) {
+        return "0 درهم";
+    }
+
+    const number =
+        Number(value);
+
+    if (Number.isFinite(number)) {
+        return (
+            number.toLocaleString(
+                "ar-EG",
+                {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2
+                }
+            ) +
+            " درهم"
+        );
+    }
+
+    return (
+        escapeHtml(String(value)) +
+        " درهم"
+    );
+}
+
+function showToast(message, type) {
+    type = type || "success";
+
+    const toast =
+        document.getElementById("toast");
+
+    if (!toast) {
+        return;
+    }
+
+    clearTimeout(toastTimer);
+
+    toast.textContent =
+        message;
+
+    toast.className =
+        "toast " + type;
+
+    toast.style.display =
+        "block";
+
+    toastTimer =
+        setTimeout(function () {
+            toast.style.display =
+                "none";
+        }, 3000);
+}
+
+function logout() {
+    clearSession();
+    currentOrders = [];
+    activeTab = "pending";
+    showLogin();
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function escapeAttribute(value) {
+    return escapeHtml(value);
+}
 ```
