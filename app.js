@@ -1,132 +1,49 @@
-javascript
+```javascript
 var SESSION_KEY = "driver_session";
 
 var session = null;
 var orders = [];
-var filter = "pending";
+var currentFilter = "pending";
 var toastTimer = null;
 
-document.addEventListener("DOMContentLoaded", function () {
-    session = loadSession();
+function getElement(id) {
+    return document.getElementById(id);
+}
 
-    setupEvents();
-
-    if (session && session.access_token) {
-        showOrders();
-        loadOrders();
-    } else {
-        clearSession();
-        showLogin();
-    }
-});
-
-function setupEvents() {
-    var loginForm =
-        document.getElementById("login-form");
-
-    var refreshBtn =
-        document.getElementById("refresh-btn");
-
-    var logoutBtn =
-        document.getElementById("logout-btn");
-
-    if (loginForm) {
-        loginForm.addEventListener(
-            "submit",
-            function (event) {
-                event.preventDefault();
-                login();
-            }
-        );
+function saveSession(data) {
+    if (!data) {
+        return;
     }
 
-    if (refreshBtn) {
-        refreshBtn.addEventListener(
-            "click",
-            loadOrders
-        );
-    }
+    session = {
+        access_token: data.access_token || "",
+        refresh_token: data.refresh_token || "",
+        username: data.username || "",
+        mandoub_name: data.mandoub_name || "",
+        sheet_name: data.sheet_name || "",
+        expires_at: data.expires_at || 0
+    };
 
-    if (logoutBtn) {
-        logoutBtn.addEventListener(
-            "click",
-            logout
-        );
-    }
-
-    document
-        .querySelectorAll(".tab")
-        .forEach(function (button) {
-            button.addEventListener(
-                "click",
-                function () {
-                    document
-                        .querySelectorAll(".tab")
-                        .forEach(function (item) {
-                            item.classList.remove(
-                                "active"
-                            );
-                        });
-
-                    button.classList.add(
-                        "active"
-                    );
-
-                    filter =
-                        button.getAttribute(
-                            "data-filter"
-                        ) || "pending";
-
-                    render();
-                }
-            );
-        });
+    localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify(session)
+    );
 }
 
 function loadSession() {
     try {
-        var saved =
-            localStorage.getItem(
-                SESSION_KEY
-            );
+        var saved = localStorage.getItem(SESSION_KEY);
 
         if (!saved) {
             return null;
         }
 
-        var data =
-            JSON.parse(saved);
+        var data = JSON.parse(saved);
 
         if (
             data &&
             data.access_token
         ) {
-            return data;
-        }
-
-        if (
-            data &&
-            data.session &&
-            data.session.access_token
-        ) {
-            data.access_token =
-                data.session.access_token;
-
-            data.refresh_token =
-                data.refresh_token ||
-                data.session.refresh_token ||
-                "";
-
-            return data;
-        }
-
-        if (
-            data &&
-            data.token
-        ) {
-            data.access_token =
-                data.token;
-
             return data;
         }
 
@@ -137,77 +54,15 @@ function loadSession() {
     }
 }
 
-function saveSession(data) {
-    var accessToken =
-        data.access_token ||
-        data.token ||
-        (
-            data.session &&
-            data.session.access_token
-        ) ||
-        "";
-
-    var refreshToken =
-        data.refresh_token ||
-        (
-            data.session &&
-            data.session.refresh_token
-        ) ||
-        "";
-
-    session = {
-        access_token:
-            accessToken,
-
-        refresh_token:
-            refreshToken,
-
-        username:
-            data.username ||
-            "",
-
-        mandoub_name:
-            data.mandoub_name ||
-            "",
-
-        sheet_name:
-            data.sheet_name ||
-            "",
-
-        expires_at:
-            data.expires_at ||
-            0
-    };
-
-    localStorage.setItem(
-        SESSION_KEY,
-        JSON.stringify(session)
-    );
-}
-
 function clearSession() {
     session = null;
-
-    localStorage.removeItem(
-        SESSION_KEY
-    );
+    localStorage.removeItem(SESSION_KEY);
 }
 
 function showLogin(message) {
-    var loginView =
-        document.getElementById(
-            "login-view"
-        );
-
-    var ordersView =
-        document.getElementById(
-            "orders-view"
-        );
-
-    var errorBox =
-        document.getElementById(
-            "login-error"
-        );
+    var loginView = getElement("login-view");
+    var ordersView = getElement("orders-view");
+    var errorBox = getElement("login-error");
 
     if (loginView) {
         loginView.hidden = false;
@@ -218,24 +73,14 @@ function showLogin(message) {
     }
 
     if (errorBox) {
-        errorBox.textContent =
-            message || "";
-
-        errorBox.hidden =
-            !message;
+        errorBox.textContent = message || "";
+        errorBox.hidden = !message;
     }
 }
 
 function showOrders() {
-    var loginView =
-        document.getElementById(
-            "login-view"
-        );
-
-    var ordersView =
-        document.getElementById(
-            "orders-view"
-        );
+    var loginView = getElement("login-view");
+    var ordersView = getElement("orders-view");
 
     if (loginView) {
         loginView.hidden = true;
@@ -245,92 +90,69 @@ function showOrders() {
         ordersView.hidden = false;
     }
 
-    var driverName =
-        document.getElementById(
-            "driver-name"
-        );
-
-    var sheetName =
-        document.getElementById(
-            "sheet-name"
-        );
+    var driverName = getElement("driver-name");
+    var sheetName = getElement("sheet-name");
 
     if (driverName) {
         driverName.textContent =
-            session &&
-            (
-                session.mandoub_name ||
-                session.username
-            ) ||
+            session.mandoub_name ||
+            session.username ||
             "المندوب";
     }
 
     if (sheetName) {
         sheetName.textContent =
-            session &&
             session.sheet_name
-            ? "القائمة: " +
-              session.sheet_name
-            : "";
+                ? "القائمة: " + session.sheet_name
+                : "";
+    }
+}
+
+function setLoginButton(text, disabled) {
+    var button = getElement("login-btn");
+
+    if (!button) {
+        return;
+    }
+
+    button.disabled = disabled;
+
+    var span = button.querySelector("span");
+
+    if (span) {
+        span.textContent = text;
+    } else {
+        button.textContent = text;
     }
 }
 
 async function login() {
-    var usernameInput =
-        document.getElementById(
-            "username"
-        );
+    var usernameInput = getElement("username");
+    var passwordInput = getElement("password");
+    var errorBox = getElement("login-error");
 
-    var passwordInput =
-        document.getElementById(
-            "password"
-        );
+    var username = usernameInput
+        ? usernameInput.value.trim().toLowerCase()
+        : "";
 
-    var errorBox =
-        document.getElementById(
-            "login-error"
-        );
-
-    var loginBtn =
-        document.getElementById(
-            "login-btn"
-        );
-
-    var username =
-        usernameInput
-            ? usernameInput.value
-                .trim()
-                .toLowerCase()
-            : "";
-
-    var password =
-        passwordInput
-            ? passwordInput.value
-            : "";
+    var password = passwordInput
+        ? passwordInput.value
+        : "";
 
     if (!username || !password) {
         if (errorBox) {
             errorBox.textContent =
-                "اكتب اسم المستخدم وكلمة المرور";
-
-            errorBox.hidden =
-                false;
+                "يرجى إدخال اسم المستخدم وكلمة المرور";
+            errorBox.hidden = false;
         }
 
         return;
     }
 
-    if (loginBtn) {
-        loginBtn.disabled = true;
-
-        loginBtn.querySelector("span")
-            ? loginBtn.querySelector(
-                "span"
-            ).textContent =
-                "جاري تسجيل الدخول..."
-            : loginBtn.textContent =
-                "جاري تسجيل الدخول...";
-    }
+    setLoginButton(
+        "جارٍ تسجيل الدخول...",
+        true
+    );
 
     if (errorBox) {
         errorBox.textContent = "";
@@ -338,55 +160,39 @@ async function login() {
     }
 
     try {
-        var response =
-            await fetch(
-                "/api/login",
-                {
-                    method: "POST",
+        var response = await fetch(
+            "/api/login",
+            {
+                method: "POST",
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
+                headers: {
+                    "Content-Type": "application/json"
+                },
 
-                    body:
-                        JSON.stringify({
-                            username:
-                                username,
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
+            }
+        );
 
-                            password:
-                                password
-                        })
-                }
-            );
-
-        var data =
-            await response
-                .json()
-                .catch(function () {
-                    return {};
-                });
+        var data = await response
+            .json()
+            .catch(function () {
+                return {};
+            });
 
         if (!response.ok) {
             throw new Error(
                 data.error ||
                 data.message ||
-                "بيانات الدخول غير صحيحة"
+                "تعذر تسجيل الدخول"
             );
         }
 
-        var accessToken =
-            data.access_token ||
-            data.token ||
-            (
-                data.session &&
-                data.session.access_token
-            ) ||
-            "";
-
-        if (!accessToken) {
+        if (!data.access_token) {
             throw new Error(
-                "تم الاتصال بالموقع لكن لم يتم استلام جلسة الدخول"
+                "لم يتم استلام رمز الدخول من الخادم"
             );
         }
 
@@ -409,22 +215,10 @@ async function login() {
         );
 
     } finally {
-        if (loginBtn) {
-            loginBtn.disabled = false;
-
-            var span =
-                loginBtn.querySelector(
-                    "span"
-                );
-
-            if (span) {
-                span.textContent =
-                    "تسجيل الدخول";
-            } else {
-                loginBtn.textContent =
-                    "تسجيل الدخول";
-            }
-        }
+        setLoginButton(
+            "تسجيل الدخول",
+            false
+        );
     }
 }
 
@@ -437,59 +231,42 @@ async function refreshSession() {
     }
 
     try {
-        var response =
-            await fetch(
-                "/api/refresh",
-                {
-                    method: "POST",
+        var response = await fetch(
+            "/api/refresh",
+            {
+                method: "POST",
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
+                headers: {
+                    "Content-Type": "application/json"
+                },
 
-                    body:
-                        JSON.stringify({
-                            refresh_token:
-                                session.refresh_token
-                        })
-                }
-            );
+                body: JSON.stringify({
+                    refresh_token:
+                        session.refresh_token
+                })
+            }
+        );
 
-        var data =
-            await response
-                .json()
-                .catch(function () {
-                    return {};
-                });
+        var data = await response
+            .json()
+            .catch(function () {
+                return {};
+            });
 
         if (!response.ok) {
             return false;
         }
 
-        var accessToken =
-            data.access_token ||
-            data.token ||
-            (
-                data.session &&
-                data.session.access_token
-            ) ||
-            "";
-
-        if (!accessToken) {
+        if (!data.access_token) {
             return false;
         }
 
         saveSession({
             access_token:
-                accessToken,
+                data.access_token,
 
             refresh_token:
                 data.refresh_token ||
-                (
-                    data.session &&
-                    data.session.refresh_token
-                ) ||
                 session.refresh_token,
 
             username:
@@ -516,13 +293,12 @@ async function refreshSession() {
     }
 }
 
-async function authorizedFetch(
+async function apiFetch(
     url,
     options,
     retry
 ) {
-    options =
-        options || {};
+    options = options || {};
 
     if (retry === undefined) {
         retry = true;
@@ -533,18 +309,20 @@ async function authorizedFetch(
         !session.access_token
     ) {
         throw new Error(
-            "جلسة الدخول غير موجودة"
+            "انتهت جلسة الدخول"
         );
     }
 
     var headers = {};
 
-    Object.keys(
-        options.headers || {}
-    ).forEach(function (key) {
-        headers[key] =
-            options.headers[key];
-    });
+    if (options.headers) {
+        Object.keys(
+            options.headers
+        ).forEach(function (key) {
+            headers[key] =
+                options.headers[key];
+        });
+    }
 
     headers.Authorization =
         "Bearer " +
@@ -558,15 +336,24 @@ async function authorizedFetch(
             "application/json";
     }
 
-    var response =
-        await fetch(
-            url,
-            {
-                ...options,
-                headers:
-                    headers
-            }
-        );
+    var requestOptions = {
+        method:
+            options.method ||
+            "GET",
+
+        headers:
+            headers
+    };
+
+    if (options.body) {
+        requestOptions.body =
+            options.body;
+    }
+
+    var response = await fetch(
+        url,
+        requestOptions
+    );
 
     if (
         response.status === 401 &&
@@ -576,7 +363,7 @@ async function authorizedFetch(
             await refreshSession();
 
         if (refreshed) {
-            return authorizedFetch(
+            return apiFetch(
                 url,
                 options,
                 false
@@ -588,6 +375,10 @@ async function authorizedFetch(
 }
 
 async function loadOrders() {
+    var list = getElement("orders-list");
+    var refreshButton =
+        getElement("refresh-btn");
+
     if (
         !session ||
         !session.access_token
@@ -596,69 +387,58 @@ async function loadOrders() {
         return;
     }
 
-    var list =
-        document.getElementById(
-            "orders-list"
-        );
-
-    var refreshBtn =
-        document.getElementById(
-            "refresh-btn"
-        );
-
     if (list) {
         list.innerHTML =
             '<p class="loading">جارٍ تحميل الطلبات…</p>';
     }
 
-    if (refreshBtn) {
-        refreshBtn.disabled = true;
+    if (refreshButton) {
+        refreshButton.disabled = true;
     }
 
     try {
-        var response =
-            await authorizedFetch(
-                "/api/orders",
-                {
-                    method: "GET"
-                }
-            );
+        var response = await apiFetch(
+            "/api/orders",
+            {
+                method: "GET"
+            }
+        );
 
         if (response.status === 401) {
             clearSession();
 
             showLogin(
-                "انتهت جلسة الدخول، يرجى تسجيل الدخول مجددًا"
+                "انتهت الجلسة، يرجى تسجيل الدخول مرة أخرى"
             );
 
             return;
         }
 
-        var data =
-            await response
-                .json()
-                .catch(function () {
-                    return {};
-                });
+        var data = await response
+            .json()
+            .catch(function () {
+                return {};
+            });
 
         if (!response.ok) {
             throw new Error(
                 data.error ||
                 data.message ||
-                "فشل تحميل الطلبات"
+                "تعذر تحميل الطلبات"
             );
         }
 
-        orders =
+        if (
             Array.isArray(data)
-                ? data
-                : (
-                    Array.isArray(
-                        data.orders
-                    )
-                        ? data.orders
-                        : []
-                );
+        ) {
+            orders = data;
+        } else if (
+            Array.isArray(data.orders)
+        ) {
+            orders = data.orders;
+        } else {
+            orders = [];
+        }
 
         if (data.sheet) {
             session.sheet_name =
@@ -676,7 +456,7 @@ async function loadOrders() {
         );
 
         showOrders();
-        render();
+        renderOrders();
 
     } catch (error) {
         if (list) {
@@ -691,90 +471,152 @@ async function loadOrders() {
         }
 
     } finally {
-        if (refreshBtn) {
-            refreshBtn.disabled = false;
+        if (refreshButton) {
+            refreshButton.disabled = false;
         }
     }
 }
 
-function render() {
-    var list =
-        document.getElementById(
-            "orders-list"
+function isDelivered(order) {
+    if (!order) {
+        return false;
+    }
+
+    var status =
+        String(
+            order.delivery_status ||
+            order.status ||
+            ""
+        )
+            .trim()
+            .toLowerCase();
+
+    return (
+        status === "delivered" ||
+        status === "done" ||
+        status === "تم" ||
+        status.indexOf("تم التسليم") !== -1 ||
+        status.indexOf("مسلم") !== -1
+    );
+}
+
+function formatTotal(value) {
+    if (
+        value === null ||
+        value === undefined ||
+        String(value).trim() === ""
+    ) {
+        return "0 درهم";
+    }
+
+    var number = Number(value);
+
+    if (Number.isFinite(number)) {
+        return (
+            number.toLocaleString(
+                "ar-EG",
+                {
+                    maximumFractionDigits: 2
+                }
+            ) +
+            " درهم"
         );
+    }
+
+    return String(value) + " درهم";
+}
+
+function setField(
+    node,
+    field,
+    value
+) {
+    var element =
+        node.querySelector(
+            '[data-f="' +
+            field +
+            '"]'
+        );
+
+    if (!element) {
+        return;
+    }
+
+    if (
+        value !== null &&
+        value !== undefined &&
+        String(value).trim() !== ""
+    ) {
+        element.textContent =
+            value;
+    } else {
+        element.textContent =
+            "—";
+    }
+}
+
+function renderOrders() {
+    var list =
+        getElement("orders-list");
 
     if (!list) {
         return;
     }
 
-    var done =
-        orders.filter(
-            function (order) {
-                return isDelivered(
-                    order
-                );
-            }
-        );
+    var deliveredCount =
+        orders.filter(function (order) {
+            return isDelivered(order);
+        }).length;
 
-    var pending =
+    var pendingCount =
         orders.length -
-        done.length;
+        deliveredCount;
 
-    var statPending =
-        document.getElementById(
-            "stat-pending"
-        );
+    var pendingStat =
+        getElement("stat-pending");
 
-    var statDone =
-        document.getElementById(
-            "stat-done"
-        );
+    var doneStat =
+        getElement("stat-done");
 
-    if (statPending) {
-        statPending.textContent =
-            pending.toLocaleString(
+    if (pendingStat) {
+        pendingStat.textContent =
+            pendingCount.toLocaleString(
                 "ar-EG"
             );
     }
 
-    if (statDone) {
-        statDone.textContent =
-            done.length.toLocaleString(
+    if (doneStat) {
+        doneStat.textContent =
+            deliveredCount.toLocaleString(
                 "ar-EG"
             );
     }
 
-    var shown =
-        orders.filter(
-            function (order) {
-                if (
-                    filter === "done"
-                ) {
-                    return isDelivered(
-                        order
-                    );
-                }
-
-                if (
-                    filter === "all"
-                ) {
-                    return true;
-                }
-
-                return !isDelivered(
-                    order
-                );
+    var visibleOrders =
+        orders.filter(function (order) {
+            if (
+                currentFilter === "done"
+            ) {
+                return isDelivered(order);
             }
-        );
+
+            if (
+                currentFilter === "all"
+            ) {
+                return true;
+            }
+
+            return !isDelivered(order);
+        });
 
     list.replaceChildren();
 
-    if (!shown.length) {
+    if (!visibleOrders.length) {
         list.innerHTML =
             '<p class="empty">' +
             '<span class="big">📦</span>' +
             (
-                filter === "done"
+                currentFilter === "done"
                     ? "لا توجد طلبات مسلّمة بعد"
                     : "لا توجد طلبات حالياً"
             ) +
@@ -784,15 +626,13 @@ function render() {
     }
 
     var template =
-        document.getElementById(
-            "order-tpl"
-        );
+        getElement("order-tpl");
 
     if (!template) {
         return;
     }
 
-    shown.forEach(
+    visibleOrders.forEach(
         function (order) {
             var node =
                 template.content
@@ -802,7 +642,7 @@ function render() {
             setField(
                 node,
                 "order_number",
-                order.order_number ??
+                order.order_number ||
                 order.id
             );
 
@@ -855,13 +695,19 @@ function render() {
                         order.phone;
 
                     phone.href =
-                        normalizePhone(
+                        createPhoneLink(
                             order.phone
                         );
                 } else {
-                    phone.closest(
-                        ".meta-item"
-                    ).hidden = true;
+                    var phoneRow =
+                        phone.closest(
+                            ".meta-item"
+                        );
+
+                    if (phoneRow) {
+                        phoneRow.hidden =
+                            true;
+                    }
                 }
             }
 
@@ -871,28 +717,37 @@ function render() {
                 );
 
             if (location) {
-                var url =
-                    normalizeLocation(
-                        order.location_url
-                    );
+                var locationUrl =
+                    String(
+                        order.location_url ||
+                        ""
+                    ).trim();
 
-                if (url) {
+                if (
+                    /^https?:\/\//i.test(
+                        locationUrl
+                    )
+                ) {
                     location.href =
-                        url;
+                        locationUrl;
 
                     location.hidden =
                         false;
                 } else {
-                    location.closest(
-                        ".location-row"
-                    ).hidden = true;
+                    var locationRow =
+                        location.closest(
+                            ".location-row"
+                        );
+
+                    if (locationRow) {
+                        locationRow.hidden =
+                            true;
+                    }
                 }
             }
 
             var delivered =
-                isDelivered(
-                    order
-                );
+                isDelivered(order);
 
             var status =
                 node.querySelector(
@@ -916,71 +771,37 @@ function render() {
                 delivered
             );
 
-            var button =
+            var deliverButton =
                 node.querySelector(
                     ".btn-deliver"
                 );
 
-            if (button) {
+            if (deliverButton) {
                 if (delivered) {
-                    button.remove();
+                    deliverButton.remove();
                 } else {
-                    button.addEventListener(
+                    deliverButton.addEventListener(
                         "click",
                         function () {
                             markDelivered(
                                 order,
-                                button
+                                deliverButton
                             );
                         }
                     );
                 }
             }
 
-            list.appendChild(
-                node
-            );
+            list.appendChild(node);
         }
     );
-}
-
-function setField(
-    node,
-    field,
-    value
-) {
-    var element =
-        node.querySelector(
-            '[data-f="' +
-            field +
-            '"]'
-        );
-
-    if (!element) {
-        return;
-    }
-
-    if (
-        value !== null &&
-        value !== undefined &&
-        String(value).trim() !== ""
-    ) {
-        element.textContent =
-            value;
-    } else {
-        element.textContent =
-            "—";
-    }
 }
 
 async function markDelivered(
     order,
     button
 ) {
-    var orderId =
-        order.id;
-
-    if (!orderId) {
+    if (!order || !order.id) {
         showToast(
             "رقم الطلب غير موجود",
             true
@@ -989,7 +810,7 @@ async function markDelivered(
         return;
     }
 
-    var orderNumber =
+    var number =
         order.order_number ||
         order.id;
 
@@ -1000,44 +821,35 @@ async function markDelivered(
     var message =
         customer
             ? "تأكيد تسليم الطلب #" +
-              orderNumber +
+              number +
               " للعميل " +
               customer +
               "؟"
             : "تأكيد تسليم الطلب #" +
-              orderNumber +
+              number +
               "؟";
 
-    if (
-        !window.confirm(
-            message
-        )
-    ) {
+    if (!confirm(message)) {
         return;
     }
 
     if (button) {
         button.disabled = true;
-
         button.textContent =
             "جارٍ التحديث…";
     }
 
     try {
         var response =
-            await authorizedFetch(
+            await apiFetch(
                 "/api/deliver",
                 {
                     method: "POST",
 
-                    body:
-                        JSON.stringify({
-                            orderId:
-                                orderId,
-
-                            order_id:
-                                orderId
-                        })
+                    body: JSON.stringify({
+                        orderId:
+                            order.id
+                    })
                 }
             );
 
@@ -1059,7 +871,7 @@ async function markDelivered(
         order.delivery_status =
             "delivered";
 
-        render();
+        renderOrders();
 
         showToast(
             "تم تسجيل التسليم بنجاح ✅",
@@ -1069,7 +881,6 @@ async function markDelivered(
     } catch (error) {
         if (button) {
             button.disabled = false;
-
             button.textContent =
                 "تم التسليم";
         }
@@ -1082,136 +893,15 @@ async function markDelivered(
     }
 }
 
-function isDelivered(order) {
-    var status =
-        String(
-            order &&
-            (
-                order.delivery_status ||
-                order.status ||
-                ""
-            )
-        )
-            .trim()
-            .toLowerCase();
-
-    return (
-        status === "delivered" ||
-        status === "done" ||
-        status === "تم" ||
-        status.indexOf(
-            "تم التسليم"
-        ) !== -1 ||
-        status.indexOf(
-            "مسلم"
-        ) !== -1
-    );
-}
-
-function normalizePhone(phone) {
-    if (!phone) {
-        return "";
-    }
-
+function createPhoneLink(phone) {
     var value =
         String(phone)
-            .trim()
             .replace(
                 /[^\d+]/g,
                 ""
             );
 
-    if (
-        value.indexOf("00") === 0
-    ) {
-        value =
-            "+" +
-            value.substring(2);
-    }
-
-    if (
-        value.indexOf("05") === 0
-    ) {
-        value =
-            "+971" +
-            value.substring(1);
-    }
-
-    if (
-        value.indexOf("5") === 0 &&
-        value.length === 9
-    ) {
-        value =
-            "+971" +
-            value;
-    }
-
     return "tel:" + value;
-}
-
-function normalizeLocation(
-    location
-) {
-    if (!location) {
-        return "";
-    }
-
-    var value =
-        String(location)
-            .trim();
-
-    if (
-        !/^https?:\/\//i.test(
-            value
-        )
-    ) {
-        return "";
-    }
-
-    if (
-        /open%20location/i.test(
-            value
-        )
-    ) {
-        return "";
-    }
-
-    return value;
-}
-
-function formatTotal(
-    value
-) {
-    if (
-        value === null ||
-        value === undefined ||
-        String(value).trim() === ""
-    ) {
-        return "0 درهم";
-    }
-
-    var number =
-        Number(value);
-
-    if (
-        Number.isFinite(number)
-    ) {
-        return (
-            number.toLocaleString(
-                "ar-EG",
-                {
-                    maximumFractionDigits:
-                        2
-                }
-            ) +
-            " درهم"
-        );
-    }
-
-    return (
-        String(value) +
-        " درهم"
-    );
 }
 
 function showToast(
@@ -1219,33 +909,28 @@ function showToast(
     isError
 ) {
     var toast =
-        document.getElementById(
-            "toast"
-        );
+        getElement("toast");
 
     if (!toast) {
         return;
     }
 
-    clearTimeout(
-        toastTimer
-    );
+    clearTimeout(toastTimer);
 
     toast.textContent =
         message;
-
-    toast.hidden = false;
 
     toast.classList.toggle(
         "err",
         !!isError
     );
 
+    toast.hidden = false;
+
     toastTimer =
         setTimeout(
             function () {
-                toast.hidden =
-                    true;
+                toast.hidden = true;
             },
             3000
         );
@@ -1255,18 +940,13 @@ function logout() {
     clearSession();
 
     orders = [];
-
-    filter = "pending";
+    currentFilter = "pending";
 
     showLogin();
 }
 
-function escapeHtml(
-    value
-) {
-    return String(
-        value ?? ""
-    )
+function escapeHtml(value) {
+    return String(value || "")
         .replace(
             /&/g,
             "&amp;"
@@ -1289,3 +969,97 @@ function escapeHtml(
         );
 }
 
+function setupApplication() {
+    var loginForm =
+        getElement("login-form");
+
+    var refreshButton =
+        getElement("refresh-btn");
+
+    var logoutButton =
+        getElement("logout-btn");
+
+    if (loginForm) {
+        loginForm.addEventListener(
+            "submit",
+            function (event) {
+                event.preventDefault();
+                login();
+            }
+        );
+    }
+
+    if (refreshButton) {
+        refreshButton.addEventListener(
+            "click",
+            loadOrders
+        );
+    }
+
+    if (logoutButton) {
+        logoutButton.addEventListener(
+            "click",
+            logout
+        );
+    }
+
+    var tabs =
+        document.querySelectorAll(
+            ".tab"
+        );
+
+    tabs.forEach(
+        function (tab) {
+            tab.addEventListener(
+                "click",
+                function () {
+                    tabs.forEach(
+                        function (item) {
+                            item.classList.remove(
+                                "active"
+                            );
+                        }
+                    );
+
+                    tab.classList.add(
+                        "active"
+                    );
+
+                    currentFilter =
+                        tab.getAttribute(
+                            "data-filter"
+                        ) ||
+                        "pending";
+
+                    renderOrders();
+                }
+            );
+        }
+    );
+
+    session =
+        loadSession();
+
+    if (
+        session &&
+        session.access_token
+    ) {
+        showOrders();
+        loadOrders();
+    } else {
+        clearSession();
+        showLogin();
+    }
+}
+
+if (
+    document.readyState === "loading"
+) {
+    document.addEventListener(
+        "DOMContentLoaded",
+        setupApplication
+    );
+} else {
+    setupApplication();
+}
+```
