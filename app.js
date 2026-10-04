@@ -1,13 +1,13 @@
 ```javascript
 "use strict";
 
-const API_BASE = "";
-const SESSION_KEY = "driver_session";
+var API_BASE = "";
+var SESSION_KEY = "driver_session";
 
-let session = null;
-let currentOrders = [];
-let activeTab = "pending";
-let toastTimer = null;
+var session = null;
+var currentOrders = [];
+var activeTab = "pending";
+var toastTimer = null;
 
 document.addEventListener("DOMContentLoaded", function () {
     session = loadSession();
@@ -18,16 +18,16 @@ document.addEventListener("DOMContentLoaded", function () {
         loadOrders();
     } else {
         clearSession();
-        showLogin();
+        showLogin("");
     }
 });
 
 function setupEvents() {
-    const loginBtn = document.getElementById("login-btn");
-    const passwordInput = document.getElementById("password");
-    const usernameInput = document.getElementById("username");
-    const refreshBtn = document.getElementById("refresh-btn");
-    const logoutBtn = document.getElementById("logout-btn");
+    var loginBtn = document.getElementById("login-btn");
+    var passwordInput = document.getElementById("password");
+    var usernameInput = document.getElementById("username");
+    var refreshBtn = document.getElementById("refresh-btn");
+    var logoutBtn = document.getElementById("logout-btn");
 
     if (loginBtn) {
         loginBtn.addEventListener("click", login);
@@ -57,14 +57,20 @@ function setupEvents() {
         logoutBtn.addEventListener("click", logout);
     }
 
-    document.querySelectorAll(".tab-btn").forEach(function (button) {
+    var tabs = document.querySelectorAll(".tab-btn");
+
+    tabs.forEach(function (button) {
         button.addEventListener("click", function () {
-            document.querySelectorAll(".tab-btn").forEach(function (item) {
+            tabs.forEach(function (item) {
                 item.classList.remove("active");
             });
 
             button.classList.add("active");
-            activeTab = button.dataset.tab || "pending";
+
+            activeTab =
+                button.getAttribute("data-tab") ||
+                "pending";
+
             renderOrders();
         });
     });
@@ -72,64 +78,88 @@ function setupEvents() {
 
 function loadSession() {
     try {
-        const saved = localStorage.getItem(SESSION_KEY);
+        var saved =
+            localStorage.getItem(SESSION_KEY);
 
         if (!saved) {
             return null;
         }
 
-        const parsed = JSON.parse(saved);
+        var data = JSON.parse(saved);
 
         if (
-            parsed &&
-            parsed.session &&
-            parsed.session.access_token
+            data &&
+            data.access_token
         ) {
-            return {
-                ...parsed,
-                access_token: parsed.session.access_token,
-                refresh_token:
-                    parsed.refresh_token ||
-                    parsed.session.refresh_token ||
-                    ""
-            };
+            return data;
         }
 
-        if (parsed && parsed.token && !parsed.access_token) {
-            return {
-                ...parsed,
-                access_token: parsed.token
-            };
+        if (
+            data &&
+            data.session &&
+            data.session.access_token
+        ) {
+            data.access_token =
+                data.session.access_token;
+
+            data.refresh_token =
+                data.refresh_token ||
+                data.session.refresh_token ||
+                "";
+
+            return data;
         }
 
-        return parsed;
-    } catch {
+        if (
+            data &&
+            data.token
+        ) {
+            data.access_token =
+                data.token;
+
+            return data;
+        }
+
+        return null;
+
+    } catch (error) {
         return null;
     }
 }
 
 function saveSession(data) {
-    const accessToken =
-        data &&
+    var accessToken =
+        data.access_token ||
+        data.token ||
         (
-            data.access_token ||
-            data.token ||
-            (data.session && data.session.access_token)
+            data.session &&
+            data.session.access_token
         ) ||
         "";
 
-    const refreshToken =
-        data &&
+    var refreshToken =
+        data.refresh_token ||
         (
-            data.refresh_token ||
-            (data.session && data.session.refresh_token)
+            data.session &&
+            data.session.refresh_token
         ) ||
         "";
 
     session = {
-        ...(data || {}),
         access_token: accessToken,
-        refresh_token: refreshToken
+        refresh_token: refreshToken,
+        username:
+            data.username ||
+            "",
+        mandoub_name:
+            data.mandoub_name ||
+            "",
+        sheet_name:
+            data.sheet_name ||
+            "",
+        expires_at:
+            data.expires_at ||
+            0
     };
 
     localStorage.setItem(
@@ -140,17 +170,20 @@ function saveSession(data) {
 
 function clearSession() {
     session = null;
-    localStorage.removeItem(SESSION_KEY);
+
+    localStorage.removeItem(
+        SESSION_KEY
+    );
 }
 
 function showLogin(message) {
-    const loginView =
+    var loginView =
         document.getElementById("login-view");
 
-    const dashboardView =
+    var dashboardView =
         document.getElementById("dashboard-view");
 
-    const errorBox =
+    var errorBox =
         document.getElementById("login-error");
 
     if (loginView) {
@@ -158,73 +191,89 @@ function showLogin(message) {
     }
 
     if (dashboardView) {
-        dashboardView.style.display = "none";
+        dashboardView.style.display =
+            "none";
     }
 
     if (errorBox) {
-        errorBox.textContent = message || "";
+        errorBox.textContent =
+            message || "";
+
         errorBox.style.display =
             message ? "block" : "none";
     }
 }
 
 function showDashboard() {
-    const loginView =
+    var loginView =
         document.getElementById("login-view");
 
-    const dashboardView =
+    var dashboardView =
         document.getElementById("dashboard-view");
 
     if (loginView) {
-        loginView.style.display = "none";
+        loginView.style.display =
+            "none";
     }
 
     if (dashboardView) {
-        dashboardView.style.display = "";
+        dashboardView.style.display =
+            "";
     }
 
-    const driverName =
-        document.getElementById("driver-name");
+    var driverName =
+        document.getElementById(
+            "driver-name"
+        );
 
-    const sheetName =
-        document.getElementById("sheet-name");
+    var sheetName =
+        document.getElementById(
+            "sheet-name"
+        );
 
     if (driverName) {
         driverName.textContent =
-            session &&
-            (
-                session.mandoub_name ||
-                session.username
-            ) ||
+            session.mandoub_name ||
+            session.username ||
             "المندوب";
     }
 
     if (sheetName) {
         sheetName.textContent =
-            (session && session.sheet_name) ||
+            session.sheet_name ||
             "";
     }
 }
 
 async function login() {
-    const usernameInput =
-        document.getElementById("username");
+    var usernameInput =
+        document.getElementById(
+            "username"
+        );
 
-    const passwordInput =
-        document.getElementById("password");
+    var passwordInput =
+        document.getElementById(
+            "password"
+        );
 
-    const errorBox =
-        document.getElementById("login-error");
+    var errorBox =
+        document.getElementById(
+            "login-error"
+        );
 
-    const loginBtn =
-        document.getElementById("login-btn");
+    var loginBtn =
+        document.getElementById(
+            "login-btn"
+        );
 
-    const username =
+    var username =
         usernameInput
-            ? usernameInput.value.trim().toLowerCase()
+            ? usernameInput.value
+                .trim()
+                .toLowerCase()
             : "";
 
-    const password =
+    var password =
         passwordInput
             ? passwordInput.value
             : "";
@@ -243,34 +292,47 @@ async function login() {
 
     if (loginBtn) {
         loginBtn.disabled = true;
+
         loginBtn.textContent =
             "جاري الدخول...";
     }
 
     if (errorBox) {
         errorBox.textContent = "";
-        errorBox.style.display = "none";
+
+        errorBox.style.display =
+            "none";
     }
 
     try {
-        const response = await fetch(
-            "/api/login",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    username: username,
-                    password: password
-                })
-            }
-        );
+        var response =
+            await fetch(
+                "/api/login",
+                {
+                    method: "POST",
 
-        const data =
-            await response.json().catch(function () {
-                return {};
-            });
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            username:
+                                username,
+
+                            password:
+                                password
+                        })
+                }
+            );
+
+        var data =
+            await response
+                .json()
+                .catch(function () {
+                    return {};
+                });
 
         if (!response.ok) {
             throw new Error(
@@ -280,29 +342,27 @@ async function login() {
             );
         }
 
-        const accessToken =
-            data.access_token ||
-            data.token ||
-            (data.session &&
-                data.session.access_token) ||
-            "";
-
-        if (!accessToken) {
+        if (
+            !data.access_token &&
+            !data.token &&
+            !(
+                data.session &&
+                data.session.access_token
+            )
+        ) {
             throw new Error(
-                "تم الدخول لكن لم يتم استلام جلسة الدخول"
+                "لم يتم استلام جلسة الدخول من الموقع"
             );
         }
 
-        saveSession({
-            ...data,
-            access_token: accessToken
-        });
+        saveSession(data);
 
         if (passwordInput) {
             passwordInput.value = "";
         }
 
         showDashboard();
+
         await loadOrders();
 
     } catch (error) {
@@ -316,6 +376,7 @@ async function login() {
     } finally {
         if (loginBtn) {
             loginBtn.disabled = false;
+
             loginBtn.textContent =
                 "تسجيل الدخول";
         }
@@ -323,78 +384,128 @@ async function login() {
 }
 
 async function refreshSession() {
-    if (!session || !session.refresh_token) {
+    if (
+        !session ||
+        !session.refresh_token
+    ) {
         return false;
     }
 
     try {
-        const response = await fetch(
-            "/api/refresh",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    refresh_token:
-                        session.refresh_token
-                })
-            }
-        );
+        var response =
+            await fetch(
+                "/api/refresh",
+                {
+                    method: "POST",
 
-        const data =
-            await response.json().catch(function () {
-                return {};
-            });
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            refresh_token:
+                                session.refresh_token
+                        })
+                }
+            );
+
+        var data =
+            await response
+                .json()
+                .catch(function () {
+                    return {};
+                });
 
         if (!response.ok) {
             return false;
         }
 
-        const accessToken =
-            data.access_token ||
-            data.token ||
-            (data.session &&
-                data.session.access_token) ||
-            "";
-
-        if (!accessToken) {
+        if (
+            !data.access_token &&
+            !data.token &&
+            !(
+                data.session &&
+                data.session.access_token
+            )
+        ) {
             return false;
         }
 
         saveSession({
-            ...session,
-            ...data,
-            access_token: accessToken,
+            access_token:
+                data.access_token ||
+                data.token ||
+                data.session.access_token,
+
             refresh_token:
                 data.refresh_token ||
-                (data.session &&
-                    data.session.refresh_token) ||
-                session.refresh_token
+                (
+                    data.session &&
+                    data.session.refresh_token
+                ) ||
+                session.refresh_token,
+
+            username:
+                data.username ||
+                session.username,
+
+            mandoub_name:
+                data.mandoub_name ||
+                session.mandoub_name,
+
+            sheet_name:
+                data.sheet_name ||
+                session.sheet_name,
+
+            expires_at:
+                data.expires_at ||
+                session.expires_at
         });
 
         return true;
 
-    } catch {
+    } catch (error) {
         return false;
     }
 }
 
-async function authorizedFetch(url, options, retry) {
-    options = options || {};
-    retry = retry !== false;
+async function authorizedFetch(
+    url,
+    options,
+    retry
+) {
+    options =
+        options || {};
 
-    if (!session || !session.access_token) {
+    if (retry === undefined) {
+        retry = true;
+    }
+
+    if (
+        !session ||
+        !session.access_token
+    ) {
         throw new Error(
             "جلسة الدخول غير موجودة"
         );
     }
 
-    const headers = {
-        ...(options.headers || {}),
-        Authorization:
-            "Bearer " + session.access_token
-    };
+    var headers = {};
+
+    var existingHeaders =
+        options.headers || {};
+
+    Object.keys(existingHeaders)
+        .forEach(function (key) {
+            headers[key] =
+                existingHeaders[key];
+        });
+
+    headers.Authorization =
+        "Bearer " +
+        session.access_token;
 
     if (
         options.body &&
@@ -404,19 +515,20 @@ async function authorizedFetch(url, options, retry) {
             "application/json";
     }
 
-    const response = await fetch(
-        url,
-        {
-            ...options,
-            headers: headers
-        }
-    );
+    var response =
+        await fetch(
+            url,
+            {
+                ...options,
+                headers: headers
+            }
+        );
 
     if (
         response.status === 401 &&
         retry
     ) {
-        const refreshed =
+        var refreshed =
             await refreshSession();
 
         if (refreshed) {
@@ -432,17 +544,24 @@ async function authorizedFetch(url, options, retry) {
 }
 
 async function loadOrders() {
-    if (!session || !session.access_token) {
+    if (
+        !session ||
+        !session.access_token
+    ) {
         clearSession();
-        showLogin();
+        showLogin("");
         return;
     }
 
-    const ordersList =
-        document.getElementById("orders-list");
+    var ordersList =
+        document.getElementById(
+            "orders-list"
+        );
 
-    const refreshBtn =
-        document.getElementById("refresh-btn");
+    var refreshBtn =
+        document.getElementById(
+            "refresh-btn"
+        );
 
     if (ordersList) {
         ordersList.innerHTML =
@@ -451,16 +570,16 @@ async function loadOrders() {
 
     if (refreshBtn) {
         refreshBtn.disabled = true;
-        refreshBtn.classList.add("loading");
     }
 
     try {
-        const response =
+        var response =
             await authorizedFetch(
                 "/api/orders",
                 {
                     method: "GET"
-                }
+                },
+                true
             );
 
         if (response.status === 401) {
@@ -473,10 +592,12 @@ async function loadOrders() {
             return;
         }
 
-        const data =
-            await response.json().catch(function () {
-                return {};
-            });
+        var data =
+            await response
+                .json()
+                .catch(function () {
+                    return {};
+                });
 
         if (!response.ok) {
             throw new Error(
@@ -486,12 +607,17 @@ async function loadOrders() {
             );
         }
 
-        currentOrders =
+        if (
             Array.isArray(data)
-                ? data
-                : Array.isArray(data.orders)
+        ) {
+            currentOrders =
+                data;
+        } else {
+            currentOrders =
+                Array.isArray(data.orders)
                     ? data.orders
                     : [];
+        }
 
         if (data.sheet) {
             session.sheet_name =
@@ -509,7 +635,9 @@ async function loadOrders() {
         );
 
         showDashboard();
+
         updateStats();
+
         renderOrders();
 
     } catch (error) {
@@ -529,59 +657,93 @@ async function loadOrders() {
     } finally {
         if (refreshBtn) {
             refreshBtn.disabled = false;
-            refreshBtn.classList.remove("loading");
         }
     }
 }
 
 function updateStats() {
-    const pending =
-        currentOrders.filter(function (order) {
-            return !isDelivered(order);
-        }).length;
+    var pending =
+        currentOrders.filter(
+            function (order) {
+                return !isDelivered(
+                    order
+                );
+            }
+        ).length;
 
-    const delivered =
-        currentOrders.filter(function (order) {
-            return isDelivered(order);
-        }).length;
+    var delivered =
+        currentOrders.filter(
+            function (order) {
+                return isDelivered(
+                    order
+                );
+            }
+        ).length;
 
-    document.querySelectorAll(
-        "#stat-pending"
-    ).forEach(function (element) {
-        element.textContent =
-            pending.toLocaleString("ar-EG");
-    });
+    document
+        .querySelectorAll(
+            "#stat-pending"
+        )
+        .forEach(
+            function (element) {
+                element.textContent =
+                    pending.toLocaleString(
+                        "ar-EG"
+                    );
+            }
+        );
 
-    document.querySelectorAll(
-        "#stat-delivered"
-    ).forEach(function (element) {
-        element.textContent =
-            delivered.toLocaleString("ar-EG");
-    });
+    document
+        .querySelectorAll(
+            "#stat-delivered"
+        )
+        .forEach(
+            function (element) {
+                element.textContent =
+                    delivered.toLocaleString(
+                        "ar-EG"
+                    );
+            }
+        );
 }
 
 function renderOrders() {
-    const ordersList =
-        document.getElementById("orders-list");
+    var ordersList =
+        document.getElementById(
+            "orders-list"
+        );
 
     if (!ordersList) {
         return;
     }
 
-    let orders = currentOrders;
+    var orders =
+        currentOrders;
 
-    if (activeTab === "pending") {
+    if (
+        activeTab === "pending"
+    ) {
         orders =
-            currentOrders.filter(function (order) {
-                return !isDelivered(order);
-            });
+            currentOrders.filter(
+                function (order) {
+                    return !isDelivered(
+                        order
+                    );
+                }
+            );
     }
 
-    if (activeTab === "delivered") {
+    if (
+        activeTab === "delivered"
+    ) {
         orders =
-            currentOrders.filter(function (order) {
-                return isDelivered(order);
-            });
+            currentOrders.filter(
+                function (order) {
+                    return isDelivered(
+                        order
+                    );
+                }
+            );
     }
 
     if (!orders.length) {
@@ -601,105 +763,132 @@ function renderOrders() {
     }
 
     ordersList.innerHTML =
-        orders.map(function (order) {
-            return createOrderCard(order);
-        }).join("");
+        orders.map(
+            function (order) {
+                return createOrderCard(
+                    order
+                );
+            }
+        ).join("");
 
     ordersList
-        .querySelectorAll(".deliver-btn")
-        .forEach(function (button) {
-            button.addEventListener(
-                "click",
-                function () {
-                    markDelivered(
-                        button.dataset.id,
-                        button
-                    );
-                }
-            );
-        });
+        .querySelectorAll(
+            ".deliver-btn"
+        )
+        .forEach(
+            function (button) {
+                button.addEventListener(
+                    "click",
+                    function () {
+                        markDelivered(
+                            button.dataset.id,
+                            button
+                        );
+                    }
+                );
+            }
+        );
 }
 
 function createOrderCard(order) {
-    const orderNumber =
+    var orderNumber =
         order.order_number ??
         order.orderNumber ??
         order.id ??
         "";
 
-    const customer =
+    var customer =
         order.customer_name ??
         order.customer ??
         "";
 
-    const phone =
+    var phone =
         order.phone ??
         order.customer_phone ??
         "";
 
-    const area =
+    var area =
         order.area ??
         "";
 
-    const details =
+    var details =
         order.order_details ??
         order.details ??
         "";
 
-    const location =
+    var location =
         order.location_url ??
         order.location ??
         order.location_link ??
         "";
 
-    const coordinator =
+    var coordinator =
         order.appointment_coordinator ??
         order.coordinator ??
         "";
 
-    const note =
+    var note =
         order.note ??
         "";
 
-    const total =
+    var total =
         order.total ??
         0;
 
-    const delivered =
+    var delivered =
         isDelivered(order);
 
-    const safePhone =
+    var safePhone =
         normalizePhone(phone);
 
-    const safeLocation =
+    var safeLocation =
         normalizeLocation(location);
 
-    let callButton = "";
+    var html =
+        '<article class="order-card ' +
+        (
+            delivered
+                ? "delivered"
+                : ""
+        ) +
+        '">' +
 
-    if (safePhone) {
-        callButton =
-            '<a class="call-btn" href="tel:' +
-            escapeAttribute(safePhone) +
-            '">' +
-            "📞 اتصال بالعميل" +
-            "</a>";
-    }
+        '<div class="order-header">' +
 
-    let locationButton = "";
+        '<div class="order-number">' +
+        "طلب #" +
+        escapeHtml(
+            String(orderNumber)
+        ) +
+        "</div>" +
 
-    if (safeLocation) {
-        locationButton =
-            '<a class="location-btn" href="' +
-            escapeAttribute(safeLocation) +
-            '" target="_blank" rel="noopener noreferrer">' +
-            "📍 فتح الموقع" +
-            "</a>";
-    }
+        '<div class="order-status ' +
+        (
+            delivered
+                ? "delivered"
+                : "pending"
+        ) +
+        '">' +
+        (
+            delivered
+                ? "تم التسليم"
+                : "قيد التوصيل"
+        ) +
+        "</div>" +
 
-    let phoneRow = "";
+        "</div>" +
+
+        '<div class="order-info">' +
+
+        '<div class="info-row">' +
+        '<span class="info-label">العميل</span>' +
+        '<span class="info-value">' +
+        escapeHtml(customer) +
+        "</span>" +
+        "</div>";
 
     if (phone) {
-        phoneRow =
+        html +=
             '<div class="info-row">' +
             '<span class="info-label">رقم الهاتف</span>' +
             '<span class="info-value phone-value">' +
@@ -708,10 +897,8 @@ function createOrderCard(order) {
             "</div>";
     }
 
-    let areaRow = "";
-
     if (area) {
-        areaRow =
+        html +=
             '<div class="info-row">' +
             '<span class="info-label">المنطقة</span>' +
             '<span class="info-value">' +
@@ -720,10 +907,8 @@ function createOrderCard(order) {
             "</div>";
     }
 
-    let detailsRow = "";
-
     if (details) {
-        detailsRow =
+        html +=
             '<div class="info-row details-row">' +
             '<span class="info-label">الطلب</span>' +
             '<span class="info-value">' +
@@ -732,10 +917,8 @@ function createOrderCard(order) {
             "</div>";
     }
 
-    let coordinatorRow = "";
-
     if (coordinator) {
-        coordinatorRow =
+        html +=
             '<div class="info-row">' +
             '<span class="info-label">منسق الموعد</span>' +
             '<span class="info-value">' +
@@ -744,10 +927,8 @@ function createOrderCard(order) {
             "</div>";
     }
 
-    let noteRow = "";
-
     if (note) {
-        noteRow =
+        html +=
             '<div class="info-row note-row">' +
             '<span class="info-label">ملاحظات</span>' +
             '<span class="info-value">' +
@@ -756,15 +937,47 @@ function createOrderCard(order) {
             "</div>";
     }
 
-    let deliveryButton = "";
+    html +=
+        '<div class="info-row total-row">' +
+        '<span class="info-label">الإجمالي</span>' +
+        '<span class="info-value">' +
+        formatTotal(total) +
+        "</span>" +
+        "</div>" +
+
+        "</div>" +
+
+        '<div class="order-actions">';
+
+    if (safePhone) {
+        html +=
+            '<a class="call-btn" href="tel:' +
+            escapeAttribute(
+                safePhone
+            ) +
+            '">' +
+            "📞 اتصال بالعميل" +
+            "</a>";
+    }
+
+    if (safeLocation) {
+        html +=
+            '<a class="location-btn" href="' +
+            escapeAttribute(
+                safeLocation
+            ) +
+            '" target="_blank" rel="noopener noreferrer">' +
+            "📍 فتح الموقع" +
+            "</a>";
+    }
 
     if (delivered) {
-        deliveryButton =
+        html +=
             '<div class="delivered-label">' +
             "✓ تم التسليم" +
             "</div>";
     } else {
-        deliveryButton =
+        html +=
             '<button type="button" class="deliver-btn" data-id="' +
             escapeAttribute(
                 String(
@@ -778,63 +991,22 @@ function createOrderCard(order) {
             "</button>";
     }
 
-    return (
-        '<article class="order-card ' +
-        (delivered ? "delivered" : "") +
-        '">' +
-
-        '<div class="order-header">' +
-
-        '<div class="order-number">' +
-        "طلب #" +
-        escapeHtml(String(orderNumber)) +
+    html +=
         "</div>" +
+        "</article>";
 
-        '<div class="order-status ' +
-        (delivered ? "delivered" : "pending") +
-        '">' +
-        (delivered ? "تم التسليم" : "قيد التوصيل") +
-        "</div>" +
-
-        "</div>" +
-
-        '<div class="order-info">' +
-
-        '<div class="info-row">' +
-        '<span class="info-label">العميل</span>' +
-        '<span class="info-value">' +
-        escapeHtml(customer) +
-        "</span>" +
-        "</div>" +
-
-        phoneRow +
-        areaRow +
-        detailsRow +
-        coordinatorRow +
-        noteRow +
-
-        '<div class="info-row total-row">' +
-        '<span class="info-label">الإجمالي</span>' +
-        '<span class="info-value">' +
-        formatTotal(total) +
-        "</span>" +
-        "</div>" +
-
-        "</div>" +
-
-        '<div class="order-actions">' +
-        callButton +
-        locationButton +
-        deliveryButton +
-        "</div>" +
-
-        "</article>"
-    );
+    return html;
 }
 
-async function markDelivered(orderId, button) {
-    if (!session || !session.access_token) {
-        showLogin();
+async function markDelivered(
+    orderId,
+    button
+) {
+    if (
+        !session ||
+        !session.access_token
+    ) {
+        showLogin("");
         return;
     }
 
@@ -847,24 +1019,27 @@ async function markDelivered(orderId, button) {
         return;
     }
 
-    const order =
-        currentOrders.find(function (item) {
-            return String(
-                item.id ??
-                item.order_number
-            ) === String(orderId);
-        });
+    var order =
+        currentOrders.find(
+            function (item) {
+                return String(
+                    item.id ??
+                    item.order_number
+                ) ===
+                String(orderId);
+            }
+        );
 
-    const orderNumber =
+    var orderNumber =
         order?.order_number ??
         order?.id ??
         orderId;
 
-    const customer =
+    var customer =
         order?.customer_name ||
         "";
 
-    const confirmationText =
+    var confirmationText =
         customer
             ? "هل تريد تأكيد تسليم الطلب #" +
               orderNumber +
@@ -875,33 +1050,43 @@ async function markDelivered(orderId, button) {
               orderNumber +
               "؟";
 
-    if (!window.confirm(
-        confirmationText
-    )) {
+    if (
+        !window.confirm(
+            confirmationText
+        )
+    ) {
         return;
     }
 
     if (button) {
         button.disabled = true;
+
         button.textContent =
             "جاري تسجيل التسليم...";
     }
 
     try {
-        const response =
+        var response =
             await authorizedFetch(
                 "/api/deliver",
                 {
                     method: "POST",
+
                     headers: {
                         "Content-Type":
                             "application/json"
                     },
-                    body: JSON.stringify({
-                        order_id: orderId,
-                        orderId: orderId
-                    })
-                }
+
+                    body:
+                        JSON.stringify({
+                            order_id:
+                                orderId,
+
+                            orderId:
+                                orderId
+                        })
+                },
+                true
             );
 
         if (response.status === 401) {
@@ -914,10 +1099,12 @@ async function markDelivered(orderId, button) {
             return;
         }
 
-        const data =
-            await response.json().catch(function () {
-                return {};
-            });
+        var data =
+            await response
+                .json()
+                .catch(function () {
+                    return {};
+                });
 
         if (!response.ok) {
             throw new Error(
@@ -927,13 +1114,16 @@ async function markDelivered(orderId, button) {
             );
         }
 
-        const target =
-            currentOrders.find(function (item) {
-                return String(
-                    item.id ??
-                    item.order_number
-                ) === String(orderId);
-            });
+        var target =
+            currentOrders.find(
+                function (item) {
+                    return String(
+                        item.id ??
+                        item.order_number
+                    ) ===
+                    String(orderId);
+                }
+            );
 
         if (target) {
             target.delivery_status =
@@ -954,6 +1144,7 @@ async function markDelivered(orderId, button) {
     } catch (error) {
         if (button) {
             button.disabled = false;
+
             button.textContent =
                 "✓ تم التسليم";
         }
@@ -967,11 +1158,14 @@ async function markDelivered(orderId, button) {
 }
 
 function isDelivered(order) {
-    const status =
+    var status =
         String(
-            order?.delivery_status ??
-            order?.status ??
-            ""
+            order &&
+            (
+                order.delivery_status ??
+                order.status ??
+                ""
+            )
         )
             .trim()
             .toLowerCase();
@@ -980,8 +1174,12 @@ function isDelivered(order) {
         status === "delivered" ||
         status === "done" ||
         status === "تم" ||
-        status.includes("تم التسليم") ||
-        status.includes("مسلم")
+        status.indexOf(
+            "تم التسليم"
+        ) !== -1 ||
+        status.indexOf(
+            "مسلم"
+        ) !== -1
     );
 }
 
@@ -990,25 +1188,29 @@ function normalizePhone(phone) {
         return "";
     }
 
-    let value =
+    var value =
         String(phone)
             .trim()
             .replace(/[^\d+]/g, "");
 
-    if (value.startsWith("00")) {
+    if (
+        value.indexOf("00") === 0
+    ) {
         value =
             "+" +
             value.substring(2);
     }
 
-    if (value.startsWith("05")) {
+    if (
+        value.indexOf("05") === 0
+    ) {
         value =
             "+971" +
             value.substring(1);
     }
 
     if (
-        value.startsWith("5") &&
+        value.indexOf("5") === 0 &&
         value.length === 9
     ) {
         value =
@@ -1024,18 +1226,24 @@ function normalizeLocation(location) {
         return "";
     }
 
-    const value =
+    var value =
         String(location).trim();
 
     if (
-        !/^https?:\/\//i.test(value)
+        !/^https?:\/\//i.test(
+            value
+        )
     ) {
         return "";
     }
 
     if (
-        /open%20location/i.test(value) ||
-        /\/Open%20Location/i.test(value)
+        /open%20location/i.test(
+            value
+        ) ||
+        /\/Open%20Location/i.test(
+            value
+        )
     ) {
         return "";
     }
@@ -1052,10 +1260,12 @@ function formatTotal(value) {
         return "0 درهم";
     }
 
-    const number =
+    var number =
         Number(value);
 
-    if (Number.isFinite(number)) {
+    if (
+        Number.isFinite(number)
+    ) {
         return (
             number.toLocaleString(
                 "ar-EG",
@@ -1069,16 +1279,24 @@ function formatTotal(value) {
     }
 
     return (
-        escapeHtml(String(value)) +
+        escapeHtml(
+            String(value)
+        ) +
         " درهم"
     );
 }
 
-function showToast(message, type) {
-    type = type || "success";
+function showToast(
+    message,
+    type
+) {
+    type =
+        type || "success";
 
-    const toast =
-        document.getElementById("toast");
+    var toast =
+        document.getElementById(
+            "toast"
+        );
 
     if (!toast) {
         return;
@@ -1096,26 +1314,49 @@ function showToast(message, type) {
         "block";
 
     toastTimer =
-        setTimeout(function () {
-            toast.style.display =
-                "none";
-        }, 3000);
+        setTimeout(
+            function () {
+                toast.style.display =
+                    "none";
+            },
+            3000
+        );
 }
 
 function logout() {
     clearSession();
+
     currentOrders = [];
+
     activeTab = "pending";
-    showLogin();
+
+    showLogin("");
 }
 
 function escapeHtml(value) {
-    return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    return String(
+        value ?? ""
+    )
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
 
 function escapeAttribute(value) {
