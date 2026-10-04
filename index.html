@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>تطبيق المندوب</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- Login -->
+  <main id="login-view" class="view login" hidden>
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>
+        </div>
+        <h1>تطبيق المندوب</h1>
+        <p>سجّل الدخول لعرض طلبات التوصيل الخاصة بك</p>
+      </div>
+      <form id="login-form" novalidate>
+        <label for="username">اسم المستخدم</label>
+        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" dir="ltr" placeholder="zain" required />
+        <label for="password">كلمة المرور</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" dir="ltr" required />
+        <p id="login-error" class="error" role="alert" hidden></p>
+        <button id="login-btn" type="submit" class="btn btn-primary">تسجيل الدخول</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- Orders -->
+  <div id="orders-view" class="view" hidden>
+    <header class="topbar">
+      <div>
+        <p class="hello">مرحبًا، <strong id="driver-name"></strong></p>
+        <p class="sheet" id="sheet-name"></p>
+      </div>
+      <div class="top-actions">
+        <button id="refresh-btn" class="icon-btn" aria-label="تحديث">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+        </button>
+        <button id="logout-btn" class="icon-btn" aria-label="تسجيل الخروج">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="stats">
+      <div class="stat"><span id="stat-pending">0</span><small>قيد التوصيل</small></div>
+      <div class="stat done"><span id="stat-done">0</span><small>تم التسليم</small></div>
+    </section>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-filter="pending" role="tab">قيد التوصيل</button>
+      <button class="tab" data-filter="done" role="tab">تم التسليم</button>
+      <button class="tab" data-filter="all" role="tab">الكل</button>
+    </nav>
+
+    <main id="orders-list" class="orders" aria-live="polite"></main>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <template id="order-tpl">
+    <article class="order">
+      <div class="order-head">
+        <span class="order-no">فاتورة #<b data-f="order_number"></b></span>
+        <span class="status" data-f="delivery_status"></span>
+      </div>
+      <h2 class="customer" data-f="customer_name"></h2>
+      <dl class="meta">
+        <div><dt>الهاتف</dt><dd><a class="phone" data-f="phone" dir="ltr"></a></dd></div>
+        <div><dt>المنطقة</dt><dd data-f="area"></dd></div>
+        <div class="full"><dt>تفاصيل الطلب</dt><dd class="details" data-f="order_details"></dd></div>
+      </dl>
+      <div class="order-foot">
+        <div class="total"><small>الإجمالي</small><b data-f="total"></b></div>
+        <button class="btn btn-deliver" type="button">تم التسليم</button>
+      </div>
+    </article>
+  </template>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
