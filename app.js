@@ -1,4 +1,4 @@
-```javascript
+javascript
 "use strict";
 
 var SESSION_KEY = "driver_session";
@@ -1290,4 +1290,4 @@ function escapeHtml(
             "&#039;"
         );
 }
-```
+
