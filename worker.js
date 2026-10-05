@@ -1,8 +1,8 @@
 const SUPABASE_URL = "https://wnfibznjxihilgfedfij.supabase.co";
 
 const DRIVER_EMAILS = {
-zain: "[zain@yourapp.local](mailto:zain@yourapp.local)",
-zain2: "[zain2@yourapp.local](mailto:zain2@yourapp.local)"
+zain: "[nasegypt9@gmail.com](mailto:nasegypt9@gmail.com)",
+zain2: "[moomaro990@gmail.com](mailto:moomaro990@gmail.com)"
 };
 
 function json(data, status) {
@@ -13,8 +13,7 @@ headers: {
 "Access-Control-Allow-Origin": "*",
 "Access-Control-Allow-Headers":
 "Content-Type, Authorization, X-Excel-Sync-Secret",
-"Access-Control-Allow-Methods":
-"GET, POST, OPTIONS"
+"Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 }
 });
 }
@@ -105,10 +104,7 @@ status: 401
 };
 }
 
-const user = await getUser(
-token,
-env.SUPABASE_ANON_KEY
-);
+const user = await getUser(token, env.SUPABASE_ANON_KEY);
 
 if (!user || !user.id) {
 return {
@@ -186,8 +182,7 @@ headers: {
 "Access-Control-Allow-Origin": "*",
 "Access-Control-Allow-Headers":
 "Content-Type, Authorization, X-Excel-Sync-Secret",
-"Access-Control-Allow-Methods":
-"GET, POST, OPTIONS"
+"Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 }
 });
 }
@@ -214,8 +209,7 @@ try {
     if (!username || !password) {
       return json(
         {
-          error:
-            "يرجى إدخال اسم المستخدم وكلمة المرور"
+          error: "يرجى إدخال اسم المستخدم وكلمة المرور"
         },
         400
       );
@@ -226,8 +220,7 @@ try {
     if (!email) {
       return json(
         {
-          error:
-            "اسم المستخدم أو كلمة المرور غير صحيحة"
+          error: "اسم المستخدم أو كلمة المرور غير صحيحة"
         },
         401
       );
@@ -236,8 +229,7 @@ try {
     if (!env.SUPABASE_ANON_KEY) {
       return json(
         {
-          error:
-            "مفتاح Supabase غير موجود في Cloudflare"
+          error: "مفتاح Supabase غير موجود في Cloudflare"
         },
         500
       );
@@ -267,8 +259,7 @@ try {
     if (!authResponse.ok) {
       return json(
         {
-          error:
-            "اسم المستخدم أو كلمة المرور غير صحيحة"
+          error: "اسم المستخدم أو كلمة المرور غير صحيحة"
         },
         401
       );
@@ -283,8 +274,7 @@ try {
     if (!driver) {
       return json(
         {
-          error:
-            "المندوب غير مسجل في النظام"
+          error: "المندوب غير مسجل في النظام"
         },
         403
       );
@@ -360,8 +350,7 @@ try {
     if (!driver) {
       return json(
         {
-          error:
-            "المندوب غير مسجل"
+          error: "المندوب غير مسجل"
         },
         403
       );
@@ -388,10 +377,7 @@ try {
     path === "/api/orders" &&
     request.method === "GET"
   ) {
-    const auth = await requireDriver(
-      request,
-      env
-    );
+    const auth = await requireDriver(request, env);
 
     if (auth.error) {
       return json(
@@ -409,18 +395,15 @@ try {
       encodeURIComponent(sheet) +
       "&select=*";
 
-    const ordersResponse =
-      await supabaseRequest(
-        ordersPath,
-        {
-          headers: {
-            apikey:
-              env.SUPABASE_ANON_KEY,
-            Authorization:
-              "Bearer " + auth.token
-          }
+    const ordersResponse = await supabaseRequest(
+      ordersPath,
+      {
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + auth.token
         }
-      );
+      }
+    );
 
     const orders = await ordersResponse
       .json()
@@ -431,23 +414,18 @@ try {
     if (!ordersResponse.ok) {
       return json(
         {
-          error:
-            "تعذر تحميل الطلبات"
+          error: "تعذر تحميل الطلبات"
         },
         500
       );
     }
 
     return json({
-      orders: Array.isArray(orders)
-        ? orders
-        : [],
+      orders: Array.isArray(orders) ? orders : [],
       sheet: sheet,
-      mandoub_name:
-        auth.driver.mandoub_name,
+      mandoub_name: auth.driver.mandoub_name,
       can_call:
-        auth.user.email ===
-        DRIVER_EMAILS.zain2
+        auth.user.email === DRIVER_EMAILS.zain2
     });
   }
 
@@ -455,10 +433,7 @@ try {
     path === "/api/payment" &&
     request.method === "POST"
   ) {
-    const auth = await requireDriver(
-      request,
-      env
-    );
+    const auth = await requireDriver(request, env);
 
     if (auth.error) {
       return json(
@@ -474,11 +449,9 @@ try {
     });
 
     const orderId = Number(body.orderId);
-
-    const paymentMethod =
-      normalizePayment(
-        body.payment_method
-      );
+    const paymentMethod = normalizePayment(
+      body.payment_method
+    );
 
     if (
       !Number.isInteger(orderId) ||
@@ -486,8 +459,7 @@ try {
     ) {
       return json(
         {
-          error:
-            "رقم الطلب غير صحيح"
+          error: "رقم الطلب غير صحيح"
         },
         400
       );
@@ -496,33 +468,27 @@ try {
     if (!paymentMethod) {
       return json(
         {
-          error:
-            "طريقة الدفع غير صحيحة"
+          error: "طريقة الدفع غير صحيحة"
         },
         400
       );
     }
 
-    const rpcResponse =
-      await supabaseRequest(
-        "/rest/v1/rpc/set_order_payment_method",
-        {
-          method: "POST",
-          headers: {
-            apikey:
-              env.SUPABASE_ANON_KEY,
-            Authorization:
-              "Bearer " + auth.token,
-            "Content-Type":
-              "application/json"
-          },
-          body: JSON.stringify({
-            p_order_id: orderId,
-            p_payment_method:
-              paymentMethod
-          })
-        }
-      );
+    const rpcResponse = await supabaseRequest(
+      "/rest/v1/rpc/set_order_payment_method",
+      {
+        method: "POST",
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + auth.token,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          p_order_id: orderId,
+          p_payment_method: paymentMethod
+        })
+      }
+    );
 
     const rpcData = await rpcResponse
       .json()
@@ -534,12 +500,9 @@ try {
       return json(
         {
           error:
-            (rpcData &&
-              rpcData.message) ||
-            (rpcData &&
-              rpcData.hint) ||
-            (rpcData &&
-              rpcData.error) ||
+            (rpcData && rpcData.message) ||
+            (rpcData && rpcData.hint) ||
+            (rpcData && rpcData.error) ||
             "تعذر حفظ طريقة الدفع"
         },
         400
@@ -548,12 +511,8 @@ try {
 
     return json({
       success: true,
-      payment_method:
-        paymentMethod,
-      payment_label:
-        paymentLabel(
-          paymentMethod
-        )
+      payment_method: paymentMethod,
+      payment_label: paymentLabel(paymentMethod)
     });
   }
 
@@ -561,10 +520,7 @@ try {
     path === "/api/deliver" &&
     request.method === "POST"
   ) {
-    const auth = await requireDriver(
-      request,
-      env
-    );
+    const auth = await requireDriver(request, env);
 
     if (auth.error) {
       return json(
@@ -587,50 +543,40 @@ try {
     ) {
       return json(
         {
-          error:
-            "رقم الطلب غير صحيح"
+          error: "رقم الطلب غير صحيح"
         },
         400
       );
     }
 
-    const rpcResponse =
-      await supabaseRequest(
-        "/rest/v1/rpc/mark_order_delivered",
-        {
-          method: "POST",
-          headers: {
-            apikey:
-              env.SUPABASE_ANON_KEY,
-            Authorization:
-              "Bearer " + auth.token,
-            "Content-Type":
-              "application/json"
-          },
-          body: JSON.stringify({
-            p_order_id:
-              orderId
-          })
-        }
-      );
+    const rpcResponse = await supabaseRequest(
+      "/rest/v1/rpc/mark_order_delivered",
+      {
+        method: "POST",
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + auth.token,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          p_order_id: orderId
+        })
+      }
+    );
 
-    const rpcData =
-      await rpcResponse
-        .json()
-        .catch(function () {
-          return null;
-        });
+    const rpcData = await rpcResponse
+      .json()
+      .catch(function () {
+        return null;
+      });
 
     if (!rpcResponse.ok) {
       return json(
         {
           error:
-            (rpcData &&
-              rpcData.message) ||
-            (rpcData &&
-              rpcData.hint) ||
-            (rpcData &&
-              rpcData.error) ||
+            (rpcData && rpcData.message) ||
+            (rpcData && rpcData.hint) ||
+            (rpcData && rpcData.error) ||
             "تعذر تسجيل التسليم"
         },
         400
@@ -639,8 +585,7 @@ try {
 
     return json({
       success: true,
-      delivery_status:
-        "delivered"
+      delivery_status: "delivered"
     });
   }
 
@@ -649,14 +594,11 @@ try {
     request.method === "POST"
   ) {
     const secret =
-      request.headers.get(
-        "X-Excel-Sync-Secret"
-      ) || "";
+      request.headers.get("X-Excel-Sync-Secret") || "";
 
     if (
       !env.EXCEL_SYNC_SECRET ||
-      secret !==
-        env.EXCEL_SYNC_SECRET
+      secret !== env.EXCEL_SYNC_SECRET
     ) {
       return json(
         {
@@ -666,17 +608,14 @@ try {
       );
     }
 
-    const body =
-      await request.json()
-        .catch(function () {
-          return null;
-        });
+    const body = await request.json().catch(function () {
+      return null;
+    });
 
     if (!body) {
       return json(
         {
-          error:
-            "بيانات غير صحيحة"
+          error: "بيانات غير صحيحة"
         },
         400
       );
@@ -689,43 +628,35 @@ try {
           ? body.orders
           : [];
 
-    const rpcResponse =
-      await supabaseRequest(
-        "/rest/v1/rpc/sync_orders_from_excel",
-        {
-          method: "POST",
-          headers: {
-            apikey:
-              env.SUPABASE_ANON_KEY,
-            Authorization:
-              "Bearer " +
-              env.SUPABASE_ANON_KEY,
-            "Content-Type":
-              "application/json"
-          },
-          body: JSON.stringify({
-            p_orders: orders
-          })
-        }
-      );
+    const rpcResponse = await supabaseRequest(
+      "/rest/v1/rpc/sync_orders_from_excel",
+      {
+        method: "POST",
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization:
+            "Bearer " + env.SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          p_orders: orders
+        })
+      }
+    );
 
-    const rpcData =
-      await rpcResponse
-        .json()
-        .catch(function () {
-          return null;
-        });
+    const rpcData = await rpcResponse
+      .json()
+      .catch(function () {
+        return null;
+      });
 
     if (!rpcResponse.ok) {
       return json(
         {
           error:
-            (rpcData &&
-              rpcData.message) ||
-            (rpcData &&
-              rpcData.hint) ||
-            (rpcData &&
-              rpcData.error) ||
+            (rpcData && rpcData.message) ||
+            (rpcData && rpcData.hint) ||
+            (rpcData && rpcData.error) ||
             "فشل مزامنة Excel"
         },
         500
@@ -743,58 +674,46 @@ try {
     request.method === "GET"
   ) {
     const secret =
-      request.headers.get(
-        "X-Excel-Sync-Secret"
-      ) || "";
+      request.headers.get("X-Excel-Sync-Secret") || "";
 
     if (
       !env.EXCEL_SYNC_SECRET ||
-      secret !==
-        env.EXCEL_SYNC_SECRET
+      secret !== env.EXCEL_SYNC_SECRET
     ) {
       return json(
         {
-          error:
-            "غير مصرح"
+          error: "غير مصرح"
         },
         401
       );
     }
 
-    const rpcResponse =
-      await supabaseRequest(
-        "/rest/v1/rpc/get_order_delivery_statuses",
-        {
-          method: "POST",
-          headers: {
-            apikey:
-              env.SUPABASE_ANON_KEY,
-            Authorization:
-              "Bearer " +
-              env.SUPABASE_ANON_KEY,
-            "Content-Type":
-              "application/json"
-          }
+    const rpcResponse = await supabaseRequest(
+      "/rest/v1/rpc/get_order_delivery_statuses",
+      {
+        method: "POST",
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization:
+            "Bearer " + env.SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
         }
-      );
+      }
+    );
 
-    const data =
-      await rpcResponse
-        .json()
-        .catch(function () {
-          return null;
-        });
+    const data = await rpcResponse
+      .json()
+      .catch(function () {
+        return null;
+      });
 
     if (!rpcResponse.ok) {
       return json(
         {
           error:
-            (data &&
-              data.message) ||
-            (data &&
-              data.hint) ||
-            (data &&
-              data.error) ||
+            (data && data.message) ||
+            (data && data.hint) ||
+            (data && data.error) ||
             "تعذر قراءة حالات التسليم"
         },
         500
@@ -811,22 +730,17 @@ try {
     return env.ASSETS.fetch(request);
   }
 
-  return new Response(
-    "Not Found",
-    {
-      status: 404,
-      headers: {
-        "Content-Type":
-          "text/plain; charset=utf-8"
-      }
+  return new Response("Not Found", {
+    status: 404,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8"
     }
-  );
+  });
 } catch (error) {
   return json(
     {
       error:
-        error &&
-        error.message
+        error && error.message
           ? error.message
           : "حدث خطأ غير متوقع"
     },
