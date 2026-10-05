@@ -8,9 +8,9 @@ const DRIVER_EMAILS = {
 const MASTER_USERNAME = "zezo";
 const MASTER_EMAIL = "marwanadel333\u0040gmail.com";
 
-function json(data, status = 200) {
+function json(data, status) {
   return new Response(JSON.stringify(data), {
-    status,
+    status: status || 200,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
@@ -21,66 +21,113 @@ function json(data, status = 200) {
 }
 
 function checkSecrets(env) {
-  if (!env.SUPABASE_ANON_KEY) return "SUPABASE_ANON_KEY";
+  if (!env.SUPABASE_ANON_KEY) {
+    return "SUPABASE_ANON_KEY";
+  }
+
+  if (!env.EXCEL_SYNC_SECRET) {
+    return "EXCEL_SYNC_SECRET";
+  }
+
   return null;
 }
 
-async function supabaseRequest(path, options = {}) {
-  return fetch(SUPABASE_URL + path, options);
-}
+function getBearerToken(request) {
+  const header = request.headers.get("Authorization") || "";
 
-async function getDriverInfo(accessToken, anonKey, userId) {
-  if (!accessToken || !anonKey || !userId) return null;
-
-  const response = await supabaseRequest(
-    "/rest/v1/mandoub_users?user_id=eq." +
-      encodeURIComponent(userId) +
-      "&select=user_id,mandoub_name,sheet_name&limit=1",
-    {
-      method: "GET",
-      headers: {
-        apikey: anonKey,
-        Authorization: "Bearer " + accessToken
-      }
-    }
-  );
-
-  if (!response.ok) return null;
-
-  const rows = await response.json().catch(() => []);
-  return Array.isArray(rows) && rows.length ? rows[0] : null;
-}
-
-async function requireDriver(request, env) {
-  const authHeader = request.headers.get("Authorization") || "";
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-
-  if (!match) {
-    return { error: "غير مصرح", status: 401 };
+  if (!header.startsWith("Bearer ")) {
+    return null;
   }
 
-  const token = match[1].trim();
+  return header.slice(7).trim();
+}
 
-  if (!token) {
-    return { error: "غير مصرح", status: 401 };
+async function supabaseRequest(path, options) {
+  const opts = options || {};
+
+  return fetch(SUPABASE_URL + path, {
+    method: opts.method || "GET",
+    headers: opts.headers || {},
+    body: opts.body
+  });
+}
+
+async function getUser(token, anonKey) {
+  if (!token || !anonKey) {
+    return null;
   }
 
-  const userResponse = await supabaseRequest("/auth/v1/user", {
-    method: "GET",
+  const response = await supabaseRequest("/auth/v1/user", {
     headers: {
-      apikey: env.SUPABASE_ANON_KEY,
+      apikey: anonKey,
       Authorization: "Bearer " + token
     }
   });
 
-  if (!userResponse.ok) {
-    return { error: "انتهت الجلسة", status: 401 };
+  if (!response.ok) {
+    return null;
   }
 
-  const user = await userResponse.json().catch(() => null);
+  return await response.json().catch(function () {
+    return null;
+  });
+}
+
+async function getDriverInfo(token, anonKey, userId) {
+  if (!token || !anonKey || !userId) {
+    return null;
+  }
+
+  const path =
+    "/rest/v1/mandoub_users?user_id=eq." +
+    encodeURIComponent(userId) +
+    "&select=mandoub_name,sheet_name";
+
+  const response = await supabaseRequest(path, {
+    headers: {
+      apikey: anonKey,
+      Authorization: "Bearer " + token
+    }
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const rows = await response.json().catch(function () {
+    return [];
+  });
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+
+  return {
+    mandoub_name: rows[0].mandoub_name || "",
+    sheet_name: rows[0].sheet_name || ""
+  };
+}
+
+async function requireDriver(request, env) {
+  const token = getBearerToken(request);
+
+  if (!token) {
+    return {
+      error: "غير مصرح",
+      status: 401
+    };
+  }
+
+  const user = await getUser(
+    token,
+    env.SUPABASE_ANON_KEY
+  );
 
   if (!user || !user.id) {
-    return { error: "انتهت الجلسة", status: 401 };
+    return {
+      error: "انتهت الجلسة",
+      status: 401
+    };
   }
 
   const driver = await getDriverInfo(
@@ -90,31 +137,99 @@ async function requireDriver(request, env) {
   );
 
   if (!driver) {
-    return { error: "المندوب غير مسجل في النظام", status: 403 };
+    return {
+      error: "المندوب غير مسجل",
+      status: 403
+    };
   }
 
   return {
+    token: token,
+    user: user,
+    driver: driver
+  };
+}
+
+async function requireMaster(request, env) {
+  const token = getBearerToken(request);
+
+  if (!token) {
+    return {
+      error: "غير مصرح",
+      status: 401
+    };
+  }
+
+  const user = await getUser(
     token,
-    user,
-    driver
+    env.SUPABASE_ANON_KEY
+  );
+
+  if (!user || !user.id) {
+    return {
+      error: "انتهت الجلسة",
+      status: 401
+    };
+  }
+
+  const path =
+    "/rest/v1/master_admins?user_id=eq." +
+    encodeURIComponent(user.id) +
+    "&select=id,user_id,email";
+
+  const response = await supabaseRequest(path, {
+    headers: {
+      apikey: env.SUPABASE_ANON_KEY,
+      Authorization: "Bearer " + token
+    }
+  });
+
+  if (!response.ok) {
+    return {
+      error: "تعذر التحقق من صلاحيات الماستر",
+      status: 500
+    };
+  }
+
+  const rows = await response.json().catch(function () {
+    return [];
+  });
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return {
+      error: "غير مصرح",
+      status: 403
+    };
+  }
+
+  return {
+    token: token,
+    user: user,
+    master: rows[0]
   };
 }
 
 function normalizePayment(value) {
-  const valueText = String(value || "").trim().toLowerCase();
+  const v = String(value || "")
+    .trim()
+    .toLowerCase();
 
   if (
-    valueText === "cash" ||
-    valueText === "كاش" ||
-    valueText === "دفع كاش"
+    v === "cash" ||
+    v === "كاش" ||
+    v === "نقدي" ||
+    v === "دفع كاش"
   ) {
     return "cash";
   }
 
   if (
-    valueText === "bank_transfer" ||
-    valueText === "bank transfer" ||
-    valueText === "تحويل بنكي"
+    v === "bank_transfer" ||
+    v === "bank transfer" ||
+    v === "bank" ||
+    v === "transfer" ||
+    v === "تحويل بنكي" ||
+    v === "تحويل"
   ) {
     return "bank_transfer";
   }
@@ -123,13 +238,15 @@ function normalizePayment(value) {
 }
 
 function paymentLabel(value) {
-  if (value === "cash") return "دفع كاش";
-  if (value === "bank_transfer") return "تحويل بنكي";
-  return "";
-}
+  if (value === "cash") {
+    return "دفع كاش";
+  }
 
-function isAllowedUsername(username) {
-  return username === "zain" || username === "zain2";
+  if (value === "bank_transfer") {
+    return "تحويل بنكي";
+  }
+
+  return "";
 }
 
 export default {
@@ -150,8 +267,7 @@ export default {
         status: 204,
         headers: {
           "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers":
-            "Content-Type, Authorization, X-Excel-Sync-Secret",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Excel-Sync-Secret",
           "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
         }
       });
@@ -161,7 +277,10 @@ export default {
     const path = url.pathname;
 
     try {
-      if (path === "/api/health" && request.method === "GET") {
+      if (
+        path === "/api/health" &&
+        request.method === "GET"
+      ) {
         return json({
           ok: true,
           worker: "delivery-driver-app",
@@ -169,512 +288,545 @@ export default {
         });
       }
 
-      if (path === "/api/login" && request.method === "POST") {
-        const body = await request.json().catch(() => ({}));
+      if (
+        path === "/api/login" &&
+        request.method === "POST"
+      ) {
+        const body =
+          await request.json().catch(function () {
+            return {};
+          });
 
-        const username = String(body.username || "")
-          .trim()
-          .toLowerCase();
+        const username =
+          String(body.username || "")
+            .trim()
+            .toLowerCase();
 
-        const password = String(body.password || "");
+        const password =
+          String(body.password || "");
 
         if (!username || !password) {
           return json(
             {
-              error: "يرجى إدخال اسم المستخدم وكلمة المرور"
+              error:
+                "يرجى إدخال اسم المستخدم وكلمة المرور"
             },
             400
           );
         }
 
-        let driverUsername = username;
+        const email =
+          DRIVER_EMAILS[username];
 
-        if (username === DRIVER_EMAILS.zain) {
-          driverUsername = "zain";
-        } else if (username === DRIVER_EMAILS.zain2) {
-          driverUsername = "zain2";
-        }
-
-        if (!isAllowedUsername(driverUsername)) {
+        if (!email) {
           return json(
             {
-              error: "اسم المستخدم أو كلمة المرور غير صحيحة"
+              error:
+                "اسم المستخدم أو كلمة المرور غير صحيحة"
             },
             401
           );
         }
 
-        const email = DRIVER_EMAILS[driverUsername];
+        const authResponse =
+          await supabaseRequest(
+            "/auth/v1/token?grant_type=password",
+            {
+              method: "POST",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                "Content-Type":
+                  "application/json"
+              },
+              body: JSON.stringify({
+                email: email,
+                password: password
+              })
+            }
+          );
 
-        const authResponse = await supabaseRequest(
-          "/auth/v1/token?grant_type=password",
-          {
-            method: "POST",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              email,
-              password
-            })
-          }
-        );
+        const authData =
+          await authResponse.json().catch(function () {
+            return {};
+          });
 
-        const authData = await authResponse.json().catch(() => ({}));
-
-        if (!authResponse.ok || !authData.access_token) {
+        if (
+          !authResponse.ok ||
+          !authData.access_token
+        ) {
           return json(
             {
-              error: "اسم المستخدم أو كلمة المرور غير صحيحة"
+              error:
+                "اسم المستخدم أو كلمة المرور غير صحيحة"
             },
             401
           );
         }
 
-        const driver = await getDriverInfo(
-          authData.access_token,
-          env.SUPABASE_ANON_KEY,
-          authData.user && authData.user.id
-        );
+        const driver =
+          await getDriverInfo(
+            authData.access_token,
+            env.SUPABASE_ANON_KEY,
+            authData.user &&
+              authData.user.id
+          );
 
         if (!driver) {
           return json(
             {
-              error: "المندوب غير مسجل في النظام"
+              error:
+                "المندوب غير مسجل في النظام"
             },
             403
           );
         }
 
         return json({
-          access_token: authData.access_token,
-          refresh_token: authData.refresh_token,
-          expires_in: authData.expires_in,
-          username: driverUsername,
-          email,
-          mandoub_name: driver.mandoub_name,
-          sheet_name: driver.sheet_name,
-          can_call: driverUsername === "zain2"
+          access_token:
+            authData.access_token,
+          refresh_token:
+            authData.refresh_token,
+          expires_in:
+            authData.expires_in,
+          username:
+            username,
+          mandoub_name:
+            driver.mandoub_name,
+          sheet_name:
+            driver.sheet_name,
+          can_call:
+            username === "zain2"
         });
       }
 
-      if (path === "/api/refresh" && request.method === "POST") {
-        const body = await request.json().catch(() => ({}));
-        const refreshToken = String(body.refresh_token || "").trim();
+      if (
+        path === "/api/master-login" &&
+        request.method === "POST"
+      ) {
+        const body =
+          await request.json().catch(function () {
+            return {};
+          });
+
+        const username =
+          String(body.username || "")
+            .trim()
+            .toLowerCase();
+
+        const password =
+          String(body.password || "");
+
+        if (
+          username !==
+          MASTER_USERNAME
+        ) {
+          return json(
+            {
+              error:
+                "اسم المستخدم أو كلمة المرور غير صحيحة"
+            },
+            401
+          );
+        }
+
+        if (!password) {
+          return json(
+            {
+              error:
+                "يرجى إدخال كلمة المرور"
+            },
+            400
+          );
+        }
+
+        const authResponse =
+          await supabaseRequest(
+            "/auth/v1/token?grant_type=password",
+            {
+              method: "POST",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                "Content-Type":
+                  "application/json"
+              },
+              body: JSON.stringify({
+                email:
+                  MASTER_EMAIL,
+                password:
+                  password
+              })
+            }
+          );
+
+        const authData =
+          await authResponse.json().catch(function () {
+            return {};
+          });
+
+        if (
+          !authResponse.ok ||
+          !authData.access_token
+        ) {
+          return json(
+            {
+              error:
+                "اسم المستخدم أو كلمة المرور غير صحيحة"
+            },
+            401
+          );
+        }
+
+        const user =
+          await getUser(
+            authData.access_token,
+            env.SUPABASE_ANON_KEY
+          );
+
+        if (!user || !user.id) {
+          return json(
+            {
+              error:
+                "تعذر التحقق من حساب الماستر"
+            },
+            401
+          );
+        }
+
+        const masterPath =
+          "/rest/v1/master_admins?user_id=eq." +
+          encodeURIComponent(user.id) +
+          "&select=id,user_id,email";
+
+        const masterResponse =
+          await supabaseRequest(
+            masterPath,
+            {
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  authData.access_token
+              }
+            }
+          );
+
+        const masterRows =
+          await masterResponse.json().catch(function () {
+            return [];
+          });
+
+        if (
+          !masterResponse.ok ||
+          !Array.isArray(masterRows) ||
+          masterRows.length === 0
+        ) {
+          return json(
+            {
+              error:
+                "هذا الحساب ليس حساب ماستر"
+            },
+            403
+          );
+        }
+
+        return json({
+          access_token:
+            authData.access_token,
+          refresh_token:
+            authData.refresh_token,
+          expires_in:
+            authData.expires_in,
+          username:
+            MASTER_USERNAME,
+          email:
+            MASTER_EMAIL,
+          role:
+            "master_admin"
+        });
+      }
+
+      if (
+        path === "/api/refresh" &&
+        request.method === "POST"
+      ) {
+        const body =
+          await request.json().catch(function () {
+            return {};
+          });
+
+        const refreshToken =
+          String(
+            body.refresh_token || ""
+          ).trim();
 
         if (!refreshToken) {
           return json(
             {
-              error: "لا يوجد refresh token"
+              error:
+                "لا يوجد refresh token"
             },
             401
           );
         }
 
-        const authResponse = await supabaseRequest(
-          "/auth/v1/token?grant_type=refresh_token",
-          {
-            method: "POST",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              refresh_token: refreshToken
-            })
-          }
-        );
+        const authResponse =
+          await supabaseRequest(
+            "/auth/v1/token?grant_type=refresh_token",
+            {
+              method: "POST",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                "Content-Type":
+                  "application/json"
+              },
+              body: JSON.stringify({
+                refresh_token:
+                  refreshToken
+              })
+            }
+          );
 
-        const authData = await authResponse.json().catch(() => ({}));
+        const authData =
+          await authResponse.json().catch(function () {
+            return {};
+          });
 
-        if (!authResponse.ok || !authData.access_token) {
+        if (
+          !authResponse.ok ||
+          !authData.access_token
+        ) {
           return json(
             {
-              error: "انتهت الجلسة"
+              error:
+                "انتهت الجلسة"
             },
             401
           );
         }
 
-        const driver = await getDriverInfo(
-          authData.access_token,
-          env.SUPABASE_ANON_KEY,
-          authData.user && authData.user.id
-        );
+        const driver =
+          await getDriverInfo(
+            authData.access_token,
+            env.SUPABASE_ANON_KEY,
+            authData.user &&
+              authData.user.id
+          );
 
         if (!driver) {
           return json(
             {
-              error: "المندوب غير مسجل"
+              error:
+                "المندوب غير مسجل"
             },
             403
           );
         }
 
-        const email = String(
-          (authData.user && authData.user.email) || ""
-        ).toLowerCase();
-
         const username =
-          email === DRIVER_EMAILS.zain2 ? "zain2" : "zain";
+          authData.user &&
+          authData.user.email ===
+            DRIVER_EMAILS.zain2
+            ? "zain2"
+            : "zain";
 
         return json({
-          access_token: authData.access_token,
-          refresh_token: authData.refresh_token,
-          expires_in: authData.expires_in,
-          username,
-          email,
-          mandoub_name: driver.mandoub_name,
-          sheet_name: driver.sheet_name,
-          can_call: username === "zain2"
+          access_token:
+            authData.access_token,
+          refresh_token:
+            authData.refresh_token,
+          expires_in:
+            authData.expires_in,
+          username:
+            username,
+          mandoub_name:
+            driver.mandoub_name,
+          sheet_name:
+            driver.sheet_name,
+          can_call:
+            username === "zain2"
         });
       }
 
-      if (path === "/api/master-login" && request.method === "POST") {
-        const body = await request.json().catch(() => ({}));
-        const username = String(body.username || "").trim().toLowerCase();
-        const password = String(body.password || "");
-
-        if (username !== MASTER_USERNAME || !password) {
-          return json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" }, 401);
-        }
-
-        const authResponse = await supabaseRequest(
-          "/auth/v1/token?grant_type=password",
-          {
-            method: "POST",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ email: MASTER_EMAIL, password })
-          }
-        );
-
-        const authData = await authResponse.json().catch(() => ({}));
-
-        if (!authResponse.ok || !authData.access_token || !authData.user?.id) {
-          return json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" }, 401);
-        }
-
-        const adminResponse = await supabaseRequest(
-          "/rest/v1/master_admins?user_id=eq." +
-            encodeURIComponent(authData.user.id) +
-            "&select=user_id,email&limit=1",
-          {
-            method: "GET",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + authData.access_token
-            }
-          }
-        );
-
-        if (!adminResponse.ok) {
-          return json({ error: "تعذر التحقق من صلاحية Master Admin" }, 500);
-        }
-
-        const admins = await adminResponse.json().catch(() => []);
-
-        if (!Array.isArray(admins) || !admins.length) {
-          return json({ error: "هذا الحساب ليس لديه صلاحية Master Admin" }, 403);
-        }
-
-        return json({
-          access_token: authData.access_token,
-          refresh_token: authData.refresh_token,
-          expires_in: authData.expires_in,
-          username: MASTER_USERNAME,
-          email: MASTER_EMAIL,
-          role: "master_admin"
-        });
-      }
-
-      if (path === "/api/master/orders" && request.method === "GET") {
-        const authHeader = request.headers.get("Authorization") || "";
-        const match = authHeader.match(/^Bearer\s+(.+)$/i);
-
-        if (!match) return json({ error: "غير مصرح" }, 401);
-
-        const token = match[1].trim();
-        const userResponse = await supabaseRequest("/auth/v1/user", {
-          method: "GET",
-          headers: {
-            apikey: env.SUPABASE_ANON_KEY,
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!userResponse.ok) return json({ error: "انتهت الجلسة" }, 401);
-
-        const user = await userResponse.json().catch(() => null);
-        if (!user?.id) return json({ error: "انتهت الجلسة" }, 401);
-
-        const adminResponse = await supabaseRequest(
-          "/rest/v1/master_admins?user_id=eq." +
-            encodeURIComponent(user.id) +
-            "&select=user_id,email&limit=1",
-          {
-            method: "GET",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + token
-            }
-          }
-        );
-
-        if (!adminResponse.ok) {
-          return json({ error: "تعذر التحقق من صلاحية Master Admin" }, 500);
-        }
-
-        const admins = await adminResponse.json().catch(() => []);
-        if (!Array.isArray(admins) || !admins.length) {
-          return json({ error: "غير مصرح" }, 403);
-        }
-
-        const ordersResponse = await supabaseRequest(
-          "/rest/v1/orders?select=*",
-          {
-            method: "GET",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + token
-            }
-          }
-        );
-
-        const orders = await ordersResponse.json().catch(() => []);
-        if (!ordersResponse.ok) {
-          return json({ error: "تعذر تحميل الفواتير" }, 500);
-        }
-
-        return json({
-          orders: Array.isArray(orders) ? orders : [],
-          username: MASTER_USERNAME,
-          email: MASTER_EMAIL,
-          role: "master_admin"
-        });
-      }
-
-      if (path === "/api/master/order/update" && request.method === "POST") {
-        const authHeader = request.headers.get("Authorization") || "";
-        const match = authHeader.match(/^Bearer\s+(.+)$/i);
-
-        if (!match) return json({ error: "غير مصرح" }, 401);
-
-        const token = match[1].trim();
-        const userResponse = await supabaseRequest("/auth/v1/user", {
-          method: "GET",
-          headers: {
-            apikey: env.SUPABASE_ANON_KEY,
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!userResponse.ok) return json({ error: "انتهت الجلسة" }, 401);
-
-        const user = await userResponse.json().catch(() => null);
-        if (!user?.id) return json({ error: "انتهت الجلسة" }, 401);
-
-        const adminResponse = await supabaseRequest(
-          "/rest/v1/master_admins?user_id=eq." +
-            encodeURIComponent(user.id) +
-            "&select=user_id&limit=1",
-          {
-            method: "GET",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + token
-            }
-          }
-        );
-
-        if (!adminResponse.ok) return json({ error: "تعذر التحقق من صلاحية Master Admin" }, 500);
-
-        const admins = await adminResponse.json().catch(() => []);
-        if (!Array.isArray(admins) || !admins.length) return json({ error: "غير مصرح" }, 403);
-
-        const body = await request.json().catch(() => ({}));
-        const orderId = Number(body.order_id);
-        const order = body.order;
-
-        if (!Number.isInteger(orderId) || orderId <= 0) return json({ error: "رقم الفاتورة غير صحيح" }, 400);
-        if (!order || typeof order !== "object") return json({ error: "بيانات الفاتورة غير صحيحة" }, 400);
-
-        if (order.payment_method !== undefined && order.payment_method !== "" && !["cash", "bank_transfer"].includes(String(order.payment_method))) {
-          return json({ error: "طريقة الدفع غير صحيحة" }, 400);
-        }
-
-        if (order.delivery_status !== undefined && order.delivery_status !== "" && !["pending", "delivered"].includes(String(order.delivery_status))) {
-          return json({ error: "حالة التسليم غير صحيحة" }, 400);
-        }
-
-        const rpcResponse = await supabaseRequest("/rest/v1/rpc/master_update_order", {
-          method: "POST",
-          headers: {
-            apikey: env.SUPABASE_ANON_KEY,
-            Authorization: "Bearer " + token,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            p_order_id: orderId,
-            p_order: order
-          })
-        });
-
-        const rpcData = await rpcResponse.json().catch(() => null);
-
-        if (!rpcResponse.ok) {
-          return json({
-            error: (rpcData && rpcData.message) || (rpcData && rpcData.hint) || (rpcData && rpcData.error) || "تعذر تعديل الفاتورة"
-          }, 400);
-        }
-
-        return json({ success: true, order: rpcData });
-      }
-
-      if (path === "/api/master/order/delete" && request.method === "POST") {
-        const authHeader = request.headers.get("Authorization") || "";
-        const match = authHeader.match(/^Bearer\s+(.+)$/i);
-
-        if (!match) return json({ error: "غير مصرح" }, 401);
-
-        const token = match[1].trim();
-        const userResponse = await supabaseRequest("/auth/v1/user", {
-          method: "GET",
-          headers: {
-            apikey: env.SUPABASE_ANON_KEY,
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!userResponse.ok) return json({ error: "انتهت الجلسة" }, 401);
-
-        const user = await userResponse.json().catch(() => null);
-        if (!user?.id) return json({ error: "انتهت الجلسة" }, 401);
-
-        const adminResponse = await supabaseRequest(
-          "/rest/v1/master_admins?user_id=eq." +
-            encodeURIComponent(user.id) +
-            "&select=user_id&limit=1",
-          {
-            method: "GET",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + token
-            }
-          }
-        );
-
-        if (!adminResponse.ok) return json({ error: "تعذر التحقق من صلاحية Master Admin" }, 500);
-
-        const admins = await adminResponse.json().catch(() => []);
-        if (!Array.isArray(admins) || !admins.length) return json({ error: "غير مصرح" }, 403);
-
-        const body = await request.json().catch(() => ({}));
-        const orderId = Number(body.order_id);
-
-        if (!Number.isInteger(orderId) || orderId <= 0) return json({ error: "رقم الفاتورة غير صحيح" }, 400);
-
-        const rpcResponse = await supabaseRequest("/rest/v1/rpc/master_delete_order", {
-          method: "POST",
-          headers: {
-            apikey: env.SUPABASE_ANON_KEY,
-            Authorization: "Bearer " + token,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            p_order_id: orderId
-          })
-        });
-
-        const rpcData = await rpcResponse.json().catch(() => null);
-
-        if (!rpcResponse.ok) {
-          return json({
-            error: (rpcData && rpcData.message) || (rpcData && rpcData.hint) || (rpcData && rpcData.error) || "تعذر حذف الفاتورة"
-          }, 400);
-        }
-
-        return json({
-          success: true,
-          deleted: true,
-          data: rpcData
-        });
-      }
-
-      if (path === "/api/orders" && request.method === "GET") {
-        const auth = await requireDriver(request, env);
+      if (
+        path === "/api/orders" &&
+        request.method === "GET"
+      ) {
+        const auth =
+          await requireDriver(
+            request,
+            env
+          );
 
         if (auth.error) {
           return json(
             {
-              error: auth.error
+              error:
+                auth.error
             },
             auth.status
           );
         }
 
-        const sheet = auth.driver.sheet_name;
+        const sheet =
+          auth.driver.sheet_name;
 
         const ordersPath =
           "/rest/v1/orders?sheet_name=eq." +
           encodeURIComponent(sheet) +
           "&select=*";
 
-        const ordersResponse = await supabaseRequest(
-          ordersPath,
-          {
-            method: "GET",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + auth.token
+        const ordersResponse =
+          await supabaseRequest(
+            ordersPath,
+            {
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  auth.token
+              }
             }
-          }
-        );
+          );
 
-        const orders = await ordersResponse.json().catch(() => []);
+        const orders =
+          await ordersResponse.json().catch(function () {
+            return [];
+          });
 
         if (!ordersResponse.ok) {
           return json(
             {
-              error: "تعذر تحميل الطلبات"
+              error:
+                "تعذر تحميل الطلبات"
             },
             500
           );
         }
 
         return json({
-          orders: Array.isArray(orders) ? orders : [],
-          sheet,
-          mandoub_name: auth.driver.mandoub_name,
+          orders:
+            Array.isArray(orders)
+              ? orders
+              : [],
+          sheet:
+            sheet,
+          mandoub_name:
+            auth.driver.mandoub_name,
           can_call:
-            String(auth.user.email || "").toLowerCase() ===
+            auth.user.email ===
             DRIVER_EMAILS.zain2
         });
       }
 
-      if (path === "/api/payment" && request.method === "POST") {
-        const auth = await requireDriver(request, env);
+      if (
+        path === "/api/master/orders" &&
+        request.method === "GET"
+      ) {
+        const auth =
+          await requireMaster(
+            request,
+            env
+          );
 
         if (auth.error) {
           return json(
             {
-              error: auth.error
+              error:
+                auth.error
             },
             auth.status
           );
         }
 
-        const body = await request.json().catch(() => ({}));
-        const orderId = Number(body.orderId);
-        const paymentMethod = normalizePayment(body.payment_method);
+        const ordersResponse =
+          await supabaseRequest(
+            "/rest/v1/orders?select=*&order=id.asc",
+            {
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  auth.token
+              }
+            }
+          );
 
-        if (!Number.isInteger(orderId) || orderId <= 0) {
+        const orders =
+          await ordersResponse.json().catch(function () {
+            return [];
+          });
+
+        if (!ordersResponse.ok) {
           return json(
             {
-              error: "رقم الطلب غير صحيح"
+              error:
+                "تعذر تحميل فواتير الماستر"
+            },
+            500
+          );
+        }
+
+        return json({
+          orders:
+            Array.isArray(orders)
+              ? orders
+              : [],
+          username:
+            MASTER_USERNAME,
+          email:
+            MASTER_EMAIL,
+          role:
+            "master_admin"
+        });
+      }
+
+      if (
+        path === "/api/payment" &&
+        request.method === "POST"
+      ) {
+        const auth =
+          await requireDriver(
+            request,
+            env
+          );
+
+        if (auth.error) {
+          return json(
+            {
+              error:
+                auth.error
+            },
+            auth.status
+          );
+        }
+
+        const body =
+          await request.json().catch(function () {
+            return {};
+          });
+
+        const orderId =
+          Number(body.orderId);
+
+        const paymentMethod =
+          normalizePayment(
+            body.payment_method
+          );
+
+        if (
+          !Number.isInteger(orderId) ||
+          orderId <= 0
+        ) {
+          return json(
+            {
+              error:
+                "رقم الطلب غير صحيح"
             },
             400
           );
@@ -683,37 +835,52 @@ export default {
         if (!paymentMethod) {
           return json(
             {
-              error: "طريقة الدفع غير صحيحة"
+              error:
+                "طريقة الدفع غير صحيحة"
             },
             400
           );
         }
 
-        const rpcResponse = await supabaseRequest(
-          "/rest/v1/rpc/set_order_payment_method",
-          {
-            method: "POST",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + auth.token,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              p_order_id: orderId,
-              p_payment_method: paymentMethod
-            })
-          }
-        );
+        const rpcResponse =
+          await supabaseRequest(
+            "/rest/v1/rpc/set_order_payment_method",
+            {
+              method: "POST",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  auth.token,
+                "Content-Type":
+                  "application/json"
+              },
+              body:
+                JSON.stringify({
+                  p_order_id:
+                    orderId,
+                  p_payment_method:
+                    paymentMethod
+                })
+            }
+          );
 
-        const rpcData = await rpcResponse.json().catch(() => null);
+        const rpcData =
+          await rpcResponse.json().catch(function () {
+            return null;
+          });
 
         if (!rpcResponse.ok) {
           return json(
             {
               error:
-                (rpcData && rpcData.message) ||
-                (rpcData && rpcData.hint) ||
-                (rpcData && rpcData.error) ||
+                (rpcData &&
+                  rpcData.message) ||
+                (rpcData &&
+                  rpcData.hint) ||
+                (rpcData &&
+                  rpcData.error) ||
                 "تعذر حفظ طريقة الدفع"
             },
             400
@@ -721,60 +888,95 @@ export default {
         }
 
         return json({
-          success: true,
-          payment_method: paymentMethod,
-          payment_label: paymentLabel(paymentMethod)
+          success:
+            true,
+          payment_method:
+            paymentMethod,
+          payment_label:
+            paymentLabel(
+              paymentMethod
+            )
         });
       }
 
-      if (path === "/api/deliver" && request.method === "POST") {
-        const auth = await requireDriver(request, env);
+      if (
+        path === "/api/deliver" &&
+        request.method === "POST"
+      ) {
+        const auth =
+          await requireDriver(
+            request,
+            env
+          );
 
         if (auth.error) {
           return json(
             {
-              error: auth.error
+              error:
+                auth.error
             },
             auth.status
           );
         }
 
-        const body = await request.json().catch(() => ({}));
-        const orderId = Number(body.orderId);
+        const body =
+          await request.json().catch(function () {
+            return {};
+          });
 
-        if (!Number.isInteger(orderId) || orderId <= 0) {
+        const orderId =
+          Number(body.orderId);
+
+        if (
+          !Number.isInteger(orderId) ||
+          orderId <= 0
+        ) {
           return json(
             {
-              error: "رقم الطلب غير صحيح"
+              error:
+                "رقم الطلب غير صحيح"
             },
             400
           );
         }
 
-        const rpcResponse = await supabaseRequest(
-          "/rest/v1/rpc/mark_order_delivered",
-          {
-            method: "POST",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + auth.token,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              p_order_id: orderId
-            })
-          }
-        );
+        const rpcResponse =
+          await supabaseRequest(
+            "/rest/v1/rpc/mark_order_delivered",
+            {
+              method: "POST",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  auth.token,
+                "Content-Type":
+                  "application/json"
+              },
+              body:
+                JSON.stringify({
+                  p_order_id:
+                    orderId
+                })
+            }
+          );
 
-        const rpcData = await rpcResponse.json().catch(() => null);
+        const rpcData =
+          await rpcResponse.json().catch(function () {
+            return null;
+          });
 
         if (!rpcResponse.ok) {
           return json(
             {
               error:
-                (rpcData && rpcData.message) ||
-                (rpcData && rpcData.hint) ||
-                (rpcData && rpcData.error) ||
+                (rpcData &&
+                  rpcData.message) ||
+                (rpcData &&
+                  rpcData.hint) ||
+                (rpcData &&
+                  rpcData.error) ||
                 "تعذر تسجيل التسليم"
             },
             400
@@ -782,74 +984,296 @@ export default {
         }
 
         return json({
-          success: true,
-          delivery_status: "delivered"
+          success:
+            true,
+          delivery_status:
+            "delivered"
         });
       }
 
-      if (path === "/api/excel-sync" && request.method === "POST") {
-        const secret =
-          request.headers.get("X-Excel-Sync-Secret") || "";
+      if (
+        path === "/api/master/order/update" &&
+        request.method === "POST"
+      ) {
+        const auth =
+          await requireMaster(
+            request,
+            env
+          );
 
-        if (!env.EXCEL_SYNC_SECRET) {
+        if (auth.error) {
           return json(
             {
-              error: "Server configuration error"
+              error:
+                auth.error
             },
-            500
+            auth.status
           );
         }
 
-        if (secret !== env.EXCEL_SYNC_SECRET) {
+        const body =
+          await request.json().catch(function () {
+            return {};
+          });
+
+        const orderId =
+          Number(body.orderId);
+
+        const order =
+          body.order;
+
+        if (
+          !Number.isInteger(orderId) ||
+          orderId <= 0
+        ) {
           return json(
             {
-              error: "غير مصرح"
-            },
-            401
-          );
-        }
-
-        const body = await request.json().catch(() => null);
-
-        if (!body) {
-          return json(
-            {
-              error: "بيانات غير صحيحة"
+              error:
+                "رقم الفاتورة غير صحيح"
             },
             400
           );
         }
 
-        const orders = Array.isArray(body)
-          ? body
-          : Array.isArray(body.orders)
-            ? body.orders
-            : [];
-
-        const rpcResponse = await supabaseRequest(
-          "/rest/v1/rpc/sync_orders_from_excel",
-          {
-            method: "POST",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + env.SUPABASE_ANON_KEY,
-              "Content-Type": "application/json"
+        if (
+          !order ||
+          typeof order !== "object"
+        ) {
+          return json(
+            {
+              error:
+                "بيانات الفاتورة غير صحيحة"
             },
-            body: JSON.stringify({
-              p_orders: orders
-            })
-          }
-        );
+            400
+          );
+        }
 
-        const rpcData = await rpcResponse.json().catch(() => null);
+        const rpcResponse =
+          await supabaseRequest(
+            "/rest/v1/rpc/master_update_order",
+            {
+              method: "POST",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  auth.token,
+                "Content-Type":
+                  "application/json"
+              },
+              body:
+                JSON.stringify({
+                  p_order_id:
+                    orderId,
+                  p_order:
+                    order
+                })
+            }
+          );
+
+        const rpcData =
+          await rpcResponse.json().catch(function () {
+            return null;
+          });
 
         if (!rpcResponse.ok) {
           return json(
             {
               error:
-                (rpcData && rpcData.message) ||
-                (rpcData && rpcData.hint) ||
-                (rpcData && rpcData.error) ||
+                (rpcData &&
+                  rpcData.message) ||
+                (rpcData &&
+                  rpcData.hint) ||
+                (rpcData &&
+                  rpcData.error) ||
+                "تعذر تعديل الفاتورة"
+            },
+            400
+          );
+        }
+
+        return json({
+          success:
+            true,
+          order:
+            rpcData
+        });
+      }
+
+      if (
+        path === "/api/master/order/delete" &&
+        request.method === "POST"
+      ) {
+        const auth =
+          await requireMaster(
+            request,
+            env
+          );
+
+        if (auth.error) {
+          return json(
+            {
+              error:
+                auth.error
+            },
+            auth.status
+          );
+        }
+
+        const body =
+          await request.json().catch(function () {
+            return {};
+          });
+
+        const orderId =
+          Number(body.orderId);
+
+        if (
+          !Number.isInteger(orderId) ||
+          orderId <= 0
+        ) {
+          return json(
+            {
+              error:
+                "رقم الفاتورة غير صحيح"
+            },
+            400
+          );
+        }
+
+        const rpcResponse =
+          await supabaseRequest(
+            "/rest/v1/rpc/master_delete_order",
+            {
+              method: "POST",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  auth.token,
+                "Content-Type":
+                  "application/json"
+              },
+              body:
+                JSON.stringify({
+                  p_order_id:
+                    orderId
+                })
+            }
+          );
+
+        const rpcData =
+          await rpcResponse.json().catch(function () {
+            return null;
+          });
+
+        if (!rpcResponse.ok) {
+          return json(
+            {
+              error:
+                (rpcData &&
+                  rpcData.message) ||
+                (rpcData &&
+                  rpcData.hint) ||
+                (rpcData &&
+                  rpcData.error) ||
+                "تعذر حذف الفاتورة"
+            },
+            400
+          );
+        }
+
+        return json({
+          success:
+            true,
+          data:
+            rpcData
+        });
+      }
+
+      if (
+        path === "/api/excel-sync" &&
+        request.method === "POST"
+      ) {
+        const secret =
+          request.headers.get(
+            "X-Excel-Sync-Secret"
+          ) || "";
+
+        if (
+          secret !==
+          env.EXCEL_SYNC_SECRET
+        ) {
+          return json(
+            {
+              error:
+                "غير مصرح"
+            },
+            401
+          );
+        }
+
+        const body =
+          await request.json().catch(function () {
+            return null;
+          });
+
+        if (!body) {
+          return json(
+            {
+              error:
+                "بيانات غير صحيحة"
+            },
+            400
+          );
+        }
+
+        const orders =
+          Array.isArray(body)
+            ? body
+            : Array.isArray(body.orders)
+              ? body.orders
+              : [];
+
+        const rpcResponse =
+          await supabaseRequest(
+            "/rest/v1/rpc/sync_orders_from_excel",
+            {
+              method: "POST",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  env.SUPABASE_ANON_KEY,
+                "Content-Type":
+                  "application/json"
+              },
+              body:
+                JSON.stringify({
+                  p_orders:
+                    orders
+                })
+            }
+          );
+
+        const rpcData =
+          await rpcResponse.json().catch(function () {
+            return null;
+          });
+
+        if (!rpcResponse.ok) {
+          return json(
+            {
+              error:
+                (rpcData &&
+                  rpcData.message) ||
+                (rpcData &&
+                  rpcData.hint) ||
+                (rpcData &&
+                  rpcData.error) ||
                 "فشل مزامنة Excel"
             },
             500
@@ -857,54 +1281,67 @@ export default {
         }
 
         return json({
-          success: true,
-          data: rpcData
+          success:
+            true,
+          data:
+            rpcData
         });
       }
 
-      if (path === "/api/excel-status" && request.method === "GET") {
+      if (
+        path === "/api/excel-status" &&
+        request.method === "GET"
+      ) {
         const secret =
-          request.headers.get("X-Excel-Sync-Secret") || "";
+          request.headers.get(
+            "X-Excel-Sync-Secret"
+          ) || "";
 
-        if (!env.EXCEL_SYNC_SECRET) {
+        if (
+          secret !==
+          env.EXCEL_SYNC_SECRET
+        ) {
           return json(
             {
-              error: "Server configuration error"
-            },
-            500
-          );
-        }
-
-        if (secret !== env.EXCEL_SYNC_SECRET) {
-          return json(
-            {
-              error: "غير مصرح"
+              error:
+                "غير مصرح"
             },
             401
           );
         }
 
-        const rpcResponse = await supabaseRequest(
-          "/rest/v1/rpc/get_order_delivery_statuses",
-          {
-            method: "POST",
-            headers: {
-              apikey: env.SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + env.SUPABASE_ANON_KEY,
-              "Content-Type": "application/json"
+        const rpcResponse =
+          await supabaseRequest(
+            "/rest/v1/rpc/get_order_delivery_statuses",
+            {
+              method: "POST",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  env.SUPABASE_ANON_KEY,
+                "Content-Type":
+                  "application/json"
+              }
             }
-          }
-        );
+          );
 
-        const data = await rpcResponse.json().catch(() => null);
+        const data =
+          await rpcResponse.json().catch(function () {
+            return null;
+          });
 
         if (!rpcResponse.ok) {
           return json(
             {
               error:
-                (data && data.message) ||
-                (data && data.hint) ||
-                (data && data.error) ||
+                (data &&
+                  data.message) ||
+                (data &&
+                  data.hint) ||
+                (data &&
+                  data.error) ||
                 "تعذر قراءة حالات التسليم"
             },
             500
@@ -916,21 +1353,30 @@ export default {
 
       if (
         env.ASSETS &&
-        typeof env.ASSETS.fetch === "function"
+        typeof env.ASSETS.fetch ===
+          "function"
       ) {
-        return env.ASSETS.fetch(request);
+        return env.ASSETS.fetch(
+          request
+        );
       }
 
-      return new Response("Not Found", {
-        status: 404,
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8"
+      return new Response(
+        "Not Found",
+        {
+          status: 404,
+          headers: {
+            "Content-Type":
+              "text/plain; charset=utf-8"
+          }
         }
-      });
+      );
+
     } catch (error) {
       return json(
         {
-          error: "حدث خطأ غير متوقع"
+          error:
+            "حدث خطأ غير متوقع"
         },
         500
       );
