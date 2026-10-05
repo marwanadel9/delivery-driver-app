@@ -1,4 +1,4 @@
-```javascript
+javascript
 (() => {
   'use strict';
 
@@ -1285,4 +1285,3 @@
 
   boot();
 })();
-```
