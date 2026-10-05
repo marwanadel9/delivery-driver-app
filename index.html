@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0f172a">
-  <title>Delivery Driver</title>
+  <title>فروج الزين</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -15,9 +15,9 @@
 
       <div class="login-card">
         <div class="brand-mark">
-          <div class="brand-icon">N</div>
+          <div class="brand-icon">🐔</div>
           <div>
-            <div class="brand-name">NAS EGYPT</div>
+            <div class="brand-name">فروج الزين</div>
             <div class="brand-subtitle">Delivery Management</div>
           </div>
         </div>
@@ -32,7 +32,14 @@
             <label for="username">اسم المستخدم</label>
             <div class="input-wrap">
               <span class="input-icon">👤</span>
-              <input id="username" name="username" type="text" placeholder="أدخل اسم المستخدم" autocomplete="username" required>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                placeholder="أدخل اسم المستخدم"
+                autocomplete="username"
+                required
+              >
             </div>
           </div>
 
@@ -40,7 +47,14 @@
             <label for="password">كلمة المرور</label>
             <div class="input-wrap">
               <span class="input-icon">🔒</span>
-              <input id="password" name="password" type="password" placeholder="أدخل كلمة المرور" autocomplete="current-password" required>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="أدخل كلمة المرور"
+                autocomplete="current-password"
+                required
+              >
             </div>
           </div>
 
@@ -53,7 +67,7 @@
         </form>
 
         <div class="login-footer">
-          <span>NAS EGYPT</span>
+          <span>فروج الزين</span>
           <span>•</span>
           <span>Delivery System</span>
         </div>
@@ -65,9 +79,9 @@
         <div class="topbar-inner">
 
           <div class="topbar-brand">
-            <div class="mini-logo">N</div>
+            <div class="mini-logo">🐔</div>
             <div class="brand-text">
-              <strong>NAS EGYPT</strong>
+              <strong>فروج الزين</strong>
               <span>Delivery</span>
             </div>
           </div>
@@ -81,8 +95,21 @@
           </div>
 
           <div class="topbar-actions">
-            <button id="refresh-btn" class="icon-btn" type="button" title="تحديث الطلبات" aria-label="تحديث الطلبات">↻</button>
-            <button id="logout-btn" class="icon-btn logout-icon" type="button" title="تسجيل الخروج" aria-label="تسجيل الخروج">↪</button>
+            <button
+              id="refresh-btn"
+              class="icon-btn"
+              type="button"
+              title="تحديث الطلبات"
+              aria-label="تحديث الطلبات"
+            >↻</button>
+
+            <button
+              id="logout-btn"
+              class="icon-btn logout-icon"
+              type="button"
+              title="تسجيل الخروج"
+              aria-label="تسجيل الخروج"
+            >↪</button>
           </div>
 
         </div>
@@ -96,6 +123,7 @@
             <h1>طلبات اليوم</h1>
             <p>تابع الطلبات وحدد طريقة الدفع وسجل التسليم بسهولة.</p>
           </div>
+
           <div class="orders-counter">
             <span id="orders-counter-number">0</span>
             <small>طلب</small>
@@ -121,9 +149,23 @@
         </section>
 
         <nav class="tabs" aria-label="تصفية الطلبات">
-          <button class="tab active" type="button" data-filter="pending">قيد التوصيل</button>
-          <button class="tab" type="button" data-filter="done">تم التسليم</button>
-          <button class="tab" type="button" data-filter="all">الكل</button>
+          <button
+            class="tab active"
+            type="button"
+            data-filter="pending"
+          >قيد التوصيل</button>
+
+          <button
+            class="tab"
+            type="button"
+            data-filter="done"
+          >تم التسليم</button>
+
+          <button
+            class="tab"
+            type="button"
+            data-filter="all"
+          >الكل</button>
         </nav>
 
         <section id="orders-list" class="orders-list"></section>
@@ -144,19 +186,31 @@
           <strong data-f="order_number">—</strong>
         </div>
 
-        <div class="delivery-status" data-f="delivery_status">قيد التوصيل</div>
+        <div
+          class="delivery-status"
+          data-f="delivery_status"
+        >قيد التوصيل</div>
       </div>
 
       <div class="customer-row">
         <div class="customer-avatar">👤</div>
+
         <div class="customer-main">
           <h2 data-f="customer_name">—</h2>
           <a class="phone-link" data-f="phone">—</a>
         </div>
-        <a class="call-btn action-icon" href="#" hidden title="اتصال" aria-label="اتصال">☎</a>
+
+        <a
+          class="call-btn action-icon"
+          href="#"
+          hidden
+          title="اتصال"
+          aria-label="اتصال"
+        >☎</a>
       </div>
 
       <div class="order-details">
+
         <div class="info-item">
           <span class="info-label">📍 المنطقة</span>
           <strong data-f="area">—</strong>
@@ -176,6 +230,7 @@
           <span class="info-label">💬 ملاحظات</span>
           <strong data-f="note">—</strong>
         </div>
+
       </div>
 
       <div class="order-total">
@@ -184,34 +239,59 @@
       </div>
 
       <div class="payment-section">
+
         <div class="payment-title">
           <span>طريقة الدفع</span>
-          <small class="payment-current">لم يتم تحديد طريقة الدفع</small>
+          <small class="payment-current">
+            لم يتم تحديد طريقة الدفع
+          </small>
         </div>
 
         <div class="payment-buttons">
-          <button class="payment-btn cash-btn" type="button" data-payment="cash">
+
+          <button
+            class="payment-btn cash-btn"
+            type="button"
+            data-payment="cash"
+          >
             <span>💵</span>
             <strong>دفع كاش</strong>
           </button>
 
-          <button class="payment-btn bank-btn" type="button" data-payment="bank_transfer">
+          <button
+            class="payment-btn bank-btn"
+            type="button"
+            data-payment="bank_transfer"
+          >
             <span>🏦</span>
             <strong>تحويل بنكي</strong>
           </button>
+
         </div>
       </div>
 
       <div class="order-actions">
-        <a class="location-btn" data-f="location_url" href="#" hidden target="_blank" rel="noopener noreferrer">
+
+        <a
+          class="location-btn"
+          data-f="location_url"
+          href="#"
+          hidden
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           <span>📍</span>
           <strong>فتح الموقع</strong>
         </a>
 
-        <button class="btn-deliver" type="button">
+        <button
+          class="btn-deliver"
+          type="button"
+        >
           <span>✓</span>
           <strong>تم التسليم</strong>
         </button>
+
       </div>
 
     </article>
