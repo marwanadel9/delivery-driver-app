@@ -1,396 +1,222 @@
-html
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f766e">
-  <meta name="color-scheme" content="light">
-  <meta name="description" content="تطبيق إدارة طلبات التوصيل للمندوب">
-  <title>تطبيق المندوب</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <title>Delivery Driver</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
-
 <body>
-
   <div class="app-shell">
 
-    <main id="login-view" class="view login-view">
+    <section id="login-view" class="login-view">
+      <div class="login-background"></div>
 
-      <section class="login-card">
-
-        <div class="login-brand">
-
-          <div class="brand-mark">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 7h11v9H3z"/>
-              <path d="M14 10h4l3 3v3h-7z"/>
-              <circle cx="7" cy="17.5" r="1.8"/>
-              <circle cx="17" cy="17.5" r="1.8"/>
-            </svg>
+      <div class="login-card">
+        <div class="brand-mark">
+          <div class="brand-icon">N</div>
+          <div>
+            <div class="brand-name">NAS EGYPT</div>
+            <div class="brand-subtitle">Delivery Management</div>
           </div>
-
-          <span class="brand-eyebrow">DELIVERY SYSTEM</span>
-          <h1>تطبيق المندوب</h1>
-          <p>إدارة طلبات التوصيل بسهولة وأمان</p>
-
         </div>
 
         <div class="login-heading">
-          <h2>تسجيل الدخول</h2>
-          <p>أدخل بيانات حساب المندوب للمتابعة</p>
+          <h1>مرحباً بك</h1>
+          <p>سجل الدخول لإدارة طلبات التوصيل</p>
         </div>
 
-        <form id="login-form" novalidate>
-
+        <form id="login-form" autocomplete="on">
           <div class="field">
-
             <label for="username">اسم المستخدم</label>
-
             <div class="input-wrap">
-
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-                <circle cx="12" cy="8" r="3.5"/>
-                <path d="M5 20c.8-3.2 3.1-5 7-5s6.2 1.8 7 5"/>
-              </svg>
-
-              <input
-                id="username"
-                name="username"
-                type="text"
-                autocomplete="username"
-                autocapitalize="none"
-                spellcheck="false"
-                dir="ltr"
-                placeholder="اسم المستخدم"
-                required
-              >
-
+              <span class="input-icon">👤</span>
+              <input id="username" name="username" type="text" placeholder="أدخل اسم المستخدم" autocomplete="username" required>
             </div>
-
           </div>
 
           <div class="field">
-
             <label for="password">كلمة المرور</label>
-
             <div class="input-wrap">
-
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="5" y="10" width="14" height="10" rx="2"/>
-                <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
-              </svg>
-
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autocomplete="current-password"
-                dir="ltr"
-                placeholder="كلمة المرور"
-                required
-              >
-
+              <span class="input-icon">🔒</span>
+              <input id="password" name="password" type="password" placeholder="أدخل كلمة المرور" autocomplete="current-password" required>
             </div>
-
           </div>
 
-          <p id="login-error" class="error" role="alert" hidden></p>
+          <p id="login-error" class="login-error" hidden></p>
 
-          <button id="login-btn" type="submit" class="btn btn-primary login-submit">
+          <button id="login-btn" class="login-btn" type="submit">
             <span>تسجيل الدخول</span>
+            <span class="login-arrow">←</span>
           </button>
-
         </form>
 
         <div class="login-footer">
-          <span>نظام إدارة طلبات التوصيل</span>
+          <span>NAS EGYPT</span>
+          <span>•</span>
+          <span>Delivery System</span>
         </div>
+      </div>
+    </section>
 
-      </section>
-
-    </main>
-
-    <div id="orders-view" class="view dashboard-view" hidden>
-
+    <section id="orders-view" class="orders-view" hidden>
       <header class="topbar">
+        <div class="topbar-inner">
 
-        <div class="driver-profile">
-
-          <div class="driver-avatar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-              <circle cx="12" cy="8" r="3.5"/>
-              <path d="M5 20c.8-3.2 3.1-5 7-5s6.2 1.8 7 5"/>
-            </svg>
+          <div class="topbar-brand">
+            <div class="mini-logo">N</div>
+            <div class="brand-text">
+              <strong>NAS EGYPT</strong>
+              <span>Delivery</span>
+            </div>
           </div>
 
-          <div class="driver-details">
-            <span class="welcome">مرحبًا بك</span>
-            <strong id="driver-name">المندوب</strong>
-            <small id="sheet-name"></small>
+          <div class="driver-profile">
+            <div class="driver-avatar">🚚</div>
+            <div class="driver-info">
+              <strong id="driver-name">المندوب</strong>
+              <span id="sheet-name">قائمة الطلبات</span>
+            </div>
+          </div>
+
+          <div class="topbar-actions">
+            <button id="refresh-btn" class="icon-btn" type="button" title="تحديث الطلبات" aria-label="تحديث الطلبات">↻</button>
+            <button id="logout-btn" class="icon-btn logout-icon" type="button" title="تسجيل الخروج" aria-label="تسجيل الخروج">↪</button>
           </div>
 
         </div>
-
-        <div class="top-actions">
-
-          <button id="refresh-btn" class="icon-btn" type="button" aria-label="تحديث الطلبات" title="تحديث الطلبات">
-
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 11a8 8 0 1 0-2.3 5.7"/>
-              <path d="M20 4v7h-7"/>
-            </svg>
-
-          </button>
-
-          <button id="logout-btn" class="icon-btn logout-icon" type="button" aria-label="تسجيل الخروج" title="تسجيل الخروج">
-
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M15 4h4v16h-4"/>
-              <path d="M10 8l-4 4 4 4"/>
-              <path d="M6 12h10"/>
-            </svg>
-
-          </button>
-
-        </div>
-
       </header>
 
-      <section class="dashboard-heading">
+      <main class="main-content">
 
-        <div>
-          <span class="section-kicker">لوحة المندوب</span>
-          <h1>طلبات التوصيل</h1>
-          <p>تابع طلباتك وسجل طريقة الدفع وحالة التسليم</p>
-        </div>
+        <section class="welcome-section">
+          <div>
+            <span class="eyebrow">لوحة المندوب</span>
+            <h1>طلبات اليوم</h1>
+            <p>تابع الطلبات وحدد طريقة الدفع وسجل التسليم بسهولة.</p>
+          </div>
+          <div class="orders-counter">
+            <span id="orders-counter-number">0</span>
+            <small>طلب</small>
+          </div>
+        </section>
 
-        <div class="orders-counter">
-          <strong id="stat-pending">0</strong>
-          <span>قيد التوصيل</span>
-        </div>
-
-      </section>
-
-      <section class="stats">
-
-        <div class="stat-card pending-stat">
-
-          <div class="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-              <circle cx="12" cy="12" r="8"/>
-              <path d="M12 8v4l2.5 2"/>
-            </svg>
+        <section class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon pending-icon">⏳</div>
+            <div>
+              <span>قيد التوصيل</span>
+              <strong id="stat-pending">0</strong>
+            </div>
           </div>
 
-          <div class="stat-content">
-            <span id="stat-pending">0</span>
-            <small>قيد التوصيل</small>
+          <div class="stat-card">
+            <div class="stat-icon done-icon">✓</div>
+            <div>
+              <span>تم التسليم</span>
+              <strong id="stat-done">0</strong>
+            </div>
           </div>
+        </section>
 
-        </div>
+        <nav class="tabs" aria-label="تصفية الطلبات">
+          <button class="tab active" type="button" data-filter="pending">قيد التوصيل</button>
+          <button class="tab" type="button" data-filter="done">تم التسليم</button>
+          <button class="tab" type="button" data-filter="all">الكل</button>
+        </nav>
 
-        <div class="stat-card done-stat">
+        <section id="orders-list" class="orders-list"></section>
 
-          <div class="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="9"/>
-              <path d="m7 12 3 3 7-7"/>
-            </svg>
-          </div>
-
-          <div class="stat-content">
-            <span id="stat-done">0</span>
-            <small>تم التسليم</small>
-          </div>
-
-        </div>
-
-      </section>
-
-      <nav class="tabs" role="tablist" aria-label="تصفية الطلبات">
-
-        <button class="tab active" data-filter="pending" type="button" role="tab">
-          <span>قيد التوصيل</span>
-        </button>
-
-        <button class="tab" data-filter="done" type="button" role="tab">
-          <span>تم التسليم</span>
-        </button>
-
-        <button class="tab" data-filter="all" type="button" role="tab">
-          <span>كل الطلبات</span>
-        </button>
-
-      </nav>
-
-      <main id="orders-list" class="orders" aria-live="polite"></main>
-
-    </div>
+      </main>
+    </section>
 
   </div>
 
-  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="toast" class="toast" hidden></div>
 
   <template id="order-tpl">
-
     <article class="order-card">
 
-      <div class="order-top">
-
+      <div class="order-card-head">
         <div class="order-number">
-          <span>رقم الطلب</span>
-          <strong data-f="order_number"></strong>
+          <span>طلب</span>
+          <strong data-f="order_number">—</strong>
         </div>
 
-        <span class="delivery-status" data-f="delivery_status"></span>
-
+        <div class="delivery-status" data-f="delivery_status">قيد التوصيل</div>
       </div>
 
-      <div class="customer-header">
-
-        <div class="customer-avatar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-            <circle cx="12" cy="8" r="3.5"/>
-            <path d="M5 20c.8-3.2 3.1-5 7-5s6.2 1.8 7 5"/>
-          </svg>
+      <div class="customer-row">
+        <div class="customer-avatar">👤</div>
+        <div class="customer-main">
+          <h2 data-f="customer_name">—</h2>
+          <a class="phone-link" data-f="phone">—</a>
         </div>
-
-        <div>
-          <span>اسم العميل</span>
-          <h2 data-f="customer_name"></h2>
-        </div>
-
+        <a class="call-btn action-icon" href="#" hidden title="اتصال" aria-label="اتصال">☎</a>
       </div>
 
-      <div class="order-info-grid">
-
-        <div class="info-box phone-box">
-
-          <span class="info-label">رقم الهاتف</span>
-
-          <div class="info-value phone-value">
-            <span data-f="phone"></span>
-          </div>
-
+      <div class="order-details">
+        <div class="info-item">
+          <span class="info-label">📍 المنطقة</span>
+          <strong data-f="area">—</strong>
         </div>
 
-        <div class="info-box">
-
-          <span class="info-label">المنطقة</span>
-
-          <strong class="info-value" data-f="area"></strong>
-
+        <div class="info-item">
+          <span class="info-label">📝 الطلب</span>
+          <strong data-f="order_details">—</strong>
         </div>
 
-        <div class="info-box full">
-
-          <span class="info-label">تفاصيل الطلب</span>
-
-          <div class="info-value details" data-f="order_details"></div>
-
+        <div class="info-item">
+          <span class="info-label">📅 منسق الموعد</span>
+          <strong data-f="appointment_coordinator">—</strong>
         </div>
 
-        <div class="info-box full location-box">
-
-          <span class="info-label">موقع العميل</span>
-
-          <a
-            class="location-link"
-            data-f="location_url"
-            href="#"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <span>فتح موقع العميل</span>
-
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 21s7-5.2 7-11a7 7 0 0 0-14 0c0 5.8 7 11 7 11Z"/>
-              <circle cx="12" cy="10" r="2.5"/>
-            </svg>
-
-          </a>
-
+        <div class="info-item note-item">
+          <span class="info-label">💬 ملاحظات</span>
+          <strong data-f="note">—</strong>
         </div>
+      </div>
 
-        <div class="info-box full">
-
-          <span class="info-label">منسق الموعد</span>
-
-          <strong class="info-value" data-f="appointment_coordinator"></strong>
-
-        </div>
-
-        <div class="info-box full note-box">
-
-          <span class="info-label">ملاحظات</span>
-
-          <div class="info-value note" data-f="note"></div>
-
-        </div>
-
+      <div class="order-total">
+        <span>الإجمالي</span>
+        <strong data-f="total">—</strong>
       </div>
 
       <div class="payment-section">
-
-        <div class="payment-heading">
-
-          <div>
-            <span class="payment-label">طريقة الدفع</span>
-            <strong>حدد طريقة الدفع</strong>
-          </div>
-
-          <span class="payment-current" data-f="payment_method">
-            لم يتم التحديد
-          </span>
-
+        <div class="payment-title">
+          <span>طريقة الدفع</span>
+          <small class="payment-current">لم يتم تحديد طريقة الدفع</small>
         </div>
 
-        <div class="payment-options">
-
-          <button
-            class="payment-btn cash-btn"
-            type="button"
-            data-payment="cash"
-          >
-            <span class="payment-icon">💵</span>
-            <span>دفع كاش</span>
+        <div class="payment-buttons">
+          <button class="payment-btn cash-btn" type="button" data-payment="cash">
+            <span>💵</span>
+            <strong>دفع كاش</strong>
           </button>
 
-          <button
-            class="payment-btn bank-btn"
-            type="button"
-            data-payment="bank_transfer"
-          >
-            <span class="payment-icon">🏦</span>
-            <span>تحويل بنكي</span>
+          <button class="payment-btn bank-btn" type="button" data-payment="bank_transfer">
+            <span>🏦</span>
+            <strong>تحويل بنكي</strong>
           </button>
-
         </div>
-
       </div>
 
-      <div class="order-bottom">
+      <div class="order-actions">
+        <a class="location-btn" data-f="location_url" href="#" hidden target="_blank" rel="noopener noreferrer">
+          <span>📍</span>
+          <strong>فتح الموقع</strong>
+        </a>
 
-        <div class="total-box">
-
-          <span>الإجمالي</span>
-          <strong data-f="total"></strong>
-
-        </div>
-
-        <button class="btn btn-deliver" type="button">
-          <span class="deliver-icon">✓</span>
-          <span>تم التسليم</span>
+        <button class="btn-deliver" type="button">
+          <span>✓</span>
+          <strong>تم التسليم</strong>
         </button>
-
       </div>
 
     </article>
-
   </template>
 
-  <script src="/app.js" defer></script>
-
+  <script src="/app.js"></script>
 </body>
 </html>
