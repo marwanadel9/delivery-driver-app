@@ -596,6 +596,201 @@
     element.textContent = text;
   }
 
+  function firstValue(order, keys) {
+    for (const key of keys) {
+      const value = order?.[key];
+
+      if (
+        value !== null &&
+        value !== undefined &&
+        String(value).trim() !== ''
+      ) {
+        return value;
+      }
+    }
+
+    return '';
+  }
+
+  function extractNumbers(value) {
+    return String(value ?? '')
+      .match(/\d+(?:[.,]\d+)?/g) || [];
+  }
+
+  function formatChickenLines(
+    weights,
+    quantities
+  ) {
+    const weightList =
+      extractNumbers(weights);
+
+    const qtyList =
+      extractNumbers(quantities);
+
+    const count =
+      Math.max(
+        weightList.length,
+        qtyList.length
+      );
+
+    if (!count) {
+      return '—';
+    }
+
+    const result = [];
+
+    for (
+      let i = 0;
+      i < count;
+      i += 1
+    ) {
+      const weight =
+        weightList[i] || '';
+
+      const qty =
+        qtyList[i] || '';
+
+      if (!weight && !qty) {
+        continue;
+      }
+
+      if (weight && qty) {
+        result.push(
+          `⚖️ ${weight} جرام — 📦 ${qty}`
+        );
+      } else if (weight) {
+        result.push(
+          `⚖️ ${weight} جرام`
+        );
+      } else {
+        result.push(
+          `📦 ${qty}`
+        );
+      }
+    }
+
+    return result.length
+      ? result.join('\n')
+      : '—';
+  }
+
+  function extractPlateNames(value) {
+    const text =
+      String(value ?? '').trim();
+
+    if (!text) {
+      return [];
+    }
+
+    const patterns = [
+      'أرجل دبوس',
+      'ارجل دبوس',
+      'صدور',
+      'أفخاذ',
+      'افخاذ',
+      'أجنحة',
+      'اجنحه',
+      'كبدة',
+      'كبده',
+      'قوانص',
+      'قلوب'
+    ];
+
+    const escaped =
+      patterns
+        .sort(
+          (a, b) =>
+            b.length - a.length
+        )
+        .map(
+          (item) =>
+            item.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              '\\$&'
+            )
+        )
+        .join('|');
+
+    return (
+      text.match(
+        new RegExp(
+          escaped,
+          'g'
+        )
+      ) || []
+    );
+  }
+
+  function extractPlateQuantities(value) {
+    const text =
+      String(value ?? '').trim();
+
+    if (!text) {
+      return [];
+    }
+
+    return (
+      text.match(
+        /\d+\s*\+\s*\d+\s*هدية|\d+/g
+      ) || []
+    );
+  }
+
+  function formatPlateLines(
+    names,
+    quantities
+  ) {
+    const nameList =
+      extractPlateNames(names);
+
+    const qtyList =
+      extractPlateQuantities(
+        quantities
+      );
+
+    const count =
+      Math.max(
+        nameList.length,
+        qtyList.length
+      );
+
+    if (!count) {
+      return '—';
+    }
+
+    const result = [];
+
+    for (
+      let i = 0;
+      i < count;
+      i += 1
+    ) {
+      const name =
+        nameList[i] || '';
+
+      const qty =
+        qtyList[i] || '';
+
+      if (!name && !qty) {
+        continue;
+      }
+
+      if (name && qty) {
+        result.push(
+          `🍗 ${name} — 📦 ${qty}`
+        );
+      } else {
+        result.push(
+          name || qty
+        );
+      }
+    }
+
+    return result.length
+      ? result.join('\n')
+      : '—';
+  }
+
   function render() {
     const list =
       $('orders-list');
@@ -603,7 +798,10 @@
     const template =
       $('order-tpl');
 
-    if (!list || !template) {
+    if (
+      !list ||
+      !template
+    ) {
       return;
     }
 
@@ -633,16 +831,25 @@
       return;
     }
 
-    for (const order of shown) {
+    for (
+      const order of shown
+    ) {
       const node =
         template.content
           .firstElementChild
           .cloneNode(true);
 
       const orderNumber =
-        order.order_number ??
-        order.id ??
-        '—';
+        firstValue(
+          order,
+          [
+            'order_number',
+            'orderNumber',
+            'invoice_no',
+            'invoice_number',
+            'id'
+          ]
+        ) || '—';
 
       const delivered =
         isDelivered(
@@ -658,61 +865,200 @@
       setText(
         node,
         'customer_name',
-        order.customer_name
+        firstValue(
+          order,
+          [
+            'customer_name',
+            'customerName',
+            'name'
+          ]
+        )
       );
 
       setText(
         node,
         'emirate',
-        order.emirate
+        firstValue(
+          order,
+          [
+            'emirate',
+            'emirate_name',
+            'emirateName'
+          ]
+        )
       );
 
       setText(
         node,
         'area',
-        order.area
+        firstValue(
+          order,
+          [
+            'area',
+            'area_name',
+            'areaName'
+          ]
+        )
       );
+
+      const chickenWeights =
+        firstValue(
+          order,
+          [
+            'chicken_weights',
+            'chickenWeights',
+            'chicken_weight',
+            'data_weights'
+          ]
+        );
+
+      const chickenQtys =
+        firstValue(
+          order,
+          [
+            'chicken_qtys',
+            'chickenQtys',
+            'chicken_quantities',
+            'chicken_quantities_text'
+          ]
+        );
+
+      const plateNames =
+        firstValue(
+          order,
+          [
+            'plate_names',
+            'plateNames',
+            'plates',
+            'cut_names'
+          ]
+        );
+
+      const plateQtys =
+        firstValue(
+          order,
+          [
+            'plate_qtys',
+            'plateQtys',
+            'plate_quantities',
+            'cut_quantities'
+          ]
+        );
+
+      const chickenDisplay =
+        formatChickenLines(
+          chickenWeights,
+          chickenQtys
+        );
+
+      const plateDisplay =
+        formatPlateLines(
+          plateNames,
+          plateQtys
+        );
 
       setText(
         node,
         'chicken_weights',
-        order.chicken_weights
+        chickenDisplay
       );
 
       setText(
         node,
         'chicken_qtys',
-        order.chicken_qtys
+        ''
       );
 
       setText(
         node,
         'plate_names',
-        order.plate_names
+        plateDisplay
       );
 
       setText(
         node,
         'plate_qtys',
-        order.plate_qtys
+        ''
+      );
+
+      [
+        'chicken_weights',
+        'chicken_qtys',
+        'plate_names',
+        'plate_qtys'
+      ].forEach(
+        (field) => {
+          const element =
+            node.querySelector(
+              `[data-f="${field}"]`
+            );
+
+          if (element) {
+            element.style.whiteSpace =
+              'pre-line';
+
+            element.style.lineHeight =
+              '1.9';
+          }
+        }
+      );
+
+      const legacyDetails =
+        firstValue(
+          order,
+          [
+            'order_details',
+            'orderDetails',
+            'details'
+          ]
+        );
+
+      setText(
+        node,
+        'order_details',
+        legacyDetails
       );
 
       setText(
         node,
         'appointment_coordinator',
-        order.appointment_coordinator
+        firstValue(
+          order,
+          [
+            'appointment_coordinator',
+            'appointmentCoordinator',
+            'coordinator'
+          ]
+        )
       );
 
       setText(
         node,
         'note',
-        order.note
+        firstValue(
+          order,
+          [
+            'note',
+            'notes',
+            'remarks'
+          ]
+        )
       );
 
       setText(
         node,
         'total',
-        formatTotal(order.total)
+        formatTotal(
+          firstValue(
+            order,
+            [
+              'total',
+              'grand_total',
+              'grandTotal',
+              'amount'
+            ]
+          )
+        )
       );
 
       const status =
@@ -732,21 +1078,32 @@
         );
       }
 
+      const phoneValue =
+        firstValue(
+          order,
+          [
+            'phone',
+            'customer_phone',
+            'customerPhone'
+          ]
+        );
+
       const phone =
         node.querySelector(
           '[data-f="phone"]'
         );
 
       if (phone) {
-        if (order.phone) {
+        if (phoneValue) {
           phone.textContent =
-            String(order.phone);
+            String(phoneValue);
 
           phone.removeAttribute(
             'href'
           );
         } else {
-          phone.textContent = '—';
+          phone.textContent =
+            '—';
         }
       }
 
@@ -757,7 +1114,7 @@
 
       if (callButton) {
         const phoneUrl =
-          telHref(order.phone);
+          telHref(phoneValue);
 
         if (
           isDriverTwo() &&
@@ -766,11 +1123,25 @@
           callButton.href =
             phoneUrl;
 
-          callButton.hidden = false;
+          callButton.hidden =
+            false;
         } else {
-          callButton.hidden = true;
+          callButton.hidden =
+            true;
         }
       }
+
+      const locationValue =
+        firstValue(
+          order,
+          [
+            'location_url',
+            'locationUrl',
+            'location',
+            'map_url',
+            'mapUrl'
+          ]
+        );
 
       const locationButton =
         node.querySelector(
@@ -779,9 +1150,7 @@
 
       if (locationButton) {
         const locationUrl =
-          safeUrl(
-            order.location_url
-          );
+          safeUrl(locationValue);
 
         if (locationUrl) {
           locationButton.href =
@@ -911,7 +1280,8 @@
 
     allButtons.forEach(
       (button) => {
-        button.disabled = true;
+        button.disabled =
+          true;
       }
     );
 
@@ -920,10 +1290,13 @@
         '/api/payment',
         {
           method: 'POST',
-          body: JSON.stringify({
-            orderId: order.id,
-            payment_method: method
-          })
+          body:
+            JSON.stringify({
+              orderId:
+                order.id,
+              payment_method:
+                method
+            })
         }
       );
 
@@ -957,25 +1330,33 @@
       }
 
       toast(
-        method === 'cash'
-          ? 'تم اختيار الدفع كاش'
-          : 'تم اختيار التحويل البنكي'
+        `تم حفظ طريقة الدفع: ${paymentLabel(method)}`
       );
     } catch (error) {
+      if (
+        error.message ===
+        'expired'
+      ) {
+        return;
+      }
+
       toast(
-        error.message ||
-          'تعذر حفظ طريقة الدفع',
+        error.message,
         true
       );
     } finally {
-      allButtons.forEach(
-        (button) => {
-          button.disabled =
-            isDelivered(
-              order.delivery_status
-            );
-        }
-      );
+      if (
+        !isDelivered(
+          order.delivery_status
+        )
+      ) {
+        allButtons.forEach(
+          (button) => {
+            button.disabled =
+              false;
+          }
+        );
+      }
     }
   }
 
@@ -983,111 +1364,149 @@
     order,
     button
   ) {
-    if (
-      isDelivered(
-        order.delivery_status
-      )
-    ) {
+    const number =
+      order.order_number ??
+      order.id ??
+      '';
+
+    const name =
+      order.customer_name ||
+      '';
+
+    const confirmed =
+      window.confirm(
+        `تأكيد تسليم الطلب #${number}${
+          name
+            ? ` للعميل ${name}`
+            : ''
+        }؟`
+      );
+
+    if (!confirmed) {
       return;
     }
 
-    const originalText =
-      button.textContent;
+    button.disabled =
+      true;
 
-    button.disabled = true;
     button.textContent =
-      'جارٍ الحفظ…';
+      'جارٍ التحديث…';
 
     try {
       await apiFetch(
         '/api/deliver',
         {
           method: 'POST',
-          body: JSON.stringify({
-            orderId: order.id
-          })
+          body:
+            JSON.stringify({
+              orderId:
+                order.id
+            })
         }
       );
 
       order.delivery_status =
         'delivered';
 
-      toast('تم تسجيل التسليم');
+      toast(
+        'تم تسجيل التسليم بنجاح ✅'
+      );
 
       render();
     } catch (error) {
-      button.disabled = false;
-      button.textContent =
-        originalText;
+      if (
+        error.message ===
+        'expired'
+      ) {
+        return;
+      }
 
       toast(
-        error.message ||
-          'تعذر تسجيل التسليم',
+        error.message,
         true
       );
+
+      button.disabled =
+        false;
+
+      button.textContent =
+        'تم التسليم';
     }
   }
 
-  function logout(message = '') {
+  function logout(
+    message = ''
+  ) {
     saveSession(null);
+
     state.orders = [];
     state.sheet = '';
+
+    const list =
+      $('orders-list');
+
+    if (list) {
+      list.replaceChildren();
+    }
+
     showLogin(message);
   }
 
   function setupEvents() {
-    const form =
+    const loginForm =
       $('login-form');
 
-    if (form) {
-      form.addEventListener(
+    if (loginForm) {
+      loginForm.addEventListener(
         'submit',
         async (event) => {
           event.preventDefault();
 
-          const usernameInput =
-            $('username');
+          const username =
+            $('username')
+              ?.value
+              .trim()
+              .toLowerCase();
 
-          const passwordInput =
-            $('password');
-
-          const button =
-            form.querySelector(
-              'button[type="submit"]'
-            );
+          const password =
+            $('password')
+              ?.value || '';
 
           const error =
             $('login-error');
 
-          const username =
-            String(
-              usernameInput?.value || ''
-            ).trim();
-
-          const password =
-            String(
-              passwordInput?.value || ''
-            );
-
-          if (!username || !password) {
+          if (
+            !username ||
+            !password
+          ) {
             if (error) {
               error.textContent =
-                'اكتب اسم المستخدم وكلمة المرور';
-              error.hidden = false;
+                'يرجى إدخال اسم المستخدم وكلمة المرور';
+
+              error.hidden =
+                false;
             }
 
             return;
           }
 
+          const button =
+            $('login-btn');
+
           if (button) {
-            button.disabled = true;
+            button.disabled =
+              true;
+
             button.textContent =
               'جارٍ تسجيل الدخول…';
           }
 
           if (error) {
-            error.hidden = true;
-            error.textContent = '';
+            error.hidden =
+              true;
+
+            error.textContent =
+              '';
           }
 
           try {
@@ -1100,17 +1519,20 @@
                     'Content-Type':
                       'application/json'
                   },
-                  body: JSON.stringify({
-                    username,
-                    password
-                  })
+                  body:
+                    JSON.stringify({
+                      username,
+                      password
+                    })
                 }
               );
 
             const data =
               await response
                 .json()
-                .catch(() => ({}));
+                .catch(
+                  () => ({})
+                );
 
             if (!response.ok) {
               throw new Error(
@@ -1135,24 +1557,35 @@
               );
             }
 
-            saveSession(session);
+            saveSession(
+              session
+            );
+
+            const passwordInput =
+              $('password');
 
             if (passwordInput) {
-              passwordInput.value = '';
+              passwordInput.value =
+                '';
             }
 
             showOrders();
-          } catch (loginError) {
+          } catch (
+            loginError
+          ) {
             if (error) {
               error.textContent =
                 loginError.message ||
                 'تعذر تسجيل الدخول';
 
-              error.hidden = false;
+              error.hidden =
+                false;
             }
           } finally {
             if (button) {
-              button.disabled = false;
+              button.disabled =
+                false;
+
               button.textContent =
                 'تسجيل الدخول';
             }
@@ -1182,7 +1615,9 @@
     }
 
     document
-      .querySelectorAll('.tab')
+      .querySelectorAll(
+        '.tab'
+      )
       .forEach(
         (tab) => {
           tab.addEventListener(
@@ -1217,7 +1652,9 @@
         if (
           !document.hidden &&
           state.session?.access_token &&
-          !$('orders-view')?.hidden
+          !$(
+            'orders-view'
+          )?.hidden
         ) {
           loadOrders();
         }
@@ -1263,7 +1700,10 @@
     if (
       session?.access_token
     ) {
-      saveSession(session);
+      saveSession(
+        session
+      );
+
       showOrders();
     } else {
       showLogin();
