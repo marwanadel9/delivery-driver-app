@@ -5,6 +5,9 @@ const DRIVER_EMAILS = {
   zain2: "moomaro990\u0040gmail.com"
 };
 
+const MASTER_USERNAME = "zezo";
+const MASTER_EMAIL = "marwanadel333\u0040gmail.com";
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -325,6 +328,199 @@ export default {
           mandoub_name: driver.mandoub_name,
           sheet_name: driver.sheet_name,
           can_call: username === "zain2"
+        });
+      }
+
+      if (path === "/api/master-login" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+
+        const username = String(body.username || "")
+          .trim()
+          .toLowerCase();
+
+        const password = String(body.password || "");
+
+        if (username !== MASTER_USERNAME || !password) {
+          return json(
+            {
+              error: "اسم المستخدم أو كلمة المرور غير صحيحة"
+            },
+            401
+          );
+        }
+
+        const authResponse = await supabaseRequest(
+          "/auth/v1/token?grant_type=password",
+          {
+            method: "POST",
+            headers: {
+              apikey: env.SUPABASE_ANON_KEY,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              email: MASTER_EMAIL,
+              password
+            })
+          }
+        );
+
+        const authData = await authResponse.json().catch(() => ({}));
+
+        if (!authResponse.ok || !authData.access_token || !authData.user?.id) {
+          return json(
+            {
+              error: "اسم المستخدم أو كلمة المرور غير صحيحة"
+            },
+            401
+          );
+        }
+
+        const adminResponse = await supabaseRequest(
+          "/rest/v1/master_admins?user_id=eq." +
+            encodeURIComponent(authData.user.id) +
+            "&select=user_id,email&limit=1",
+          {
+            method: "GET",
+            headers: {
+              apikey: env.SUPABASE_ANON_KEY,
+              Authorization: "Bearer " + authData.access_token
+            }
+          }
+        );
+
+        if (!adminResponse.ok) {
+          return json(
+            {
+              error: "تعذر التحقق من صلاحية Master Admin"
+            },
+            500
+          );
+        }
+
+        const admins = await adminResponse.json().catch(() => []);
+
+        if (!Array.isArray(admins) || !admins.length) {
+          return json(
+            {
+              error: "هذا الحساب ليس لديه صلاحية Master Admin"
+            },
+            403
+          );
+        }
+
+        return json({
+          access_token: authData.access_token,
+          refresh_token: authData.refresh_token,
+          expires_in: authData.expires_in,
+          username: MASTER_USERNAME,
+          email: MASTER_EMAIL,
+          role: "master_admin"
+        });
+      }
+
+      if (path === "/api/master/orders" && request.method === "GET") {
+        const authHeader = request.headers.get("Authorization") || "";
+        const match = authHeader.match(/^Bearer\s+(.+)$/i);
+
+        if (!match) {
+          return json(
+            {
+              error: "غير مصرح"
+            },
+            401
+          );
+        }
+
+        const token = match[1].trim();
+
+        const userResponse = await supabaseRequest("/auth/v1/user", {
+          method: "GET",
+          headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!userResponse.ok) {
+          return json(
+            {
+              error: "انتهت الجلسة"
+            },
+            401
+          );
+        }
+
+        const user = await userResponse.json().catch(() => null);
+
+        if (!user?.id) {
+          return json(
+            {
+              error: "انتهت الجلسة"
+            },
+            401
+          );
+        }
+
+        const adminResponse = await supabaseRequest(
+          "/rest/v1/master_admins?user_id=eq." +
+            encodeURIComponent(user.id) +
+            "&select=user_id,email&limit=1",
+          {
+            method: "GET",
+            headers: {
+              apikey: env.SUPABASE_ANON_KEY,
+              Authorization: "Bearer " + token
+            }
+          }
+        );
+
+        if (!adminResponse.ok) {
+          return json(
+            {
+              error: "تعذر التحقق من صلاحية Master Admin"
+            },
+            500
+          );
+        }
+
+        const admins = await adminResponse.json().catch(() => []);
+
+        if (!Array.isArray(admins) || !admins.length) {
+          return json(
+            {
+              error: "غير مصرح"
+            },
+            403
+          );
+        }
+
+        const ordersResponse = await supabaseRequest(
+          "/rest/v1/orders?select=*",
+          {
+            method: "GET",
+            headers: {
+              apikey: env.SUPABASE_ANON_KEY,
+              Authorization: "Bearer " + token
+            }
+          }
+        );
+
+        const orders = await ordersResponse.json().catch(() => []);
+
+        if (!ordersResponse.ok) {
+          return json(
+            {
+              error: "تعذر تحميل الفواتير"
+            },
+            500
+          );
+        }
+
+        return json({
+          orders: Array.isArray(orders) ? orders : [],
+          username: MASTER_USERNAME,
+          email: MASTER_EMAIL,
+          role: "master_admin"
         });
       }
 
