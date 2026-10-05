@@ -20,8 +20,7 @@ headers: {
 }
 
 function getBearerToken(request) {
-const header =
-request.headers.get("Authorization") || "";
+const header = request.headers.get("Authorization") || "";
 
 if (!header.startsWith("Bearer ")) {
 return null;
@@ -45,15 +44,12 @@ if (!token || !anonKey) {
 return null;
 }
 
-const response = await supabaseRequest(
-"/auth/v1/user",
-{
+const response = await supabaseRequest("/auth/v1/user", {
 headers: {
 apikey: anonKey,
 Authorization: "Bearer " + token
 }
-}
-);
+});
 
 if (!response.ok) {
 return null;
@@ -64,11 +60,7 @@ return null;
 });
 }
 
-async function getDriverInfo(
-token,
-anonKey,
-userId
-) {
+async function getDriverInfo(token, anonKey, userId) {
 if (!token || !anonKey || !userId) {
 return null;
 }
@@ -78,8 +70,7 @@ const path =
 encodeURIComponent(userId) +
 "&select=mandoub_name,sheet_name";
 
-const response =
-await supabaseRequest(path, {
+const response = await supabaseRequest(path, {
 headers: {
 apikey: anonKey,
 Authorization: "Bearer " + token
@@ -90,29 +81,22 @@ if (!response.ok) {
 return null;
 }
 
-const rows =
-await response.json().catch(function () {
+const rows = await response.json().catch(function () {
 return [];
 });
 
-if (
-!Array.isArray(rows) ||
-rows.length === 0
-) {
+if (!Array.isArray(rows) || rows.length === 0) {
 return null;
 }
 
 return {
-mandoub_name:
-rows[0].mandoub_name || "",
-sheet_name:
-rows[0].sheet_name || ""
+mandoub_name: rows[0].mandoub_name || "",
+sheet_name: rows[0].sheet_name || ""
 };
 }
 
 async function requireDriver(request, env) {
-const token =
-getBearerToken(request);
+const token = getBearerToken(request);
 
 if (!token) {
 return {
@@ -121,8 +105,7 @@ status: 401
 };
 }
 
-const user =
-await getUser(
+const user = await getUser(
 token,
 env.SUPABASE_ANON_KEY
 );
@@ -134,8 +117,7 @@ status: 401
 };
 }
 
-const driver =
-await getDriverInfo(
+const driver = await getDriverInfo(
 token,
 env.SUPABASE_ANON_KEY,
 user.id
@@ -156,8 +138,7 @@ driver: driver
 }
 
 function normalizePayment(value) {
-const v =
-String(value || "")
+const v = String(value || "")
 .trim()
 .toLowerCase();
 
@@ -212,39 +193,25 @@ headers: {
 }
 
 ```
-const url =
-  new URL(request.url);
-
-const path =
-  url.pathname;
+const url = new URL(request.url);
+const path = url.pathname;
 
 try {
   if (
     path === "/api/login" &&
     request.method === "POST"
   ) {
-    const body =
-      await request.json()
-        .catch(function () {
-          return {};
-        });
+    const body = await request.json().catch(function () {
+      return {};
+    });
 
-    const username =
-      String(
-        body.username || ""
-      )
-        .trim()
-        .toLowerCase();
+    const username = String(body.username || "")
+      .trim()
+      .toLowerCase();
 
-    const password =
-      String(
-        body.password || ""
-      );
+    const password = String(body.password || "");
 
-    if (
-      !username ||
-      !password
-    ) {
+    if (!username || !password) {
       return json(
         {
           error:
@@ -254,8 +221,7 @@ try {
       );
     }
 
-    const email =
-      DRIVER_EMAILS[username];
+    const email = DRIVER_EMAILS[username];
 
     if (!email) {
       return json(
@@ -267,9 +233,7 @@ try {
       );
     }
 
-    if (
-      !env.SUPABASE_ANON_KEY
-    ) {
+    if (!env.SUPABASE_ANON_KEY) {
       return json(
         {
           error:
@@ -279,31 +243,26 @@ try {
       );
     }
 
-    const authResponse =
-      await supabaseRequest(
-        "/auth/v1/token?grant_type=password",
-        {
-          method: "POST",
-          headers: {
-            apikey:
-              env.SUPABASE_ANON_KEY,
-            "Content-Type":
-              "application/json"
-          },
-          body:
-            JSON.stringify({
-              email: email,
-              password: password
-            })
-        }
-      );
+    const authResponse = await supabaseRequest(
+      "/auth/v1/token?grant_type=password",
+      {
+        method: "POST",
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password
+        })
+      }
+    );
 
-    const authData =
-      await authResponse
-        .json()
-        .catch(function () {
-          return {};
-        });
+    const authData = await authResponse
+      .json()
+      .catch(function () {
+        return {};
+      });
 
     if (!authResponse.ok) {
       return json(
@@ -315,13 +274,11 @@ try {
       );
     }
 
-    const driver =
-      await getDriverInfo(
-        authData.access_token,
-        env.SUPABASE_ANON_KEY,
-        authData.user &&
-          authData.user.id
-      );
+    const driver = await getDriverInfo(
+      authData.access_token,
+      env.SUPABASE_ANON_KEY,
+      authData.user && authData.user.id
+    );
 
     if (!driver) {
       return json(
@@ -334,20 +291,13 @@ try {
     }
 
     return json({
-      access_token:
-        authData.access_token,
-      refresh_token:
-        authData.refresh_token,
-      expires_in:
-        authData.expires_in,
-      username:
-        username,
-      mandoub_name:
-        driver.mandoub_name,
-      sheet_name:
-        driver.sheet_name,
-      can_call:
-        username === "zain2"
+      access_token: authData.access_token,
+      refresh_token: authData.refresh_token,
+      expires_in: authData.expires_in,
+      username: username,
+      mandoub_name: driver.mandoub_name,
+      sheet_name: driver.sheet_name,
+      can_call: username === "zain2"
     });
   }
 
@@ -355,70 +305,57 @@ try {
     path === "/api/refresh" &&
     request.method === "POST"
   ) {
-    const body =
-      await request.json()
-        .catch(function () {
-          return {};
-        });
+    const body = await request.json().catch(function () {
+      return {};
+    });
 
-    const refreshToken =
-      String(
-        body.refresh_token || ""
-      ).trim();
+    const refreshToken = String(
+      body.refresh_token || ""
+    ).trim();
 
     if (!refreshToken) {
       return json(
         {
-          error:
-            "لا يوجد refresh token"
+          error: "لا يوجد refresh token"
         },
         401
       );
     }
 
-    const authResponse =
-      await supabaseRequest(
-        "/auth/v1/token?grant_type=refresh_token",
-        {
-          method: "POST",
-          headers: {
-            apikey:
-              env.SUPABASE_ANON_KEY,
-            "Content-Type":
-              "application/json"
-          },
-          body:
-            JSON.stringify({
-              refresh_token:
-                refreshToken
-            })
-        }
-      );
+    const authResponse = await supabaseRequest(
+      "/auth/v1/token?grant_type=refresh_token",
+      {
+        method: "POST",
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          refresh_token: refreshToken
+        })
+      }
+    );
 
-    const authData =
-      await authResponse
-        .json()
-        .catch(function () {
-          return {};
-        });
+    const authData = await authResponse
+      .json()
+      .catch(function () {
+        return {};
+      });
 
     if (!authResponse.ok) {
       return json(
         {
-          error:
-            "انتهت الجلسة"
+          error: "انتهت الجلسة"
         },
         401
       );
     }
 
-    const driver =
-      await getDriverInfo(
-        authData.access_token,
-        env.SUPABASE_ANON_KEY,
-        authData.user &&
-          authData.user.id
-      );
+    const driver = await getDriverInfo(
+      authData.access_token,
+      env.SUPABASE_ANON_KEY,
+      authData.user && authData.user.id
+    );
 
     if (!driver) {
       return json(
@@ -432,26 +369,18 @@ try {
 
     const username =
       authData.user &&
-      authData.user.email ===
-        DRIVER_EMAILS.zain2
+      authData.user.email === DRIVER_EMAILS.zain2
         ? "zain2"
         : "zain";
 
     return json({
-      access_token:
-        authData.access_token,
-      refresh_token:
-        authData.refresh_token,
-      expires_in:
-        authData.expires_in,
-      username:
-        username,
-      mandoub_name:
-        driver.mandoub_name,
-      sheet_name:
-        driver.sheet_name,
-      can_call:
-        username === "zain2"
+      access_token: authData.access_token,
+      refresh_token: authData.refresh_token,
+      expires_in: authData.expires_in,
+      username: username,
+      mandoub_name: driver.mandoub_name,
+      sheet_name: driver.sheet_name,
+      can_call: username === "zain2"
     });
   }
 
@@ -459,24 +388,21 @@ try {
     path === "/api/orders" &&
     request.method === "GET"
   ) {
-    const auth =
-      await requireDriver(
-        request,
-        env
-      );
+    const auth = await requireDriver(
+      request,
+      env
+    );
 
     if (auth.error) {
       return json(
         {
-          error:
-            auth.error
+          error: auth.error
         },
         auth.status
       );
     }
 
-    const sheet =
-      auth.driver.sheet_name;
+    const sheet = auth.driver.sheet_name;
 
     const ordersPath =
       "/rest/v1/orders?sheet_name=eq." +
@@ -491,18 +417,16 @@ try {
             apikey:
               env.SUPABASE_ANON_KEY,
             Authorization:
-              "Bearer " +
-              auth.token
+              "Bearer " + auth.token
           }
         }
       );
 
-    const orders =
-      await ordersResponse
-        .json()
-        .catch(function () {
-          return [];
-        });
+    const orders = await ordersResponse
+      .json()
+      .catch(function () {
+        return [];
+      });
 
     if (!ordersResponse.ok) {
       return json(
@@ -515,15 +439,12 @@ try {
     }
 
     return json({
-      orders:
-        Array.isArray(orders)
-          ? orders
-          : [],
-      sheet:
-        sheet,
+      orders: Array.isArray(orders)
+        ? orders
+        : [],
+      sheet: sheet,
       mandoub_name:
-        auth.driver
-          .mandoub_name,
+        auth.driver.mandoub_name,
       can_call:
         auth.user.email ===
         DRIVER_EMAILS.zain2
@@ -534,30 +455,25 @@ try {
     path === "/api/payment" &&
     request.method === "POST"
   ) {
-    const auth =
-      await requireDriver(
-        request,
-        env
-      );
+    const auth = await requireDriver(
+      request,
+      env
+    );
 
     if (auth.error) {
       return json(
         {
-          error:
-            auth.error
+          error: auth.error
         },
         auth.status
       );
     }
 
-    const body =
-      await request.json()
-        .catch(function () {
-          return {};
-        });
+    const body = await request.json().catch(function () {
+      return {};
+    });
 
-    const orderId =
-      Number(body.orderId);
+    const orderId = Number(body.orderId);
 
     const paymentMethod =
       normalizePayment(
@@ -565,9 +481,7 @@ try {
       );
 
     if (
-      !Number.isInteger(
-        orderId
-      ) ||
+      !Number.isInteger(orderId) ||
       orderId <= 0
     ) {
       return json(
@@ -598,27 +512,23 @@ try {
             apikey:
               env.SUPABASE_ANON_KEY,
             Authorization:
-              "Bearer " +
-              auth.token,
+              "Bearer " + auth.token,
             "Content-Type":
               "application/json"
           },
-          body:
-            JSON.stringify({
-              p_order_id:
-                orderId,
-              p_payment_method:
-                paymentMethod
-            })
+          body: JSON.stringify({
+            p_order_id: orderId,
+            p_payment_method:
+              paymentMethod
+          })
         }
       );
 
-    const rpcData =
-      await rpcResponse
-        .json()
-        .catch(function () {
-          return null;
-        });
+    const rpcData = await rpcResponse
+      .json()
+      .catch(function () {
+        return null;
+      });
 
     if (!rpcResponse.ok) {
       return json(
@@ -651,35 +561,28 @@ try {
     path === "/api/deliver" &&
     request.method === "POST"
   ) {
-    const auth =
-      await requireDriver(
-        request,
-        env
-      );
+    const auth = await requireDriver(
+      request,
+      env
+    );
 
     if (auth.error) {
       return json(
         {
-          error:
-            auth.error
+          error: auth.error
         },
         auth.status
       );
     }
 
-    const body =
-      await request.json()
-        .catch(function () {
-          return {};
-        });
+    const body = await request.json().catch(function () {
+      return {};
+    });
 
-    const orderId =
-      Number(body.orderId);
+    const orderId = Number(body.orderId);
 
     if (
-      !Number.isInteger(
-        orderId
-      ) ||
+      !Number.isInteger(orderId) ||
       orderId <= 0
     ) {
       return json(
@@ -700,16 +603,14 @@ try {
             apikey:
               env.SUPABASE_ANON_KEY,
             Authorization:
-              "Bearer " +
-              auth.token,
+              "Bearer " + auth.token,
             "Content-Type":
               "application/json"
           },
-          body:
-            JSON.stringify({
-              p_order_id:
-                orderId
-            })
+          body: JSON.stringify({
+            p_order_id:
+              orderId
+          })
         }
       );
 
@@ -759,8 +660,7 @@ try {
     ) {
       return json(
         {
-          error:
-            "غير مصرح"
+          error: "غير مصرح"
         },
         401
       );
@@ -785,9 +685,7 @@ try {
     const orders =
       Array.isArray(body)
         ? body
-        : Array.isArray(
-            body.orders
-          )
+        : Array.isArray(body.orders)
           ? body.orders
           : [];
 
@@ -805,11 +703,9 @@ try {
             "Content-Type":
               "application/json"
           },
-          body:
-            JSON.stringify({
-              p_orders:
-                orders
-            })
+          body: JSON.stringify({
+            p_orders: orders
+          })
         }
       );
 
@@ -908,7 +804,10 @@ try {
     return json(data);
   }
 
-  if (env.ASSETS && typeof env.ASSETS.fetch === "function") {
+  if (
+    env.ASSETS &&
+    typeof env.ASSETS.fetch === "function"
+  ) {
     return env.ASSETS.fetch(request);
   }
 
