@@ -908,8 +908,19 @@ try {
     return json(data);
   }
 
-  return env.ASSETS.fetch(
-    request
+  if (env.ASSETS && typeof env.ASSETS.fetch === "function") {
+    return env.ASSETS.fetch(request);
+  }
+
+  return new Response(
+    "Not Found",
+    {
+      status: 404,
+      headers: {
+        "Content-Type":
+          "text/plain; charset=utf-8"
+      }
+    }
   );
 } catch (error) {
   return json(
