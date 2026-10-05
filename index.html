@@ -8,22 +8,16 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+
   <div class="app-shell">
 
     <section id="login-view" class="login-view">
       <div class="login-background"></div>
 
       <div class="login-card">
+
         <div class="brand-mark">
-          <div class="brand-icon">
-  <svg viewBox="0 0 64 64" aria-hidden="true">
-    <path fill="#fff" d="M30 17c-7 0-13 5-13 13v12c0 8 6 14 14 14h9c8 0 14-6 14-14V32c0-8-6-15-14-15H30z"/>
-    <path fill="#ef4444" d="M30 18c-2-7 3-13 8-13 2 0 4 2 4 5 0-4 3-7 6-6 3 1 4 4 2 7 3-2 7-1 8 2 1 4-3 7-8 8l-5 2-15 0z"/>
-    <path fill="#f59e0b" d="M48 27l13 5-13 6z"/>
-    <path fill="#ef4444" d="M43 39c3-3 8-2 9 2 1 4-3 7-7 6-2 4-7 4-8 1-1-3 2-6 6-6z"/>
-    <circle cx="39" cy="25" r="2.5" fill="#142033"/>
-  </svg>
-</div>
+          <div class="brand-icon">🐔</div>
           <div>
             <div class="brand-name">فروج الزين</div>
             <div class="brand-subtitle">Delivery Management</div>
@@ -36,10 +30,13 @@
         </div>
 
         <form id="login-form" autocomplete="on">
+
           <div class="field">
             <label for="username">اسم المستخدم</label>
+
             <div class="input-wrap">
               <span class="input-icon">👤</span>
+
               <input
                 id="username"
                 name="username"
@@ -53,8 +50,10 @@
 
           <div class="field">
             <label for="password">كلمة المرور</label>
+
             <div class="input-wrap">
               <span class="input-icon">🔒</span>
+
               <input
                 id="password"
                 name="password"
@@ -72,6 +71,7 @@
             <span>تسجيل الدخول</span>
             <span class="login-arrow">←</span>
           </button>
+
         </form>
 
         <div class="login-footer">
@@ -79,45 +79,52 @@
           <span>•</span>
           <span>Delivery System</span>
         </div>
+
       </div>
     </section>
 
+
     <section id="orders-view" class="orders-view" hidden>
+
       <header class="topbar">
+
         <div class="topbar-inner">
 
           <div class="topbar-brand">
-            <div class="mini-logo">
-  <svg viewBox="0 0 64 64" aria-hidden="true">
-    <path fill="#fff" d="M30 17c-7 0-13 5-13 13v12c0 8 6 14 14 14h9c8 0 14-6 14-14V32c0-8-6-15-14-15H30z"/>
-    <path fill="#ef4444" d="M30 18c-2-7 3-13 8-13 2 0 4 2 4 5 0-4 3-7 6-6 3 1 4 4 2 7 3-2 7-1 8 2 1 4-3 7-8 8l-5 2-15 0z"/>
-    <path fill="#f59e0b" d="M48 27l13 5-13 6z"/>
-    <path fill="#ef4444" d="M43 39c3-3 8-2 9 2 1 4-3 7-7 6-2 4-7 4-8 1-1-3 2-6 6-6z"/>
-    <circle cx="39" cy="25" r="2.5" fill="#142033"/>
-  </svg>
-</div>
+
+            <div class="mini-logo">🐔</div>
+
             <div class="brand-text">
               <strong>فروج الزين</strong>
               <span>Delivery</span>
             </div>
+
           </div>
 
+
           <div class="driver-profile">
+
             <div class="driver-avatar">🚚</div>
+
             <div class="driver-info">
               <strong id="driver-name">المندوب</strong>
               <span id="sheet-name">قائمة الطلبات</span>
             </div>
+
           </div>
 
+
           <div class="topbar-actions">
+
             <button
               id="refresh-btn"
               class="icon-btn"
               type="button"
               title="تحديث الطلبات"
               aria-label="تحديث الطلبات"
-            >↻</button>
+            >
+              ↻
+            </button>
 
             <button
               id="logout-btn"
@@ -125,96 +132,167 @@
               type="button"
               title="تسجيل الخروج"
               aria-label="تسجيل الخروج"
-            >↪</button>
+            >
+              ↪
+            </button>
+
           </div>
 
         </div>
+
       </header>
+
 
       <main class="main-content">
 
         <section class="welcome-section">
+
           <div>
             <span class="eyebrow">لوحة المندوب</span>
+
             <h1>طلبات اليوم</h1>
-            <p>تابع الطلبات وحدد طريقة الدفع وسجل التسليم بسهولة.</p>
+
+            <p>
+              تابع الطلبات وحدد طريقة الدفع وسجل التسليم بسهولة.
+            </p>
           </div>
 
           <div class="orders-counter">
             <span id="orders-counter-number">0</span>
             <small>طلب</small>
           </div>
+
         </section>
 
+
         <section class="stats-grid">
+
           <div class="stat-card">
-            <div class="stat-icon pending-icon">⏳</div>
+
+            <div class="stat-icon pending-icon">
+              ⏳
+            </div>
+
             <div>
               <span>قيد التوصيل</span>
               <strong id="stat-pending">0</strong>
             </div>
+
           </div>
 
+
           <div class="stat-card">
-            <div class="stat-icon done-icon">✓</div>
+
+            <div class="stat-icon done-icon">
+              ✓
+            </div>
+
             <div>
               <span>تم التسليم</span>
               <strong id="stat-done">0</strong>
             </div>
+
           </div>
+
         </section>
 
+
         <nav class="tabs" aria-label="تصفية الطلبات">
+
           <button
             class="tab active"
             type="button"
             data-filter="pending"
-          >قيد التوصيل</button>
+          >
+            قيد التوصيل
+          </button>
 
           <button
             class="tab"
             type="button"
             data-filter="done"
-          >تم التسليم</button>
+          >
+            تم التسليم
+          </button>
 
           <button
             class="tab"
             type="button"
             data-filter="all"
-          >الكل</button>
+          >
+            الكل
+          </button>
+
         </nav>
 
-        <section id="orders-list" class="orders-list"></section>
+
+        <section
+          id="orders-list"
+          class="orders-list"
+        ></section>
 
       </main>
+
     </section>
 
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+
+  <div
+    id="toast"
+    class="toast"
+    hidden
+  ></div>
+
 
   <template id="order-tpl">
+
     <article class="order-card">
 
+
       <div class="order-card-head">
+
         <div class="order-number">
+
           <span>طلب</span>
-          <strong data-f="order_number">—</strong>
+
+          <strong data-f="order_number">
+            —
+          </strong>
+
         </div>
 
         <div
           class="delivery-status"
           data-f="delivery_status"
-        >قيد التوصيل</div>
+        >
+          قيد التوصيل
+        </div>
+
       </div>
 
+
       <div class="customer-row">
-        <div class="customer-avatar">👤</div>
+
+        <div class="customer-avatar">
+          👤
+        </div>
 
         <div class="customer-main">
-          <h2 data-f="customer_name">—</h2>
-          <a class="phone-link" data-f="phone">—</a>
+
+          <h2 data-f="customer_name">
+            —
+          </h2>
+
+          <a
+            class="phone-link"
+            data-f="phone"
+          >
+            —
+          </a>
+
         </div>
+
 
         <a
           class="call-btn action-icon"
@@ -222,46 +300,216 @@
           hidden
           title="اتصال"
           aria-label="اتصال"
-        >☎</a>
+        >
+          ☎
+        </a>
+
       </div>
+
+
+      <div class="customer-location-grid">
+
+        <div class="info-item">
+
+          <span class="info-label">
+            🏙️ الإمارة
+          </span>
+
+          <strong data-f="emirate">
+            —
+          </strong>
+
+        </div>
+
+
+        <div class="info-item">
+
+          <span class="info-label">
+            📍 المنطقة
+          </span>
+
+          <strong data-f="area">
+            —
+          </strong>
+
+        </div>
+
+      </div>
+
+
+      <section class="products-section chicken-section">
+
+        <div class="products-section-head">
+
+          <div class="products-section-title">
+
+            <span class="products-icon">
+              🍗
+            </span>
+
+            <div>
+              <strong>الدجاج الكامل</strong>
+              <small>الأوزان والكميات</small>
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <div class="products-grid">
+
+          <div class="product-box">
+
+            <span class="product-label">
+              ⚖️ الأوزان
+            </span>
+
+            <strong
+              class="product-value"
+              data-f="chicken_weights"
+            >
+              —
+            </strong>
+
+          </div>
+
+
+          <div class="product-box">
+
+            <span class="product-label">
+              📦 الكمية
+            </span>
+
+            <strong
+              class="product-value"
+              data-f="chicken_qtys"
+            >
+              —
+            </strong>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <section class="products-section cuts-section">
+
+        <div class="products-section-head">
+
+          <div class="products-section-title">
+
+            <span class="products-icon">
+              🍽️
+            </span>
+
+            <div>
+              <strong>المقطعات</strong>
+              <small>الأصناف والكميات</small>
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <div class="products-grid">
+
+          <div class="product-box product-box-wide">
+
+            <span class="product-label">
+              🍗 الأصناف
+            </span>
+
+            <strong
+              class="product-value"
+              data-f="plate_names"
+            >
+              —
+            </strong>
+
+          </div>
+
+
+          <div class="product-box">
+
+            <span class="product-label">
+              📦 الكمية
+            </span>
+
+            <strong
+              class="product-value"
+              data-f="plate_qtys"
+            >
+              —
+            </strong>
+
+          </div>
+
+        </div>
+
+      </section>
+
 
       <div class="order-details">
 
         <div class="info-item">
-          <span class="info-label">📍 المنطقة</span>
-          <strong data-f="area">—</strong>
+
+          <span class="info-label">
+            📅 منسق الموعد
+          </span>
+
+          <strong data-f="appointment_coordinator">
+            —
+          </strong>
+
         </div>
 
-        <div class="info-item">
-          <span class="info-label">📝 الطلب</span>
-          <strong data-f="order_details">—</strong>
-        </div>
-
-        <div class="info-item">
-          <span class="info-label">📅 منسق الموعد</span>
-          <strong data-f="appointment_coordinator">—</strong>
-        </div>
 
         <div class="info-item note-item">
-          <span class="info-label">💬 ملاحظات</span>
-          <strong data-f="note">—</strong>
+
+          <span class="info-label">
+            💬 ملاحظات
+          </span>
+
+          <strong data-f="note">
+            —
+          </strong>
+
         </div>
 
       </div>
 
+
       <div class="order-total">
-        <span>الإجمالي</span>
-        <strong data-f="total">—</strong>
+
+        <span>
+          الإجمالي
+        </span>
+
+        <strong data-f="total">
+          —
+        </strong>
+
       </div>
+
 
       <div class="payment-section">
 
         <div class="payment-title">
-          <span>طريقة الدفع</span>
+
+          <span>
+            طريقة الدفع
+          </span>
+
           <small class="payment-current">
             لم يتم تحديد طريقة الدفع
           </small>
+
         </div>
+
 
         <div class="payment-buttons">
 
@@ -274,6 +522,7 @@
             <strong>دفع كاش</strong>
           </button>
 
+
           <button
             class="payment-btn bank-btn"
             type="button"
@@ -284,7 +533,9 @@
           </button>
 
         </div>
+
       </div>
+
 
       <div class="order-actions">
 
@@ -300,6 +551,7 @@
           <strong>فتح الموقع</strong>
         </a>
 
+
         <button
           class="btn-deliver"
           type="button"
@@ -310,9 +562,13 @@
 
       </div>
 
+
     </article>
+
   </template>
 
+
   <script src="/app.js"></script>
+
 </body>
 </html>
