@@ -1,8 +1,8 @@
 const SUPABASE_URL = "https://wnfibznjxihilgfedfij.supabase.co";
 
 const DRIVER_EMAILS = {
-zain: "[nasegypt9@gmail.com](mailto:nasegypt9@gmail.com)",
-zain2: "[moomaro990@gmail.com](mailto:moomaro990@gmail.com)"
+zain: "nasegypt9\u0040gmail.com",
+zain2: "moomaro990\u0040gmail.com"
 };
 
 function json(data, status) {
