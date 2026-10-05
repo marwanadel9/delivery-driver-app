@@ -1709,6 +1709,7 @@
     }
   }
 
+  
   boot();
 })();
 (() => {
@@ -3308,5 +3309,621 @@
       showMaster,
       0
     );
+  function masterEditStyles() {
+    if ($('master-edit-style')) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = 'master-edit-style';
+
+    style.textContent = `
+      .master-edit-actions{
+        display:flex;
+        gap:8px;
+        justify-content:center;
+        flex-wrap:wrap;
+        margin-top:8px;
+      }
+
+      .master-edit-btn,
+      .master-delete-btn{
+        border:0;
+        border-radius:10px;
+        padding:8px 12px;
+        font-family:inherit;
+        font-weight:800;
+        cursor:pointer;
+      }
+
+      .master-edit-btn{
+        background:#eef5ff;
+        color:#1769aa;
+      }
+
+      .master-delete-btn{
+        background:#fff0f0;
+        color:#c62828;
+      }
+
+      .master-edit-overlay{
+        position:fixed;
+        inset:0;
+        z-index:99999;
+        background:rgba(0,0,0,.55);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:20px;
+        overflow:auto;
+      }
+
+      .master-edit-card{
+        width:min(900px,100%);
+        max-height:92vh;
+        overflow:auto;
+        background:#fff;
+        border-radius:20px;
+        box-shadow:0 20px 60px rgba(0,0,0,.25);
+        direction:rtl;
+      }
+
+      .master-edit-head{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:15px;
+        padding:18px 20px;
+        border-bottom:1px solid #e9eef0;
+        position:sticky;
+        top:0;
+        background:#fff;
+        z-index:2;
+      }
+
+      .master-edit-head h2{
+        margin:0 0 4px;
+        font-size:20px;
+      }
+
+      .master-edit-head small{
+        color:#77848a;
+      }
+
+      .master-edit-close{
+        width:40px;
+        height:40px;
+        border:0;
+        border-radius:50%;
+        background:#f1f4f5;
+        font-size:25px;
+        cursor:pointer;
+      }
+
+      .master-edit-body{
+        padding:20px;
+      }
+
+      .master-edit-grid{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:14px;
+      }
+
+      .master-edit-field{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+      }
+
+      .master-edit-field.full{
+        grid-column:1/-1;
+      }
+
+      .master-edit-field label{
+        font-size:12px;
+        font-weight:800;
+        color:#526168;
+      }
+
+      .master-edit-field input,
+      .master-edit-field select,
+      .master-edit-field textarea{
+        width:100%;
+        box-sizing:border-box;
+        border:1px solid #dce4e7;
+        border-radius:11px;
+        padding:11px 12px;
+        font-family:inherit;
+        font-size:14px;
+        background:#fff;
+        outline:none;
+      }
+
+      .master-edit-field textarea{
+        min-height:90px;
+        resize:vertical;
+      }
+
+      .master-edit-field input:focus,
+      .master-edit-field select:focus,
+      .master-edit-field textarea:focus{
+        border-color:#7aa9c7;
+        box-shadow:0 0 0 3px rgba(54,125,164,.10);
+      }
+
+      .master-edit-footer{
+        display:flex;
+        gap:10px;
+        justify-content:flex-start;
+        padding:16px 20px;
+        border-top:1px solid #e9eef0;
+        position:sticky;
+        bottom:0;
+        background:#fff;
+      }
+
+      .master-edit-save,
+      .master-edit-cancel{
+        border:0;
+        border-radius:11px;
+        padding:11px 18px;
+        font-family:inherit;
+        font-weight:800;
+        cursor:pointer;
+      }
+
+      .master-edit-save{
+        background:#1769aa;
+        color:#fff;
+      }
+
+      .master-edit-cancel{
+        background:#eef2f3;
+        color:#39484e;
+      }
+
+      @media(max-width:650px){
+        .master-edit-overlay{
+          padding:8px;
+        }
+
+        .master-edit-card{
+          max-height:96vh;
+          border-radius:16px;
+        }
+
+        .master-edit-grid{
+          grid-template-columns:1fr;
+        }
+
+        .master-edit-field.full{
+          grid-column:auto;
+        }
+
+        .master-edit-footer{
+          flex-direction:column;
+        }
+
+        .master-edit-save,
+        .master-edit-cancel{
+          width:100%;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function masterAddActionButtons() {
+    const body = $('master-orders-body');
+
+    if (!body) {
+      return;
+    }
+
+    body.querySelectorAll('tr').forEach((row) => {
+      if (row.querySelector('.master-edit-actions')) {
+        return;
+      }
+
+      const cells = row.querySelectorAll('td');
+
+      if (!cells.length) {
+        return;
+      }
+
+      const viewCell = cells[cells.length - 1];
+
+      const numberText =
+        row.querySelector('td strong')?.textContent || '';
+
+      const number = numberText.replace(/^#/, '').trim();
+
+      const order = state.masterOrders.find((item) => {
+        const itemNumber = String(
+          item.order_number ?? item.id ?? ''
+        ).trim();
+
+        return itemNumber === number;
+      });
+
+      if (!order) {
+        return;
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'master-edit-actions';
+
+      const editButton = document.createElement('button');
+      editButton.type = 'button';
+      editButton.className = 'master-edit-btn';
+      editButton.textContent = '✏️ تعديل';
+
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'master-delete-btn';
+      deleteButton.textContent = '🗑️ حذف';
+
+      actions.appendChild(editButton);
+      actions.appendChild(deleteButton);
+      viewCell.appendChild(actions);
+
+      editButton.addEventListener(
+        'click',
+        () => openMasterEditOrder(order)
+      );
+
+      deleteButton.addEventListener(
+        'click',
+        () => deleteMasterOrder(order)
+      );
+    });
+  }
+
+  function masterValue(order, key) {
+    return String(order?.[key] ?? '');
+  }
+
+  function openMasterEditOrder(order) {
+    masterEditStyles();
+
+    $('master-edit-overlay')?.remove();
+
+    const number =
+      order.order_number ??
+      order.id ??
+      '';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'master-edit-overlay';
+    overlay.className = 'master-edit-overlay';
+
+    overlay.innerHTML = `
+      <div class="master-edit-card">
+        <div class="master-edit-head">
+          <div>
+            <h2>✏️ تعديل الفاتورة</h2>
+            <small>الفاتورة رقم ${masterEscape(number)}</small>
+          </div>
+          <button type="button" class="master-edit-close">×</button>
+        </div>
+
+        <form id="master-edit-form">
+          <div class="master-edit-body">
+            <div class="master-edit-grid">
+
+              <div class="master-edit-field">
+                <label>اسم العميل</label>
+                <input id="me-customer-name" value="${masterEscape(masterValue(order, 'customer_name'))}">
+              </div>
+
+              <div class="master-edit-field">
+                <label>رقم الهاتف</label>
+                <input id="me-phone" value="${masterEscape(masterValue(order, 'phone'))}">
+              </div>
+
+              <div class="master-edit-field">
+                <label>الإمارة</label>
+                <input id="me-emirate" value="${masterEscape(masterValue(order, 'emirate'))}">
+              </div>
+
+              <div class="master-edit-field">
+                <label>المنطقة</label>
+                <input id="me-area" value="${masterEscape(masterValue(order, 'area'))}">
+              </div>
+
+              <div class="master-edit-field">
+                <label>أوزان الدجاج الكامل</label>
+                <input id="me-chicken-weights" value="${masterEscape(masterValue(order, 'chicken_weights'))}">
+              </div>
+
+              <div class="master-edit-field">
+                <label>كميات الدجاج الكامل</label>
+                <input id="me-chicken-qtys" value="${masterEscape(masterValue(order, 'chicken_qtys'))}">
+              </div>
+
+              <div class="master-edit-field">
+                <label>أصناف المقطعات</label>
+                <input id="me-plate-names" value="${masterEscape(masterValue(order, 'plate_names'))}">
+              </div>
+
+              <div class="master-edit-field">
+                <label>كميات المقطعات</label>
+                <input id="me-plate-qtys" value="${masterEscape(masterValue(order, 'plate_qtys'))}">
+              </div>
+
+              <div class="master-edit-field">
+                <label>الإجمالي</label>
+                <input id="me-total" value="${masterEscape(masterValue(order, 'total'))}">
+              </div>
+
+              <div class="master-edit-field">
+                <label>منسق الموعد</label>
+                <input id="me-coordinator" value="${masterEscape(masterValue(order, 'appointment_coordinator'))}">
+              </div>
+
+              <div class="master-edit-field full">
+                <label>رابط الموقع</label>
+                <input id="me-location" value="${masterEscape(masterValue(order, 'location_url'))}">
+              </div>
+
+              <div class="master-edit-field full">
+                <label>الملاحظات</label>
+                <textarea id="me-note">${masterEscape(masterValue(order, 'note'))}</textarea>
+              </div>
+
+              <div class="master-edit-field">
+                <label>طريقة الدفع</label>
+                <select id="me-payment">
+                  <option value="" ${!normalizePayment(order.payment_method) ? 'selected' : ''}>لم يتم التحديد</option>
+                  <option value="cash" ${normalizePayment(order.payment_method) === 'cash' ? 'selected' : ''}>💵 دفع كاش</option>
+                  <option value="bank_transfer" ${normalizePayment(order.payment_method) === 'bank_transfer' ? 'selected' : ''}>🏦 تحويل بنكي</option>
+                </select>
+              </div>
+
+              <div class="master-edit-field">
+                <label>حالة التوصيل</label>
+                <select id="me-status">
+                  <option value="pending" ${!isDelivered(order.delivery_status) ? 'selected' : ''}>قيد التوصيل</option>
+                  <option value="delivered" ${isDelivered(order.delivery_status) ? 'selected' : ''}>تم التسليم</option>
+                </select>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="master-edit-footer">
+            <button type="button" class="master-edit-cancel">إلغاء</button>
+            <button type="submit" class="master-edit-save">💾 حفظ التعديل</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+
+    overlay.querySelector('.master-edit-close')?.addEventListener(
+      'click',
+      close
+    );
+
+    overlay.querySelector('.master-edit-cancel')?.addEventListener(
+      'click',
+      close
+    );
+
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) {
+        close();
+      }
+    });
+
+    overlay.querySelector('#master-edit-form')?.addEventListener(
+      'submit',
+      async (event) => {
+        event.preventDefault();
+
+        const saveButton =
+          overlay.querySelector('.master-edit-save');
+
+        saveButton.disabled = true;
+        saveButton.textContent = 'جارٍ الحفظ…';
+
+        const updatedOrder = {
+          customer_name:
+            $('me-customer-name')?.value.trim() || '',
+
+          phone:
+            $('me-phone')?.value.trim() || '',
+
+          emirate:
+            $('me-emirate')?.value.trim() || '',
+
+          area:
+            $('me-area')?.value.trim() || '',
+
+          chicken_weights:
+            $('me-chicken-weights')?.value.trim() || '',
+
+          chicken_qtys:
+            $('me-chicken-qtys')?.value.trim() || '',
+
+          plate_names:
+            $('me-plate-names')?.value.trim() || '',
+
+          plate_qtys:
+            $('me-plate-qtys')?.value.trim() || '',
+
+          total:
+            $('me-total')?.value.trim() || '',
+
+          appointment_coordinator:
+            $('me-coordinator')?.value.trim() || '',
+
+          location_url:
+            $('me-location')?.value.trim() || '',
+
+          note:
+            $('me-note')?.value.trim() || '',
+
+          payment_method:
+            $('me-payment')?.value || '',
+
+          delivery_status:
+            $('me-status')?.value || 'pending'
+        };
+
+        try {
+          const result = await masterFetch(
+            '/api/master/order/update',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                order_id: Number(order.id),
+                order: updatedOrder
+              })
+            }
+          );
+
+          const updated =
+            result?.order ||
+            result?.data ||
+            null;
+
+          if (!updated) {
+            throw new Error('تم الحفظ ولكن لم يتم إرجاع بيانات الفاتورة');
+          }
+
+          const index =
+            state.masterOrders.findIndex(
+              (item) =>
+                Number(item.id) ===
+                Number(order.id)
+            );
+
+          if (index !== -1) {
+            state.masterOrders[index] = updated;
+          }
+
+          close();
+          renderMasterOrders();
+
+          setTimeout(
+            masterAddActionButtons,
+            0
+          );
+
+          toast('تم تعديل الفاتورة بنجاح ✅');
+
+        } catch (error) {
+          saveButton.disabled = false;
+          saveButton.textContent = '💾 حفظ التعديل';
+
+          if (error.message !== 'expired') {
+            toast(
+              error.message || 'تعذر تعديل الفاتورة',
+              true
+            );
+          }
+        }
+      }
+    );
+  }
+
+  async function deleteMasterOrder(order) {
+    const number =
+      order.order_number ??
+      order.id ??
+      '';
+
+    const name =
+      order.customer_name ||
+      '';
+
+    const confirmed = window.confirm(
+      `هل أنت متأكد من حذف الفاتورة رقم ${number}؟\n\nالعميل: ${name}\n\nلا يمكن التراجع عن الحذف.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const result = await masterFetch(
+        '/api/master/order/delete',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            order_id: Number(order.id)
+          })
+        }
+      );
+
+      if (!result?.success) {
+        throw new Error(
+          result?.error ||
+          'تعذر حذف الفاتورة'
+        );
+      }
+
+      state.masterOrders =
+        state.masterOrders.filter(
+          (item) =>
+            Number(item.id) !==
+            Number(order.id)
+        );
+
+      renderMasterOrders();
+
+      setTimeout(
+        masterAddActionButtons,
+        0
+      );
+
+      toast('تم حذف الفاتورة بنجاح 🗑️');
+
+    } catch (error) {
+      if (error.message !== 'expired') {
+        toast(
+          error.message ||
+          'تعذر حذف الفاتورة',
+          true
+        );
+      }
+    }
+  }
+
+  function masterWatchTable() {
+    masterEditStyles();
+
+    const body = $('master-orders-body');
+
+    if (!body) {
+      setTimeout(
+        masterWatchTable,
+        500
+      );
+      return;
+    }
+
+    masterAddActionButtons();
+
+    const observer = new MutationObserver(() => {
+      masterAddActionButtons();
+    });
+
+    observer.observe(body, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  setTimeout(
+    masterWatchTable,
+    500
+  );
   }
 })();
