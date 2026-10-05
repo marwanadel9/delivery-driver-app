@@ -17,6 +17,18 @@ headers: {
 });
 }
 
+function checkSecrets(env) {
+if (!env.SUPABASE_ANON_KEY) {
+return "SUPABASE_ANON_KEY";
+}
+
+if (!env.EXCEL_SYNC_SECRET) {
+return "EXCEL_SYNC_SECRET";
+}
+
+return null;
+}
+
 function getBearerToken(request) {
 const header = request.headers.get("Authorization") || "";
 
@@ -172,22 +184,41 @@ return "";
 
 export default {
 async fetch(request, env) {
-if (request.method === "OPTIONS") {
-return new Response(null, {
-status: 204,
-headers: {
-"Access-Control-Allow-Origin": "*",
-"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Excel-Sync-Secret",
-"Access-Control-Allow-Methods": "GET, POST, OPTIONS"
-}
-});
-}
+const missingSecret = checkSecrets(env);
 
 ```
+if (missingSecret) {
+  return json(
+    {
+      error: "Server configuration error"
+    },
+    500
+  );
+}
+
+if (request.method === "OPTIONS") {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Excel-Sync-Secret",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+    }
+  });
+}
+
 const url = new URL(request.url);
 const path = url.pathname;
 
 try {
+  if (path === "/api/health" && request.method === "GET") {
+    return json({
+      ok: true,
+      worker: "delivery-driver-app",
+      configuration: "ready"
+    });
+  }
+
   if (path === "/api/login" && request.method === "POST") {
     const body = await request.json().catch(function () {
       return {};
@@ -219,15 +250,6 @@ try {
       );
     }
 
-    if (!env.SUPABASE_ANON_KEY) {
-      return json(
-        {
-          error: "مفتاح Supabase غير موجود في Cloudflare"
-        },
-        500
-      );
-    }
-
     const authResponse = await supabaseRequest(
       "/auth/v1/token?grant_type=password",
       {
@@ -247,7 +269,7 @@ try {
       return {};
     });
 
-    if (!authResponse.ok) {
+    if (!authResponse.ok || !authData.access_token) {
       return json(
         {
           error: "اسم المستخدم أو كلمة المرور غير صحيحة"
@@ -316,7 +338,7 @@ try {
       return {};
     });
 
-    if (!authResponse.ok) {
+    if (!authResponse.ok || !authData.access_token) {
       return json(
         {
           error: "انتهت الجلسة"
@@ -553,10 +575,7 @@ try {
     const secret =
       request.headers.get("X-Excel-Sync-Secret") || "";
 
-    if (
-      !env.EXCEL_SYNC_SECRET ||
-      secret !== env.EXCEL_SYNC_SECRET
-    ) {
+    if (secret !== env.EXCEL_SYNC_SECRET) {
       return json(
         {
           error: "غير مصرح"
@@ -627,10 +646,7 @@ try {
     const secret =
       request.headers.get("X-Excel-Sync-Secret") || "";
 
-    if (
-      !env.EXCEL_SYNC_SECRET ||
-      secret !== env.EXCEL_SYNC_SECRET
-    ) {
+    if (secret !== env.EXCEL_SYNC_SECRET) {
       return json(
         {
           error: "غير مصرح"
@@ -687,10 +703,7 @@ try {
 } catch (error) {
   return json(
     {
-      error:
-        error && error.message
-          ? error.message
-          : "حدث خطأ غير متوقع"
+      error: "حدث خطأ غير متوقع"
     },
     500
   );
