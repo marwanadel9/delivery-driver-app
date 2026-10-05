@@ -5,9 +5,9 @@ zain: "[zain@yourapp.local](mailto:zain@yourapp.local)",
 zain2: "[zain2@yourapp.local](mailto:zain2@yourapp.local)"
 };
 
-const json = (data, status = 200) =>
-new Response(JSON.stringify(data), {
-status,
+function json(data, status) {
+return new Response(JSON.stringify(data), {
+status: status || 200,
 headers: {
 "Content-Type": "application/json; charset=utf-8",
 "Access-Control-Allow-Origin": "*",
@@ -15,8 +15,9 @@ headers: {
 "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 }
 });
+}
 
-const getBearerToken = (request) => {
+function getBearerToken(request) {
 const header = request.headers.get("Authorization") || "";
 
 if (!header.startsWith("Bearer ")) {
@@ -24,68 +25,75 @@ return null;
 }
 
 return header.slice(7).trim();
-};
-
-const supabaseRequest = async (path, options = {}) => {
-return fetch(`${SUPABASE_URL}${path}`, {
-...options,
-headers: {
-apikey: options.headers?.apikey || "",
-"Content-Type": "application/json",
-...(options.headers || {})
 }
-});
-};
 
-const getUser = async (token) => {
+async function supabaseRequest(path, options) {
+const opts = options || {};
+
+return fetch(SUPABASE_URL + path, {
+method: opts.method || "GET",
+headers: opts.headers || {},
+body: opts.body
+});
+}
+
+async function getUser(token, anonKey) {
 if (!token) {
 return null;
 }
 
-const res = await supabaseRequest("/auth/v1/user", {
+const response = await supabaseRequest("/auth/v1/user", {
 headers: {
-apikey: "",
-Authorization: `Bearer ${token}`
+apikey: anonKey,
+Authorization: "Bearer " + token
 }
 });
 
-if (!res.ok) {
+if (!response.ok) {
 return null;
 }
 
-return await res.json().catch(() => null);
-};
+return await response.json().catch(function () {
+return null;
+});
+}
 
-const getDriverInfo = async (token, userId) => {
-const res = await supabaseRequest(
-`/rest/v1/mandoub_users?user_id=eq.${encodeURIComponent(userId)}&select=mandoub_name,sheet_name`,
-{
+async function getDriverInfo(token, anonKey, userId) {
+if (!token || !userId) {
+return null;
+}
+
+const path =
+"/rest/v1/mandoub_users?user_id=eq." +
+encodeURIComponent(userId) +
+"&select=mandoub_name,sheet_name";
+
+const response = await supabaseRequest(path, {
 headers: {
-apikey: token,
-Authorization: `Bearer ${token}`
+apikey: anonKey,
+Authorization: "Bearer " + token
 }
-}
-);
+});
 
-if (!res.ok) {
+if (!response.ok) {
 return null;
 }
 
-const rows = await res.json().catch(() => []);
+const rows = await response.json().catch(function () {
+return [];
+});
 
-if (!Array.isArray(rows) || !rows.length) {
+if (!Array.isArray(rows) || rows.length === 0) {
 return null;
 }
-
-const row = rows[0];
 
 return {
-mandoub_name: row.mandoub_name || "",
-sheet_name: row.sheet_name || ""
+mandoub_name: rows[0].mandoub_name || "",
+sheet_name: rows[0].sheet_name || ""
 };
-};
+}
 
-const requireDriver = async (request) => {
+async function requireDriver(request, env) {
 const token = getBearerToken(request);
 
 if (!token) {
@@ -95,16 +103,20 @@ status: 401
 };
 }
 
-const user = await getUser(token);
+const user = await getUser(token, env.SUPABASE_ANON_KEY);
 
-if (!user?.id) {
+if (!user || !user.id) {
 return {
 error: "انتهت الجلسة",
 status: 401
 };
 }
 
-const driver = await getDriverInfo(token, user.id);
+const driver = await getDriverInfo(
+token,
+env.SUPABASE_ANON_KEY,
+user.id
+);
 
 if (!driver) {
 return {
@@ -114,13 +126,13 @@ status: 403
 }
 
 return {
-token,
-user,
-driver
+token: token,
+user: user,
+driver: driver
 };
-};
+}
 
-const normalizePayment = (value) => {
+function normalizePayment(value) {
 const v = String(value || "").trim().toLowerCase();
 
 if (
@@ -142,9 +154,9 @@ return "bank_transfer";
 }
 
 return null;
-};
+}
 
-const paymentLabel = (value) => {
+function paymentLabel(value) {
 if (value === "cash") {
 return "دفع كاش";
 }
@@ -154,7 +166,7 @@ return "تحويل بنكي";
 }
 
 return "";
-};
+}
 
 export default {
 async fetch(request, env) {
@@ -163,8 +175,7 @@ return new Response(null, {
 status: 204,
 headers: {
 "Access-Control-Allow-Origin": "*",
-"Access-Control-Allow-Headers":
-"Content-Type, Authorization, X-Excel-Sync-Secret",
+"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Excel-Sync-Secret",
 "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 }
 });
@@ -176,7 +187,9 @@ const path = url.pathname;
 
 try {
   if (path === "/api/login" && request.method === "POST") {
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(function () {
+      return {};
+    });
 
     const username = String(body.username || "")
       .trim()
@@ -204,23 +217,26 @@ try {
       );
     }
 
-    const authRes = await supabaseRequest(
+    const authResponse = await supabaseRequest(
       "/auth/v1/token?grant_type=password",
       {
         method: "POST",
         headers: {
-          apikey: env.SUPABASE_ANON_KEY
+          apikey: env.SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          email,
-          password
+          email: email,
+          password: password
         })
       }
     );
 
-    const authData = await authRes.json().catch(() => ({}));
+    const authData = await authResponse.json().catch(function () {
+      return {};
+    });
 
-    if (!authRes.ok) {
+    if (!authResponse.ok) {
       return json(
         {
           error: "اسم المستخدم أو كلمة المرور غير صحيحة"
@@ -231,7 +247,8 @@ try {
 
     const driver = await getDriverInfo(
       authData.access_token,
-      authData.user?.id
+      env.SUPABASE_ANON_KEY,
+      authData.user && authData.user.id
     );
 
     if (!driver) {
@@ -247,7 +264,7 @@ try {
       access_token: authData.access_token,
       refresh_token: authData.refresh_token,
       expires_in: authData.expires_in,
-      username,
+      username: username,
       mandoub_name: driver.mandoub_name,
       sheet_name: driver.sheet_name,
       can_call: username === "zain2"
@@ -255,7 +272,9 @@ try {
   }
 
   if (path === "/api/refresh" && request.method === "POST") {
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(function () {
+      return {};
+    });
 
     const refreshToken = String(
       body.refresh_token || ""
@@ -270,12 +289,13 @@ try {
       );
     }
 
-    const authRes = await supabaseRequest(
+    const authResponse = await supabaseRequest(
       "/auth/v1/token?grant_type=refresh_token",
       {
         method: "POST",
         headers: {
-          apikey: env.SUPABASE_ANON_KEY
+          apikey: env.SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           refresh_token: refreshToken
@@ -283,9 +303,11 @@ try {
       }
     );
 
-    const authData = await authRes.json().catch(() => ({}));
+    const authData = await authResponse.json().catch(function () {
+      return {};
+    });
 
-    if (!authRes.ok) {
+    if (!authResponse.ok) {
       return json(
         {
           error: "انتهت الجلسة"
@@ -296,7 +318,8 @@ try {
 
     const driver = await getDriverInfo(
       authData.access_token,
-      authData.user?.id
+      env.SUPABASE_ANON_KEY,
+      authData.user && authData.user.id
     );
 
     if (!driver) {
@@ -309,7 +332,8 @@ try {
     }
 
     const username =
-      authData.user?.email === DRIVER_EMAILS.zain2
+      authData.user &&
+      authData.user.email === DRIVER_EMAILS.zain2
         ? "zain2"
         : "zain";
 
@@ -317,7 +341,7 @@ try {
       access_token: authData.access_token,
       refresh_token: authData.refresh_token,
       expires_in: authData.expires_in,
-      username,
+      username: username,
       mandoub_name: driver.mandoub_name,
       sheet_name: driver.sheet_name,
       can_call: username === "zain2"
@@ -325,7 +349,7 @@ try {
   }
 
   if (path === "/api/orders" && request.method === "GET") {
-    const auth = await requireDriver(request);
+    const auth = await requireDriver(request, env);
 
     if (auth.error) {
       return json(
@@ -338,19 +362,26 @@ try {
 
     const sheet = auth.driver.sheet_name;
 
-    const ordersRes = await supabaseRequest(
-      `/rest/v1/orders?sheet_name=eq.${encodeURIComponent(sheet)}&select=*`,
+    const ordersPath =
+      "/rest/v1/orders?sheet_name=eq." +
+      encodeURIComponent(sheet) +
+      "&select=*";
+
+    const ordersResponse = await supabaseRequest(
+      ordersPath,
       {
         headers: {
-          apikey: auth.token,
-          Authorization: `Bearer ${auth.token}`
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + auth.token
         }
       }
     );
 
-    const orders = await ordersRes.json().catch(() => []);
+    const orders = await ordersResponse.json().catch(function () {
+      return [];
+    });
 
-    if (!ordersRes.ok) {
+    if (!ordersResponse.ok) {
       return json(
         {
           error: "تعذر تحميل الطلبات"
@@ -369,7 +400,7 @@ try {
   }
 
   if (path === "/api/payment" && request.method === "POST") {
-    const auth = await requireDriver(request);
+    const auth = await requireDriver(request, env);
 
     if (auth.error) {
       return json(
@@ -380,7 +411,9 @@ try {
       );
     }
 
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(function () {
+      return {};
+    });
 
     const orderId = Number(body.orderId);
     const paymentMethod = normalizePayment(
@@ -405,13 +438,14 @@ try {
       );
     }
 
-    const rpcRes = await supabaseRequest(
+    const rpcResponse = await supabaseRequest(
       "/rest/v1/rpc/set_order_payment_method",
       {
         method: "POST",
         headers: {
-          apikey: auth.token,
-          Authorization: `Bearer ${auth.token}`
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + auth.token,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           p_order_id: orderId,
@@ -420,15 +454,17 @@ try {
       }
     );
 
-    const rpcData = await rpcRes.json().catch(() => null);
+    const rpcData = await rpcResponse.json().catch(function () {
+      return null;
+    });
 
-    if (!rpcRes.ok) {
+    if (!rpcResponse.ok) {
       return json(
         {
           error:
-            rpcData?.message ||
-            rpcData?.hint ||
-            rpcData?.error ||
+            (rpcData && rpcData.message) ||
+            (rpcData && rpcData.hint) ||
+            (rpcData && rpcData.error) ||
             "تعذر حفظ طريقة الدفع"
         },
         400
@@ -443,7 +479,7 @@ try {
   }
 
   if (path === "/api/deliver" && request.method === "POST") {
-    const auth = await requireDriver(request);
+    const auth = await requireDriver(request, env);
 
     if (auth.error) {
       return json(
@@ -454,7 +490,9 @@ try {
       );
     }
 
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(function () {
+      return {};
+    });
 
     const orderId = Number(body.orderId);
 
@@ -467,13 +505,14 @@ try {
       );
     }
 
-    const rpcRes = await supabaseRequest(
+    const rpcResponse = await supabaseRequest(
       "/rest/v1/rpc/mark_order_delivered",
       {
         method: "POST",
         headers: {
-          apikey: auth.token,
-          Authorization: `Bearer ${auth.token}`
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + auth.token,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           p_order_id: orderId
@@ -481,15 +520,17 @@ try {
       }
     );
 
-    const rpcData = await rpcRes.json().catch(() => null);
+    const rpcData = await rpcResponse.json().catch(function () {
+      return null;
+    });
 
-    if (!rpcRes.ok) {
+    if (!rpcResponse.ok) {
       return json(
         {
           error:
-            rpcData?.message ||
-            rpcData?.hint ||
-            rpcData?.error ||
+            (rpcData && rpcData.message) ||
+            (rpcData && rpcData.hint) ||
+            (rpcData && rpcData.error) ||
             "تعذر تسجيل التسليم"
         },
         400
@@ -521,7 +562,9 @@ try {
       );
     }
 
-    const body = await request.json().catch(() => null);
+    const body = await request.json().catch(function () {
+      return null;
+    });
 
     if (!body) {
       return json(
@@ -538,13 +581,14 @@ try {
         ? body.orders
         : [];
 
-    const rpcRes = await supabaseRequest(
+    const rpcResponse = await supabaseRequest(
       "/rest/v1/rpc/sync_orders_from_excel",
       {
         method: "POST",
         headers: {
           apikey: env.SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`
+          Authorization: "Bearer " + env.SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           p_orders: orders
@@ -552,15 +596,17 @@ try {
       }
     );
 
-    const rpcData = await rpcRes.json().catch(() => null);
+    const rpcData = await rpcResponse.json().catch(function () {
+      return null;
+    });
 
-    if (!rpcRes.ok) {
+    if (!rpcResponse.ok) {
       return json(
         {
           error:
-            rpcData?.message ||
-            rpcData?.hint ||
-            rpcData?.error ||
+            (rpcData && rpcData.message) ||
+            (rpcData && rpcData.hint) ||
+            (rpcData && rpcData.error) ||
             "فشل مزامنة Excel"
         },
         500
@@ -592,26 +638,29 @@ try {
       );
     }
 
-    const rpcRes = await supabaseRequest(
+    const rpcResponse = await supabaseRequest(
       "/rest/v1/rpc/get_order_delivery_statuses",
       {
         method: "POST",
         headers: {
           apikey: env.SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`
+          Authorization: "Bearer " + env.SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
         }
       }
     );
 
-    const data = await rpcRes.json().catch(() => null);
+    const data = await rpcResponse.json().catch(function () {
+      return null;
+    });
 
-    if (!rpcRes.ok) {
+    if (!rpcResponse.ok) {
       return json(
         {
           error:
-            data?.message ||
-            data?.hint ||
-            data?.error ||
+            (data && data.message) ||
+            (data && data.hint) ||
+            (data && data.error) ||
             "تعذر قراءة حالات التسليم"
         },
         500
@@ -630,8 +679,9 @@ try {
   return json(
     {
       error:
-        error?.message ||
-        "حدث خطأ غير متوقع"
+        error && error.message
+          ? error.message
+          : "حدث خطأ غير متوقع"
     },
     500
   );
