@@ -663,14 +663,38 @@
 
       setText(
         node,
+        'emirate',
+        order.emirate
+      );
+
+      setText(
+        node,
         'area',
         order.area
       );
 
       setText(
         node,
-        'order_details',
-        order.order_details
+        'chicken_weights',
+        order.chicken_weights
+      );
+
+      setText(
+        node,
+        'chicken_qtys',
+        order.chicken_qtys
+      );
+
+      setText(
+        node,
+        'plate_names',
+        order.plate_names
+      );
+
+      setText(
+        node,
+        'plate_qtys',
+        order.plate_qtys
       );
 
       setText(
@@ -933,31 +957,25 @@
       }
 
       toast(
-        `تم حفظ طريقة الدفع: ${paymentLabel(method)}`
+        method === 'cash'
+          ? 'تم اختيار الدفع كاش'
+          : 'تم اختيار التحويل البنكي'
       );
     } catch (error) {
-      if (
-        error.message === 'expired'
-      ) {
-        return;
-      }
-
       toast(
-        error.message,
+        error.message ||
+          'تعذر حفظ طريقة الدفع',
         true
       );
     } finally {
-      if (
-        !isDelivered(
-          order.delivery_status
-        )
-      ) {
-        allButtons.forEach(
-          (button) => {
-            button.disabled = false;
-          }
-        );
-      }
+      allButtons.forEach(
+        (button) => {
+          button.disabled =
+            isDelivered(
+              order.delivery_status
+            );
+        }
+      );
     }
   }
 
@@ -965,31 +983,20 @@
     order,
     button
   ) {
-    const number =
-      order.order_number ??
-      order.id ??
-      '';
-
-    const name =
-      order.customer_name ||
-      '';
-
-    const confirmed =
-      window.confirm(
-        `تأكيد تسليم الطلب #${number}${
-          name
-            ? ` للعميل ${name}`
-            : ''
-        }؟`
-      );
-
-    if (!confirmed) {
+    if (
+      isDelivered(
+        order.delivery_status
+      )
+    ) {
       return;
     }
 
+    const originalText =
+      button.textContent;
+
     button.disabled = true;
     button.textContent =
-      'جارٍ التحديث…';
+      'جارٍ الحفظ…';
 
     try {
       await apiFetch(
@@ -1005,86 +1012,72 @@
       order.delivery_status =
         'delivered';
 
-      toast(
-        'تم تسجيل التسليم بنجاح ✅'
-      );
+      toast('تم تسجيل التسليم');
 
       render();
     } catch (error) {
-      if (
-        error.message === 'expired'
-      ) {
-        return;
-      }
-
-      toast(
-        error.message,
-        true
-      );
-
       button.disabled = false;
       button.textContent =
-        'تم التسليم';
+        originalText;
+
+      toast(
+        error.message ||
+          'تعذر تسجيل التسليم',
+        true
+      );
     }
   }
 
-  function logout(
-    message = ''
-  ) {
+  function logout(message = '') {
     saveSession(null);
-
     state.orders = [];
     state.sheet = '';
-
-    const list =
-      $('orders-list');
-
-    if (list) {
-      list.replaceChildren();
-    }
-
     showLogin(message);
   }
 
   function setupEvents() {
-    const loginForm =
+    const form =
       $('login-form');
 
-    if (loginForm) {
-      loginForm.addEventListener(
+    if (form) {
+      form.addEventListener(
         'submit',
         async (event) => {
           event.preventDefault();
 
-          const username =
-            $('username')
-              ?.value
-              .trim()
-              .toLowerCase();
+          const usernameInput =
+            $('username');
 
-          const password =
-            $('password')
-              ?.value || '';
+          const passwordInput =
+            $('password');
+
+          const button =
+            form.querySelector(
+              'button[type="submit"]'
+            );
 
           const error =
             $('login-error');
 
-          if (
-            !username ||
-            !password
-          ) {
+          const username =
+            String(
+              usernameInput?.value || ''
+            ).trim();
+
+          const password =
+            String(
+              passwordInput?.value || ''
+            );
+
+          if (!username || !password) {
             if (error) {
               error.textContent =
-                'يرجى إدخال اسم المستخدم وكلمة المرور';
-
+                'اكتب اسم المستخدم وكلمة المرور';
               error.hidden = false;
             }
 
             return;
           }
-
-          const button =
-            $('login-btn');
 
           if (button) {
             button.disabled = true;
@@ -1107,11 +1100,10 @@
                     'Content-Type':
                       'application/json'
                   },
-                  body:
-                    JSON.stringify({
-                      username,
-                      password
-                    })
+                  body: JSON.stringify({
+                    username,
+                    password
+                  })
                 }
               );
 
@@ -1145,12 +1137,8 @@
 
             saveSession(session);
 
-            const passwordInput =
-              $('password');
-
             if (passwordInput) {
-              passwordInput.value =
-                '';
+              passwordInput.value = '';
             }
 
             showOrders();
