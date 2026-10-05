@@ -11,8 +11,7 @@ status: status || 200,
 headers: {
 "Content-Type": "application/json; charset=utf-8",
 "Access-Control-Allow-Origin": "*",
-"Access-Control-Allow-Headers":
-"Content-Type, Authorization, X-Excel-Sync-Secret",
+"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Excel-Sync-Secret",
 "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 }
 });
@@ -134,9 +133,7 @@ driver: driver
 }
 
 function normalizePayment(value) {
-const v = String(value || "")
-.trim()
-.toLowerCase();
+const v = String(value || "").trim().toLowerCase();
 
 if (
 v === "cash" ||
@@ -180,8 +177,7 @@ return new Response(null, {
 status: 204,
 headers: {
 "Access-Control-Allow-Origin": "*",
-"Access-Control-Allow-Headers":
-"Content-Type, Authorization, X-Excel-Sync-Secret",
+"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Excel-Sync-Secret",
 "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 }
 });
@@ -192,10 +188,7 @@ const url = new URL(request.url);
 const path = url.pathname;
 
 try {
-  if (
-    path === "/api/login" &&
-    request.method === "POST"
-  ) {
+  if (path === "/api/login" && request.method === "POST") {
     const body = await request.json().catch(function () {
       return {};
     });
@@ -250,11 +243,9 @@ try {
       }
     );
 
-    const authData = await authResponse
-      .json()
-      .catch(function () {
-        return {};
-      });
+    const authData = await authResponse.json().catch(function () {
+      return {};
+    });
 
     if (!authResponse.ok) {
       return json(
@@ -291,17 +282,12 @@ try {
     });
   }
 
-  if (
-    path === "/api/refresh" &&
-    request.method === "POST"
-  ) {
+  if (path === "/api/refresh" && request.method === "POST") {
     const body = await request.json().catch(function () {
       return {};
     });
 
-    const refreshToken = String(
-      body.refresh_token || ""
-    ).trim();
+    const refreshToken = String(body.refresh_token || "").trim();
 
     if (!refreshToken) {
       return json(
@@ -326,11 +312,9 @@ try {
       }
     );
 
-    const authData = await authResponse
-      .json()
-      .catch(function () {
-        return {};
-      });
+    const authData = await authResponse.json().catch(function () {
+      return {};
+    });
 
     if (!authResponse.ok) {
       return json(
@@ -373,10 +357,7 @@ try {
     });
   }
 
-  if (
-    path === "/api/orders" &&
-    request.method === "GET"
-  ) {
+  if (path === "/api/orders" && request.method === "GET") {
     const auth = await requireDriver(request, env);
 
     if (auth.error) {
@@ -405,11 +386,9 @@ try {
       }
     );
 
-    const orders = await ordersResponse
-      .json()
-      .catch(function () {
-        return [];
-      });
+    const orders = await ordersResponse.json().catch(function () {
+      return [];
+    });
 
     if (!ordersResponse.ok) {
       return json(
@@ -424,15 +403,11 @@ try {
       orders: Array.isArray(orders) ? orders : [],
       sheet: sheet,
       mandoub_name: auth.driver.mandoub_name,
-      can_call:
-        auth.user.email === DRIVER_EMAILS.zain2
+      can_call: auth.user.email === DRIVER_EMAILS.zain2
     });
   }
 
-  if (
-    path === "/api/payment" &&
-    request.method === "POST"
-  ) {
+  if (path === "/api/payment" && request.method === "POST") {
     const auth = await requireDriver(request, env);
 
     if (auth.error) {
@@ -449,14 +424,9 @@ try {
     });
 
     const orderId = Number(body.orderId);
-    const paymentMethod = normalizePayment(
-      body.payment_method
-    );
+    const paymentMethod = normalizePayment(body.payment_method);
 
-    if (
-      !Number.isInteger(orderId) ||
-      orderId <= 0
-    ) {
+    if (!Number.isInteger(orderId) || orderId <= 0) {
       return json(
         {
           error: "رقم الطلب غير صحيح"
@@ -490,11 +460,9 @@ try {
       }
     );
 
-    const rpcData = await rpcResponse
-      .json()
-      .catch(function () {
-        return null;
-      });
+    const rpcData = await rpcResponse.json().catch(function () {
+      return null;
+    });
 
     if (!rpcResponse.ok) {
       return json(
@@ -516,10 +484,7 @@ try {
     });
   }
 
-  if (
-    path === "/api/deliver" &&
-    request.method === "POST"
-  ) {
+  if (path === "/api/deliver" && request.method === "POST") {
     const auth = await requireDriver(request, env);
 
     if (auth.error) {
@@ -537,10 +502,7 @@ try {
 
     const orderId = Number(body.orderId);
 
-    if (
-      !Number.isInteger(orderId) ||
-      orderId <= 0
-    ) {
+    if (!Number.isInteger(orderId) || orderId <= 0) {
       return json(
         {
           error: "رقم الطلب غير صحيح"
@@ -564,11 +526,9 @@ try {
       }
     );
 
-    const rpcData = await rpcResponse
-      .json()
-      .catch(function () {
-        return null;
-      });
+    const rpcData = await rpcResponse.json().catch(function () {
+      return null;
+    });
 
     if (!rpcResponse.ok) {
       return json(
@@ -589,10 +549,7 @@ try {
     });
   }
 
-  if (
-    path === "/api/excel-sync" &&
-    request.method === "POST"
-  ) {
+  if (path === "/api/excel-sync" && request.method === "POST") {
     const secret =
       request.headers.get("X-Excel-Sync-Secret") || "";
 
@@ -634,8 +591,7 @@ try {
         method: "POST",
         headers: {
           apikey: env.SUPABASE_ANON_KEY,
-          Authorization:
-            "Bearer " + env.SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + env.SUPABASE_ANON_KEY,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -644,11 +600,9 @@ try {
       }
     );
 
-    const rpcData = await rpcResponse
-      .json()
-      .catch(function () {
-        return null;
-      });
+    const rpcData = await rpcResponse.json().catch(function () {
+      return null;
+    });
 
     if (!rpcResponse.ok) {
       return json(
@@ -669,10 +623,7 @@ try {
     });
   }
 
-  if (
-    path === "/api/excel-status" &&
-    request.method === "GET"
-  ) {
+  if (path === "/api/excel-status" && request.method === "GET") {
     const secret =
       request.headers.get("X-Excel-Sync-Secret") || "";
 
@@ -694,18 +645,15 @@ try {
         method: "POST",
         headers: {
           apikey: env.SUPABASE_ANON_KEY,
-          Authorization:
-            "Bearer " + env.SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + env.SUPABASE_ANON_KEY,
           "Content-Type": "application/json"
         }
       }
     );
 
-    const data = await rpcResponse
-      .json()
-      .catch(function () {
-        return null;
-      });
+    const data = await rpcResponse.json().catch(function () {
+      return null;
+    });
 
     if (!rpcResponse.ok) {
       return json(
