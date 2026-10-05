@@ -333,20 +333,11 @@ export default {
 
       if (path === "/api/master-login" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));
-
-        const username = String(body.username || "")
-          .trim()
-          .toLowerCase();
-
+        const username = String(body.username || "").trim().toLowerCase();
         const password = String(body.password || "");
 
         if (username !== MASTER_USERNAME || !password) {
-          return json(
-            {
-              error: "اسم المستخدم أو كلمة المرور غير صحيحة"
-            },
-            401
-          );
+          return json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" }, 401);
         }
 
         const authResponse = await supabaseRequest(
@@ -357,22 +348,14 @@ export default {
               apikey: env.SUPABASE_ANON_KEY,
               "Content-Type": "application/json"
             },
-            body: JSON.stringify({
-              email: MASTER_EMAIL,
-              password
-            })
+            body: JSON.stringify({ email: MASTER_EMAIL, password })
           }
         );
 
         const authData = await authResponse.json().catch(() => ({}));
 
         if (!authResponse.ok || !authData.access_token || !authData.user?.id) {
-          return json(
-            {
-              error: "اسم المستخدم أو كلمة المرور غير صحيحة"
-            },
-            401
-          );
+          return json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" }, 401);
         }
 
         const adminResponse = await supabaseRequest(
@@ -389,23 +372,13 @@ export default {
         );
 
         if (!adminResponse.ok) {
-          return json(
-            {
-              error: "تعذر التحقق من صلاحية Master Admin"
-            },
-            500
-          );
+          return json({ error: "تعذر التحقق من صلاحية Master Admin" }, 500);
         }
 
         const admins = await adminResponse.json().catch(() => []);
 
         if (!Array.isArray(admins) || !admins.length) {
-          return json(
-            {
-              error: "هذا الحساب ليس لديه صلاحية Master Admin"
-            },
-            403
-          );
+          return json({ error: "هذا الحساب ليس لديه صلاحية Master Admin" }, 403);
         }
 
         return json({
@@ -422,17 +395,9 @@ export default {
         const authHeader = request.headers.get("Authorization") || "";
         const match = authHeader.match(/^Bearer\s+(.+)$/i);
 
-        if (!match) {
-          return json(
-            {
-              error: "غير مصرح"
-            },
-            401
-          );
-        }
+        if (!match) return json({ error: "غير مصرح" }, 401);
 
         const token = match[1].trim();
-
         const userResponse = await supabaseRequest("/auth/v1/user", {
           method: "GET",
           headers: {
@@ -441,25 +406,10 @@ export default {
           }
         });
 
-        if (!userResponse.ok) {
-          return json(
-            {
-              error: "انتهت الجلسة"
-            },
-            401
-          );
-        }
+        if (!userResponse.ok) return json({ error: "انتهت الجلسة" }, 401);
 
         const user = await userResponse.json().catch(() => null);
-
-        if (!user?.id) {
-          return json(
-            {
-              error: "انتهت الجلسة"
-            },
-            401
-          );
-        }
+        if (!user?.id) return json({ error: "انتهت الجلسة" }, 401);
 
         const adminResponse = await supabaseRequest(
           "/rest/v1/master_admins?user_id=eq." +
@@ -475,23 +425,12 @@ export default {
         );
 
         if (!adminResponse.ok) {
-          return json(
-            {
-              error: "تعذر التحقق من صلاحية Master Admin"
-            },
-            500
-          );
+          return json({ error: "تعذر التحقق من صلاحية Master Admin" }, 500);
         }
 
         const admins = await adminResponse.json().catch(() => []);
-
         if (!Array.isArray(admins) || !admins.length) {
-          return json(
-            {
-              error: "غير مصرح"
-            },
-            403
-          );
+          return json({ error: "غير مصرح" }, 403);
         }
 
         const ordersResponse = await supabaseRequest(
@@ -506,14 +445,8 @@ export default {
         );
 
         const orders = await ordersResponse.json().catch(() => []);
-
         if (!ordersResponse.ok) {
-          return json(
-            {
-              error: "تعذر تحميل الفواتير"
-            },
-            500
-          );
+          return json({ error: "تعذر تحميل الفواتير" }, 500);
         }
 
         return json({
@@ -521,6 +454,153 @@ export default {
           username: MASTER_USERNAME,
           email: MASTER_EMAIL,
           role: "master_admin"
+        });
+      }
+
+      if (path === "/api/master/order/update" && request.method === "POST") {
+        const authHeader = request.headers.get("Authorization") || "";
+        const match = authHeader.match(/^Bearer\s+(.+)$/i);
+
+        if (!match) return json({ error: "غير مصرح" }, 401);
+
+        const token = match[1].trim();
+        const userResponse = await supabaseRequest("/auth/v1/user", {
+          method: "GET",
+          headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!userResponse.ok) return json({ error: "انتهت الجلسة" }, 401);
+
+        const user = await userResponse.json().catch(() => null);
+        if (!user?.id) return json({ error: "انتهت الجلسة" }, 401);
+
+        const adminResponse = await supabaseRequest(
+          "/rest/v1/master_admins?user_id=eq." +
+            encodeURIComponent(user.id) +
+            "&select=user_id&limit=1",
+          {
+            method: "GET",
+            headers: {
+              apikey: env.SUPABASE_ANON_KEY,
+              Authorization: "Bearer " + token
+            }
+          }
+        );
+
+        if (!adminResponse.ok) return json({ error: "تعذر التحقق من صلاحية Master Admin" }, 500);
+
+        const admins = await adminResponse.json().catch(() => []);
+        if (!Array.isArray(admins) || !admins.length) return json({ error: "غير مصرح" }, 403);
+
+        const body = await request.json().catch(() => ({}));
+        const orderId = Number(body.order_id);
+        const order = body.order;
+
+        if (!Number.isInteger(orderId) || orderId <= 0) return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+        if (!order || typeof order !== "object") return json({ error: "بيانات الفاتورة غير صحيحة" }, 400);
+
+        if (order.payment_method !== undefined && order.payment_method !== "" && !["cash", "bank_transfer"].includes(String(order.payment_method))) {
+          return json({ error: "طريقة الدفع غير صحيحة" }, 400);
+        }
+
+        if (order.delivery_status !== undefined && order.delivery_status !== "" && !["pending", "delivered"].includes(String(order.delivery_status))) {
+          return json({ error: "حالة التسليم غير صحيحة" }, 400);
+        }
+
+        const rpcResponse = await supabaseRequest("/rest/v1/rpc/master_update_order", {
+          method: "POST",
+          headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            Authorization: "Bearer " + token,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            p_order_id: orderId,
+            p_order: order
+          })
+        });
+
+        const rpcData = await rpcResponse.json().catch(() => null);
+
+        if (!rpcResponse.ok) {
+          return json({
+            error: (rpcData && rpcData.message) || (rpcData && rpcData.hint) || (rpcData && rpcData.error) || "تعذر تعديل الفاتورة"
+          }, 400);
+        }
+
+        return json({ success: true, order: rpcData });
+      }
+
+      if (path === "/api/master/order/delete" && request.method === "POST") {
+        const authHeader = request.headers.get("Authorization") || "";
+        const match = authHeader.match(/^Bearer\s+(.+)$/i);
+
+        if (!match) return json({ error: "غير مصرح" }, 401);
+
+        const token = match[1].trim();
+        const userResponse = await supabaseRequest("/auth/v1/user", {
+          method: "GET",
+          headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!userResponse.ok) return json({ error: "انتهت الجلسة" }, 401);
+
+        const user = await userResponse.json().catch(() => null);
+        if (!user?.id) return json({ error: "انتهت الجلسة" }, 401);
+
+        const adminResponse = await supabaseRequest(
+          "/rest/v1/master_admins?user_id=eq." +
+            encodeURIComponent(user.id) +
+            "&select=user_id&limit=1",
+          {
+            method: "GET",
+            headers: {
+              apikey: env.SUPABASE_ANON_KEY,
+              Authorization: "Bearer " + token
+            }
+          }
+        );
+
+        if (!adminResponse.ok) return json({ error: "تعذر التحقق من صلاحية Master Admin" }, 500);
+
+        const admins = await adminResponse.json().catch(() => []);
+        if (!Array.isArray(admins) || !admins.length) return json({ error: "غير مصرح" }, 403);
+
+        const body = await request.json().catch(() => ({}));
+        const orderId = Number(body.order_id);
+
+        if (!Number.isInteger(orderId) || orderId <= 0) return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+
+        const rpcResponse = await supabaseRequest("/rest/v1/rpc/master_delete_order", {
+          method: "POST",
+          headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            Authorization: "Bearer " + token,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            p_order_id: orderId
+          })
+        });
+
+        const rpcData = await rpcResponse.json().catch(() => null);
+
+        if (!rpcResponse.ok) {
+          return json({
+            error: (rpcData && rpcData.message) || (rpcData && rpcData.hint) || (rpcData && rpcData.error) || "تعذر حذف الفاتورة"
+          }, 400);
+        }
+
+        return json({
+          success: true,
+          deleted: true,
+          data: rpcData
         });
       }
 
