@@ -1254,8 +1254,7 @@
 
     updateStats();
   }
-
-  async function setPayment(
+    async function setPayment(
     order,
     method,
     clickedButton,
