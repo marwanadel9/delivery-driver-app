@@ -674,9 +674,25 @@
       : '—';
   }
 
+  function normalizeArabicDigits(value) {
+    return String(value ?? '')
+      .replace(/[٠-٩]/g, (digit) => {
+        return String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit));
+      });
+  }
+
+  function normalizePlateName(value) {
+    return String(value ?? '')
+      .replace(/أ/g, 'ا')
+      .replace(/إ/g, 'ا')
+      .replace(/آ/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function extractPlateNames(value) {
-    const text =
-      String(value ?? '').trim();
+    const text = String(value ?? '').trim();
 
     if (!text) {
       return [];
@@ -696,145 +712,178 @@
       'قلوب'
     ];
 
-    const escaped =
-      patterns
-        .sort(
-          (a, b) =>
-            b.length - a.length
-        )
-        .map(
-          (item) =>
-            item.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              '\\$&'
-            )
-        )
-        .join('|');
+    const escaped = patterns
+      .sort((a, b) => b.length - a.length)
+      .map((item) => item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('|');
 
-    return (
-      text.match(
-        new RegExp(
-          escaped,
-          'g'
-        )
-      ) || []
-    );
+    return text.match(new RegExp(escaped, 'g')) || [];
   }
 
   function extractPlateQuantities(value) {
-    const text =
-      String(value ?? '').trim();
+    const text = normalizeArabicDigits(value)
+      .replace(/هديّه|هديـة|هديه/g, 'هدية')
+      .trim();
 
     if (!text) {
       return [];
     }
 
-    return (
-      text.match(
-        /\d+\s*\+\s*\d+\s*هدية|\d+/g
-      ) || []
-    );
+    return text.match(/\d+\s*\+\s*\d+\s*هدية|\d+\s*\+\s*\d+|\d+/g) || [];
   }
 
-  function formatPlateLines(
-    names,
-    quantities
-  ) {
-    const nameList =
-      extractPlateNames(names);
+  function plateSortOrder(name) {
+    const normalized = normalizePlateName(name);
 
-    const qtyList =
-      extractPlateQuantities(
-        quantities
-      );
-function formatPlateLines(
-  names,
-  quantities
-) {
-  const nameList =
-    extractPlateNames(names);
+    const order = [
+      'صدور',
+      'افخاذ',
+      'ارجل دبوس',
+      'اجنحه',
+      'كبده',
+      'قوانص',
+      'قلوب'
+    ];
 
-  const qtyList =
-    extractPlateQuantities(
-      quantities
-    );
+    const index = order.indexOf(normalized);
 
-    const count =
-      Math.max(
-        nameList.length,
-        qtyList.length
-      );
-  const count =
-    Math.max(
-      nameList.length,
-      qtyList.length
-    );
+    return index === -1 ? order.length : index;
+  }
 
-    if (!count) {
-      return '—';
+  function collectGiftText(value, output = []) {
+    if (value === null || value === undefined) {
+      return output;
     }
-  if (!count) {
-    return '—';
+
+    if (typeof value === 'string' || typeof value === 'number') {
+      const text = String(value);
+
+      if (/هدي|هدية/i.test(text)) {
+        output.push(text);
+      }
+
+      return output;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => collectGiftText(item, output));
+      return output;
+    }
+
+    if (typeof value === 'object') {
+      Object.values(value).forEach((item) => {
+        collectGiftText(item, output);
+      });
+    }
+
+    return output;
   }
 
-    const result = [];
-  const result = [];
+  function recoverGiftQuantities(order, nameList, qtyList) {
+    const result = [...qtyList];
 
-    for (
-      let i = 0;
-      i < count;
-      i += 1
-    ) {
-      const name =
-        nameList[i] || '';
+    if (!nameList.length) {
+      return result;
+    }
 
-      const qty =
-        qtyList[i] || '';
-  for (
-    let i = 0;
-    i < count;
-    i += 1
-  ) {
-    const name =
-      nameList[i] || '';
+    if (result.some((value) => /هدية|هديه/i.test(String(value)))) {
+      return result;
+    }
 
-      if (!name && !qty) {
+    const giftTexts = collectGiftText(order);
+
+    if (!giftTexts.length) {
+      return result;
+    }
+
+    for (const giftText of giftTexts) {
+      const normalizedText = normalizeArabicDigits(giftText)
+        .replace(/هديّه|هديـة|هديه/g, 'هدية');
+
+      const giftMatch = normalizedText.match(
+        /(\d+)\s*\+\s*(\d+)\s*هدية|(\d+)\s*هدية/
+      );
+
+      if (!giftMatch) {
         continue;
       }
-    const qty =
-      qtyList[i] || '';
 
-      if (name && qty) {
-        result.push(
-          `🍗 ${name} — 📦 ${qty}`
-        );
-      } else {
-        result.push(
-          name || qty
+      const giftValue = giftMatch[2] || giftMatch[3] || '';
+      const baseValue = giftMatch[1] || '';
+      const combined = baseValue
+        ? `${baseValue} + ${giftValue} هدية`
+        : `${giftValue} هدية`;
+
+      let targetIndex = -1;
+
+      for (let i = 0; i < nameList.length; i += 1) {
+        const normalizedName = normalizePlateName(nameList[i]);
+
+        if (normalizedText.includes(normalizedName)) {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (targetIndex === -1) {
+        targetIndex = Math.min(
+          Math.max(nameList.length - 1, 0),
+          result.length - 1
         );
       }
-    if (!name && !qty) {
-      continue;
+
+      if (targetIndex >= 0) {
+        result[targetIndex] = combined;
+        break;
+      }
     }
 
-    return result.length
-      ? result.join('\n')
-      : '—';
-    if (name && qty) {
-      result.push(
-        `🍗 ${name} — ${qty}`
-      );
-    } else {
-      result.push(
-        name || qty
-      );
-    }
+    return result;
   }
 
-  return result.length
-    ? result.join('\n')
-    : '—';
-}
+  function formatPlateLines(names, quantities, order = null) {
+    const nameList = extractPlateNames(names);
+    let qtyList = extractPlateQuantities(quantities);
+
+    if (order) {
+      qtyList = recoverGiftQuantities(order, nameList, qtyList);
+    }
+
+    if (!nameList.length) {
+      return '—';
+    }
+
+    const rows = nameList.map((name, index) => ({
+      name,
+      qty: qtyList[index] || '',
+      originalIndex: index
+    }));
+
+    rows.sort((a, b) => {
+      const orderA = plateSortOrder(a.name);
+      const orderB = plateSortOrder(b.name);
+
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      return a.originalIndex - b.originalIndex;
+    });
+
+    return rows
+      .filter((row) => row.name || row.qty)
+      .map((row) => {
+        if (row.name && row.qty) {
+          return `🍽️ ${row.name} — ${row.qty}`;
+        }
+
+        return row.name
+          ? `🍽️ ${row.name}`
+          : row.qty;
+      })
+      .join('\n') || '—';
+  }
+
   function render() {
     const list =
       $('orders-list');
@@ -998,7 +1047,8 @@ function formatPlateLines(
       const plateDisplay =
         formatPlateLines(
           plateNames,
-          plateQtys
+          plateQtys,
+          order
         );
 
       setText(
@@ -1024,6 +1074,42 @@ function formatPlateLines(
         'plate_qtys',
         ''
       );
+
+      const chickenQtyElement =
+        node.querySelector(
+          '[data-f="chicken_qtys"]'
+        );
+
+      if (chickenQtyElement) {
+        const chickenQtyRow =
+          chickenQtyElement.closest(
+            '.info-item, .order-section, .detail-row, .field-row, .product-box'
+          );
+
+        if (chickenQtyRow) {
+          chickenQtyRow.style.display = 'none';
+        } else {
+          chickenQtyElement.style.display = 'none';
+        }
+      }
+
+      const plateQtyElement =
+        node.querySelector(
+          '[data-f="plate_qtys"]'
+        );
+
+      if (plateQtyElement) {
+        const plateQtyRow =
+          plateQtyElement.closest(
+            '.info-item, .order-section, .detail-row, .field-row, .product-box'
+          );
+
+        if (plateQtyRow) {
+          plateQtyRow.style.display = 'none';
+        } else {
+          plateQtyElement.style.display = 'none';
+        }
+      }
 
       [
         'chicken_weights',
@@ -1097,7 +1183,7 @@ function formatPlateLines(
             order,
             [
               'total',
-              'grand_total',
+                            'grand_total',
               'grandTotal',
               'amount'
             ]
@@ -1496,7 +1582,8 @@ function formatPlateLines(
 
     showLogin(message);
   }
-    const MASTER_SESSION_KEY = 'master_session';
+
+  const MASTER_SESSION_KEY = 'master_session';
   const MASTER_USERNAME = 'zezo';
 
   state.masterOrders = [];
@@ -1972,7 +2059,8 @@ function formatPlateLines(
       return true;
     });
   }
-    function renderMasterStats() {
+
+  function renderMasterStats() {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -2097,8 +2185,7 @@ function formatPlateLines(
               .join(' / ') || '—'
           )}
         </td>
-
-        <td>
+                <td>
           ${masterEscape(
             masterDriver(order)
           )}
@@ -2693,7 +2780,6 @@ function formatPlateLines(
           </button>
 
         </div>
-
       </div>
     `;
 
