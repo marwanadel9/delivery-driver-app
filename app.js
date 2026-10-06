@@ -721,22 +721,75 @@
     );
   }
 
-  function extractPlateQuantities(value) {
-    const text =
-      String(value ?? '').trim();
+ function extractPlateQuantities(value) {
+  const text =
+    String(value ?? '').trim();
 
-    if (!text) {
-      return [];
-    }
-
-    return (
-      text.match(
-        /\d+\s*\+\s*\d+\s*هدية|\d+/g
-      ) || []
-    );
+  if (!text) {
+    return [];
   }
 
+  return (
+    text.match(
+      /\d+\s*\+\s*\d+\s*(?:هدية|هديه)|\d+/g
+    ) || []
+  );
+}
+
 function formatPlateLines(
+  names,
+  quantities
+) {
+  const nameList =
+    extractPlateNames(names);
+
+  const qtyList =
+    extractPlateQuantities(
+      quantities
+    );
+
+  const count =
+    Math.max(
+      nameList.length,
+      qtyList.length
+    );
+
+  if (!count) {
+    return '—';
+  }
+
+  const result = [];
+
+  for (
+    let i = 0;
+    i < count;
+    i += 1
+  ) {
+    const name =
+      nameList[i] || '';
+
+    const qty =
+      qtyList[i] || '';
+
+    if (!name && !qty) {
+      continue;
+    }
+
+    if (name && qty) {
+      result.push(
+        `🍗 ${name} — ${qty}`
+      );
+    } else {
+      result.push(
+        name || qty
+      );
+    }
+  }
+
+  return result.length
+    ? result.join('\n')
+    : '—';
+}
   names,
   quantities
 ) {
