@@ -723,7 +723,12 @@
 
   function extractPlateQuantities(value) {
     const text =
-      String(value ?? '').trim();
+      String(value ?? '')
+        .replace(/[٠-٩]/g, (digit) =>
+          String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))
+        )
+        .replace(/هديّه|هديـة|هديه/g, 'هدية')
+        .trim();
 
     if (!text) {
       return [];
@@ -731,7 +736,7 @@
 
     const matches =
       text.match(
-        /\d+\s*\+\s*\d+\s*(?:هدية|هديه)|\d+/g
+        /\d+\s*\+\s*\d+\s*هدية|\d+\s*\+\s*\d+|\d+/g
       ) || [];
 
     return matches.map(
@@ -2192,8 +2197,7 @@
 
     const chickenWeights =
       order.chicken_weights || '';
-
-    const chickenQtys =
+        const chickenQtys =
       order.chicken_qtys || '';
 
     const plateNames =
@@ -2201,6 +2205,18 @@
 
     const plateQtys =
       order.plate_qtys || '';
+
+    const chickenDisplay =
+      formatChickenLines(
+        chickenWeights,
+        chickenQtys
+      );
+
+    const plateDisplay =
+      formatPlateLines(
+        plateNames,
+        plateQtys
+      );
 
     if (title) {
       title.textContent =
@@ -2312,48 +2328,24 @@
 
       <div class="master-section">
         <div class="master-section-title">
-          🍗 الدجاج الكامل — الأوزان
+          🍗 الدجاج الكامل
         </div>
 
         <div class="master-section-content">
           ${masterEscape(
-            chickenWeights || '—'
+            chickenDisplay
           )}
         </div>
       </div>
 
       <div class="master-section">
         <div class="master-section-title">
-          📦 الدجاج الكامل — الكمية
+          🍽️ المقطعات
         </div>
 
         <div class="master-section-content">
           ${masterEscape(
-            chickenQtys || '—'
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          🍽️ المقطعات — الأصناف
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            plateNames || '—'
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          📦 المقطعات — الكمية
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            plateQtys || '—'
+            plateDisplay
           )}
         </div>
       </div>
