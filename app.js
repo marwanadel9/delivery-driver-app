@@ -721,180 +721,86 @@
     );
   }
 
-function extractPlateQuantities(value) {
-  const text =
-    String(value ?? '').trim();
+  function extractPlateQuantities(value) {
+    const text =
+      String(value ?? '').trim();
 
-  if (!text) {
-    return [];
+    if (!text) {
+      return [];
+    }
+
+    const matches =
+      text.match(
+        /\d+\s*\+\s*\d+\s*(?:هدية|هديه)|\d+/g
+      ) || [];
+
+    return matches.map(
+      (item) =>
+        item
+          .replace(/\s+/g, ' ')
+          .trim()
+    );
   }
 
-  return (
-    text.match(
-      /\d+\s*\+\s*\d+\s*(?:هدية|هديه)|\d+/g
-    ) || []
-  );
-}
-
-function formatPlateLines(
-  names,
-  quantities
-) {
-  const nameList =
-    extractPlateNames(names);
-
-  const qtyList =
-    extractPlateQuantities(
-      quantities
-    );
-
-  const count =
-    Math.max(
-      nameList.length,
-      qtyList.length
-    );
-
-  if (!count) {
-    return '—';
-  }
-
-  const result = [];
-
-  for (
-    let i = 0;
-    i < count;
-    i += 1
+  function formatPlateLines(
+    names,
+    quantities
   ) {
-    const name =
-      nameList[i] || '';
+    const nameList =
+      extractPlateNames(names);
 
-    const qty =
-      qtyList[i] || '';
+    const qtyList =
+      extractPlateQuantities(
+        quantities
+      );
 
-    if (!name && !qty) {
-      continue;
+    const count =
+      Math.max(
+        nameList.length,
+        qtyList.length
+      );
+
+    if (!count) {
+      return '—';
     }
 
-    if (name && qty) {
-      result.push(
-        `🍗 ${name} — ${qty}`
-      );
-    } else {
-      result.push(
-        name || qty
-      );
+    const result = [];
+
+    for (
+      let i = 0;
+      i < count;
+      i += 1
+    ) {
+      const name =
+        nameList[i] || '';
+
+      const qty =
+        qtyList[i] || '';
+
+      if (!name && !qty) {
+        continue;
+      }
+
+      if (name && qty) {
+        result.push(
+          `🍽️ ${name} — ${qty}`
+        );
+      } else if (name) {
+        result.push(
+          `🍽️ ${name}`
+        );
+      } else {
+        result.push(
+          qty
+        );
+      }
     }
+
+    return result.length
+      ? result.join('\n')
+      : '—';
   }
 
-  return result.length
-    ? result.join('\n')
-    : '—';
-}
-  names,
-  quantities
-  const nameList =
-    extractPlateNames(names);
-
-  const qtyList =
-    extractPlateQuantities(
-      quantities
-    );
-
-  const count =
-    Math.max(
-      nameList.length,
-      qtyList.length
-    );
-
-  if (!count) {
-    return '—';
-  }
-
-  const result = [];
-
-  for (
-    let i = 0;
-    i < count;
-    i += 1
-  ) {
-    const name =
-      nameList[i] || '';
-
-    const qty =
-      qtyList[i] || '';
-
-    if (!name && !qty) {
-      continue;
-    }
-
-    if (name && qty) {
-      result.push(
-        `🍗 ${name} — ${qty}`
-      );
-    } else {
-      result.push(
-        name || qty
-      );
-    }
-  }
-
-  return result.length
-    ? result.join('\n')
-    : '—';
-}
-  names,
-  quantities
-) {
-  const nameList =
-    extractPlateNames(names);
-
-  const qtyList =
-    extractPlateQuantities(
-      quantities
-    );
-
-  const count =
-    Math.max(
-      nameList.length,
-      qtyList.length
-    );
-
-  if (!count) {
-    return '—';
-  }
-
-  const result = [];
-
-  for (
-    let i = 0;
-    i < count;
-    i += 1
-  ) {
-    const name =
-      nameList[i] || '';
-
-    const qty =
-      qtyList[i] || '';
-
-    if (!name && !qty) {
-      continue;
-    }
-
-    if (name && qty) {
-      result.push(
-        `🍗 ${name} — ${qty}`
-      );
-    } else {
-      result.push(
-        name || qty
-      );
-    }
-  }
-
-  return result.length
-    ? result.join('\n')
-    : '—';
-}
   function render() {
     const list =
       $('orders-list');
@@ -1062,60 +968,64 @@ function formatPlateLines(
         );
 
       setText(
-  node,
-  'chicken_qtys',
-  ''
-);
+        node,
+        'chicken_weights',
+        chickenDisplay
+      );
 
-setText(
-  node,
-  'plate_names',
-  plateDisplay
-);
+      setText(
+        node,
+        'chicken_qtys',
+        ''
+      );
 
-setText(
-  node,
-  'plate_qtys',
-  ''
-);
+      setText(
+        node,
+        'plate_names',
+        plateDisplay
+      );
 
-/* إخفاء سطر الكمية الفارغ للدجاج الكامل */
-const chickenQtyElement =
-  node.querySelector(
-    '[data-f="chicken_qtys"]'
-  );
+      setText(
+        node,
+        'plate_qtys',
+        ''
+      );
 
-if (chickenQtyElement) {
-  const chickenQtyRow =
-    chickenQtyElement.closest(
-      '.info-item, .order-section, .detail-row, .field-row'
-    );
+      const chickenQtyElement =
+        node.querySelector(
+          '[data-f="chicken_qtys"]'
+        );
 
-  if (chickenQtyRow) {
-    chickenQtyRow.style.display = 'none';
-  } else {
-    chickenQtyElement.style.display = 'none';
-  }
-}
+      if (chickenQtyElement) {
+        const chickenQtyRow =
+          chickenQtyElement.closest(
+            '.info-item, .order-section, .detail-row, .field-row'
+          );
 
-/* إخفاء سطر الكمية الفارغ للمقطعات والصحون */
-const plateQtyElement =
-  node.querySelector(
-    '[data-f="plate_qtys"]'
-  );
+        if (chickenQtyRow) {
+          chickenQtyRow.style.display = 'none';
+        } else {
+          chickenQtyElement.style.display = 'none';
+        }
+      }
 
-if (plateQtyElement) {
-  const plateQtyRow =
-    plateQtyElement.closest(
-      '.info-item, .order-section, .detail-row, .field-row'
-    );
+      const plateQtyElement =
+        node.querySelector(
+          '[data-f="plate_qtys"]'
+        );
 
-  if (plateQtyRow) {
-    plateQtyRow.style.display = 'none';
-  } else {
-    plateQtyElement.style.display = 'none';
-  }
-}
+      if (plateQtyElement) {
+        const plateQtyRow =
+          plateQtyElement.closest(
+            '.info-item, .order-section, .detail-row, .field-row'
+          );
+
+        if (plateQtyRow) {
+          plateQtyRow.style.display = 'none';
+        } else {
+          plateQtyElement.style.display = 'none';
+        }
+      }
 
       [
         'chicken_weights',
@@ -1189,7 +1099,7 @@ if (plateQtyElement) {
             order,
             [
               'total',
-              'grand_total',
+                            'grand_total',
               'grandTotal',
               'amount'
             ]
@@ -1588,7 +1498,8 @@ if (plateQtyElement) {
 
     showLogin(message);
   }
-    const MASTER_SESSION_KEY = 'master_session';
+
+  const MASTER_SESSION_KEY = 'master_session';
   const MASTER_USERNAME = 'zezo';
 
   state.masterOrders = [];
@@ -2064,7 +1975,8 @@ if (plateQtyElement) {
       return true;
     });
   }
-    function renderMasterStats() {
+
+  function renderMasterStats() {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -2189,8 +2101,7 @@ if (plateQtyElement) {
               .join(' / ') || '—'
           )}
         </td>
-
-        <td>
+                <td>
           ${masterEscape(
             masterDriver(order)
           )}
@@ -2785,7 +2696,6 @@ if (plateQtyElement) {
           </button>
 
         </div>
-
       </div>
     `;
 
