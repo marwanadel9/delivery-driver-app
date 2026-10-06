@@ -674,25 +674,9 @@
       : '—';
   }
 
-  function normalizeArabicDigits(value) {
-    return String(value ?? '')
-      .replace(/[٠-٩]/g, (digit) => {
-        return String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit));
-      });
-  }
-
-  function normalizePlateName(value) {
-    return String(value ?? '')
-      .replace(/أ/g, 'ا')
-      .replace(/إ/g, 'ا')
-      .replace(/آ/g, 'ا')
-      .replace(/ة/g, 'ه')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
   function extractPlateNames(value) {
-    const text = String(value ?? '').trim();
+    const text =
+      String(value ?? '').trim();
 
     if (!text) {
       return [];
@@ -712,176 +696,137 @@
       'قلوب'
     ];
 
-    const escaped = patterns
-      .sort((a, b) => b.length - a.length)
-      .map((item) => item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-      .join('|');
+    const escaped =
+      patterns
+        .sort(
+          (a, b) =>
+            b.length - a.length
+        )
+        .map(
+          (item) =>
+            item.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              '\\$&'
+            )
+        )
+        .join('|');
 
-    return text.match(new RegExp(escaped, 'g')) || [];
+    return (
+      text.match(
+        new RegExp(
+          escaped,
+          'g'
+        )
+      ) || []
+    );
+  }
+
+  function normalizeArabicDigits(value) {
+    return String(value ?? '')
+      .replace(/[٠-٩]/g, (digit) =>
+        String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))
+      );
   }
 
   function extractPlateQuantities(value) {
     const text = normalizeArabicDigits(value)
-      .replace(/هديّه|هديـة|هديه/g, 'هدية')
+      .replace(/\r/g, '')
       .trim();
 
     if (!text) {
       return [];
     }
 
-    return text.match(/\d+\s*\+\s*\d+\s*هدية|\d+\s*\+\s*\d+|\d+/g) || [];
+    // الكمية في Excel مرتبطة بسطر المقطعة نفسه.
+    // نحافظ على النص كما هو: 2 / 2 هدية / 2 + 2 هدية.
+    const lines = text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const quantityLines = lines
+      .map((line) =>
+        line
+          .replace(/هديّه|هديـة|هديه/g, 'هدية')
+          .replace(/\s+/g, ' ')
+          .trim()
+      )
+      .filter((line) => /\d/.test(line));
+
+    if (quantityLines.length > 1) {
+      return quantityLines;
+    }
+
+    // احتياطًا لو رجعت البيانات في سطر واحد بدل أسطر Excel.
+    return (
+      text.match(
+        /\d+\s*\+\s*\d+\s*(?:هدية|هديه)|\d+\s*(?:هدية|هديه)|\d+/g
+      ) || []
+    ).map((item) =>
+      item
+        .replace(/هديّه|هديـة|هديه/g, 'هدية')
+        .replace(/\s+/g, ' ')
+        .trim()
+    );
   }
 
-  function plateSortOrder(name) {
-    const normalized = normalizePlateName(name);
+  function formatPlateLines(
+    names,
+    quantities
+  ) {
+    const nameList =
+      extractPlateNames(names);
 
-    const order = [
-      'صدور',
-      'افخاذ',
-      'ارجل دبوس',
-      'اجنحه',
-      'كبده',
-      'قوانص',
-      'قلوب'
-    ];
-
-    const index = order.indexOf(normalized);
-
-    return index === -1 ? order.length : index;
-  }
-
-  function collectGiftText(value, output = []) {
-    if (value === null || value === undefined) {
-      return output;
-    }
-
-    if (typeof value === 'string' || typeof value === 'number') {
-      const text = String(value);
-
-      if (/هدي|هدية/i.test(text)) {
-        output.push(text);
-      }
-
-      return output;
-    }
-
-    if (Array.isArray(value)) {
-      value.forEach((item) => collectGiftText(item, output));
-      return output;
-    }
-
-    if (typeof value === 'object') {
-      Object.values(value).forEach((item) => {
-        collectGiftText(item, output);
-      });
-    }
-
-    return output;
-  }
-
-  function recoverGiftQuantities(order, nameList, qtyList) {
-    const result = [...qtyList];
-
-    if (!nameList.length) {
-      return result;
-    }
-
-    if (result.some((value) => /هدية|هديه/i.test(String(value)))) {
-      return result;
-    }
-
-    const giftTexts = collectGiftText(order);
-
-    if (!giftTexts.length) {
-      return result;
-    }
-
-    for (const giftText of giftTexts) {
-      const normalizedText = normalizeArabicDigits(giftText)
-        .replace(/هديّه|هديـة|هديه/g, 'هدية');
-
-      const giftMatch = normalizedText.match(
-        /(\d+)\s*\+\s*(\d+)\s*هدية|(\d+)\s*هدية/
+    const qtyList =
+      extractPlateQuantities(
+        quantities
       );
 
-      if (!giftMatch) {
-        continue;
-      }
+    const count =
+      Math.max(
+        nameList.length,
+        qtyList.length
+      );
 
-      const giftValue = giftMatch[2] || giftMatch[3] || '';
-      const baseValue = giftMatch[1] || '';
-      const combined = baseValue
-        ? `${baseValue} + ${giftValue} هدية`
-        : `${giftValue} هدية`;
-
-      let targetIndex = -1;
-
-      for (let i = 0; i < nameList.length; i += 1) {
-        const normalizedName = normalizePlateName(nameList[i]);
-
-        if (normalizedText.includes(normalizedName)) {
-          targetIndex = i;
-          break;
-        }
-      }
-
-      if (targetIndex === -1) {
-        targetIndex = Math.min(
-          Math.max(nameList.length - 1, 0),
-          result.length - 1
-        );
-      }
-
-      if (targetIndex >= 0) {
-        result[targetIndex] = combined;
-        break;
-      }
-    }
-
-    return result;
-  }
-
-  function formatPlateLines(names, quantities, order = null) {
-    const nameList = extractPlateNames(names);
-    let qtyList = extractPlateQuantities(quantities);
-
-    if (order) {
-      qtyList = recoverGiftQuantities(order, nameList, qtyList);
-    }
-
-    if (!nameList.length) {
+    if (!count) {
       return '—';
     }
 
-    const rows = nameList.map((name, index) => ({
-      name,
-      qty: qtyList[index] || '',
-      originalIndex: index
-    }));
+    const result = [];
 
-    rows.sort((a, b) => {
-      const orderA = plateSortOrder(a.name);
-      const orderB = plateSortOrder(b.name);
+    for (
+      let i = 0;
+      i < count;
+      i += 1
+    ) {
+      const name =
+        nameList[i] || '';
 
-      if (orderA !== orderB) {
-        return orderA - orderB;
+      const qty =
+        qtyList[i] || '';
+
+      if (!name && !qty) {
+        continue;
       }
 
-      return a.originalIndex - b.originalIndex;
-    });
+      if (name && qty) {
+        result.push(
+          `🍽️ ${name} — ${qty}`
+        );
+      } else if (name) {
+        result.push(
+          `🍽️ ${name}`
+        );
+      } else {
+        result.push(
+          qty
+        );
+      }
+    }
 
-    return rows
-      .filter((row) => row.name || row.qty)
-      .map((row) => {
-        if (row.name && row.qty) {
-          return `🍽️ ${row.name} — ${row.qty}`;
-        }
-
-        return row.name
-          ? `🍽️ ${row.name}`
-          : row.qty;
-      })
-      .join('\n') || '—';
+    return result.length
+      ? result.join('\n')
+      : '—';
   }
 
   function render() {
@@ -1047,8 +992,7 @@
       const plateDisplay =
         formatPlateLines(
           plateNames,
-          plateQtys,
-          order
+          plateQtys
         );
 
       setText(
@@ -1083,7 +1027,7 @@
       if (chickenQtyElement) {
         const chickenQtyRow =
           chickenQtyElement.closest(
-            '.info-item, .order-section, .detail-row, .field-row, .product-box'
+            '.info-item, .order-section, .detail-row, .field-row'
           );
 
         if (chickenQtyRow) {
@@ -1101,7 +1045,7 @@
       if (plateQtyElement) {
         const plateQtyRow =
           plateQtyElement.closest(
-            '.info-item, .order-section, .detail-row, .field-row, .product-box'
+            '.info-item, .order-section, .detail-row, .field-row'
           );
 
         if (plateQtyRow) {
