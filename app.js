@@ -1026,8 +1026,7 @@
           plateQtyElement.style.display = 'none';
         }
       }
-
-      [
+            [
         'chicken_weights',
         'chicken_qtys',
         'plate_names',
@@ -1756,8 +1755,7 @@
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
       @media(max-width:1050px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
-      @media(max-width:650px){.master-top{align-items:flex-start}.master-wrap{padding:12px}.master-stats{grid-template-columns:repe
-      at(2,minmax(0,1fr))}.master-filters{grid-template-columns:1fr 1fr}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:17px}.master-btn{padding:9px 11px}}
+      @media(max-width:650px){.master-top{align-items:flex-start}.master-wrap{padding:12px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-filters{grid-template-columns:1fr 1fr}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:17px}.master-btn{padding:9px 11px}}
     `;
 
     document.head.appendChild(style);
@@ -2436,8 +2434,7 @@
 
     modal.classList.add('open');
   }
-
-  function openMasterEdit(order) {
+    function openMasterEdit(order) {
     const body =
       $('master-modal-body');
 
@@ -3223,8 +3220,7 @@
       }
     );
   }
-
-  function loadStoredSession() {
+    function loadStoredSession() {
     try {
       const raw =
         localStorage.getItem(
