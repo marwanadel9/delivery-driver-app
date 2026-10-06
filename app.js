@@ -3249,6 +3249,16 @@
         }
       }
     );
+
+    setInterval(() => {
+      if (
+        !document.hidden &&
+        state.session?.access_token &&
+        !$('orders-view')?.hidden
+      ) {
+        loadOrders();
+      }
+    }, 10000);
   }
 
   function loadStoredSession() {
