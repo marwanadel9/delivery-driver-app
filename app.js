@@ -656,15 +656,15 @@
 
       if (weight && qty) {
         result.push(
-          `⚖️ ${weight} جرام — 📦 ${qty}`
+          `${weight} جرام - ${qty}`
         );
       } else if (weight) {
         result.push(
-          `⚖️ ${weight} جرام`
+          `${weight} جرام`
         );
       } else {
         result.push(
-          `📦 ${qty}`
+          `${qty}`
         );
       }
     }
@@ -675,31 +675,13 @@
   }
 
   function extractPlateNames(value) {
-    const raw = String(value ?? '')
-      .replace(/\r/g, '')
-      .trim();
+    const text =
+      String(value ?? '').trim();
 
-    if (!raw) {
+    if (!text) {
       return [];
     }
 
-    // نقرأ اسم كل مقطعة من نفس السطر الموجود في Excel.
-    // لا نعتمد على قائمة أسماء ثابتة، لذلك أي صنف جديد مثل
-    // "أفخاذ" أو أي اسم آخر موجود في Excel سيظهر كما هو.
-    const lines = raw
-      .split(/[\n]+/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .filter((line) => !/^Chicken\s*Carton\b/i.test(line));
-
-    if (lines.length > 1) {
-      return lines;
-    }
-
-    const text = lines[0] || raw;
-
-    // في بعض السجلات القديمة تكون الأسماء في سطر واحد.
-    // نحافظ على دعم الأسماء المعروفة بدون التأثير على الأسماء الجديدة.
     const patterns = [
       'أرجل دبوس',
       'ارجل دبوس',
@@ -714,16 +696,29 @@
       'قلوب'
     ];
 
-    const escaped = patterns
-      .sort((a, b) => b.length - a.length)
-      .map((item) =>
-        item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      )
-      .join('|');
+    const escaped =
+      patterns
+        .sort(
+          (a, b) =>
+            b.length - a.length
+        )
+        .map(
+          (item) =>
+            item.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              '\\$&'
+            )
+        )
+        .join('|');
 
-    const knownNames = text.match(new RegExp(escaped, 'g')) || [];
-
-    return knownNames.length > 1 ? knownNames : [text];
+    return (
+      text.match(
+        new RegExp(
+          escaped,
+          'g'
+        )
+      ) || []
+    );
   }
 
   function normalizeArabicDigits(value) {
@@ -816,11 +811,11 @@
 
       if (name && qty) {
         result.push(
-          `🍽️ ${name} — ${qty}`
+          `${name} - ${qty}`
         );
       } else if (name) {
         result.push(
-          `🍽️ ${name}`
+          `${name}`
         );
       } else {
         result.push(
