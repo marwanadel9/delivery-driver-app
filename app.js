@@ -957,28 +957,60 @@ function formatPlateLines(
         );
 
       setText(
-        node,
-        'chicken_weights',
-        chickenDisplay
-      );
+  node,
+  'chicken_qtys',
+  ''
+);
 
-      setText(
-        node,
-        'chicken_qtys',
-        ''
-      );
+setText(
+  node,
+  'plate_names',
+  plateDisplay
+);
 
-      setText(
-        node,
-        'plate_names',
-        plateDisplay
-      );
+setText(
+  node,
+  'plate_qtys',
+  ''
+);
 
-      setText(
-        node,
-        'plate_qtys',
-        ''
-      );
+/* إخفاء سطر الكمية الفارغ للدجاج الكامل */
+const chickenQtyElement =
+  node.querySelector(
+    '[data-f="chicken_qtys"]'
+  );
+
+if (chickenQtyElement) {
+  const chickenQtyRow =
+    chickenQtyElement.closest(
+      '.info-item, .order-section, .detail-row, .field-row'
+    );
+
+  if (chickenQtyRow) {
+    chickenQtyRow.style.display = 'none';
+  } else {
+    chickenQtyElement.style.display = 'none';
+  }
+}
+
+/* إخفاء سطر الكمية الفارغ للمقطعات والصحون */
+const plateQtyElement =
+  node.querySelector(
+    '[data-f="plate_qtys"]'
+  );
+
+if (plateQtyElement) {
+  const plateQtyRow =
+    plateQtyElement.closest(
+      '.info-item, .order-section, .detail-row, .field-row'
+    );
+
+  if (plateQtyRow) {
+    plateQtyRow.style.display = 'none';
+  } else {
+    plateQtyElement.style.display = 'none';
+  }
+}
 
       [
         'chicken_weights',
