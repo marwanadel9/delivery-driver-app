@@ -821,7 +821,8 @@
       getFilteredOrders();
 
     list.replaceChildren();
-        if (!shown.length) {
+
+    if (!shown.length) {
       const message =
         state.filter === 'done'
           ? 'لا توجد طلبات مسلّمة بعد'
@@ -990,19 +991,19 @@
         ''
       );
 
-      // إخفاء خانات الكمية المنفصلة فقط، بدون أي تغيير في تنسيق أو مقاسات الفاتورة.
-      // الكمية أصبحت معروضة داخل نفس خانة المنتج.
       const chickenQtyElement =
         node.querySelector(
           '[data-f="chicken_qtys"]'
         );
 
       if (chickenQtyElement) {
-        const chickenQtyBox =
-          chickenQtyElement.closest('.product-box');
+        const chickenQtyRow =
+          chickenQtyElement.closest(
+            '.info-item, .order-section, .detail-row, .field-row, .product-box'
+          );
 
-        if (chickenQtyBox) {
-          chickenQtyBox.style.display = 'none';
+        if (chickenQtyRow) {
+          chickenQtyRow.style.display = 'none';
         } else {
           chickenQtyElement.style.display = 'none';
         }
@@ -1014,17 +1015,18 @@
         );
 
       if (plateQtyElement) {
-        const plateQtyBox =
-          plateQtyElement.closest('.product-box');
+        const plateQtyRow =
+          plateQtyElement.closest(
+            '.info-item, .order-section, .detail-row, .field-row, .product-box'
+          );
 
-        if (plateQtyBox) {
-          plateQtyBox.style.display = 'none';
+        if (plateQtyRow) {
+          plateQtyRow.style.display = 'none';
         } else {
           plateQtyElement.style.display = 'none';
         }
       }
 
-      // لا نغيّر أي CSS خاص بالكارت أو الـ Grid. فقط نسمح بظهور الأسطر المتعددة.
       [
         'chicken_weights',
         'chicken_qtys',
@@ -1040,6 +1042,9 @@
           if (element) {
             element.style.whiteSpace =
               'pre-line';
+
+            element.style.lineHeight =
+              '1.9';
           }
         }
       );
@@ -1094,7 +1099,7 @@
             order,
             [
               'total',
-              'grand_total',
+                            'grand_total',
               'grandTotal',
               'amount'
             ]
@@ -1643,7 +1648,7 @@
   }
 
   function masterDateInput(value) {
-        if (!value) {
+    if (!value) {
       return '';
     }
 
@@ -1751,7 +1756,8 @@
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
       @media(max-width:1050px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
-      @media(max-width:650px){.master-top{align-items:flex-start}.master-wrap{padding:12px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-filters{grid-template-columns:1fr 1fr}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:17px}.master-btn{padding:9px 11px}}
+      @media(max-width:650px){.master-top{align-items:flex-start}.master-wrap{padding:12px}.master-stats{grid-template-columns:repe
+      at(2,minmax(0,1fr))}.master-filters{grid-template-columns:1fr 1fr}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:17px}.master-btn{padding:9px 11px}}
     `;
 
     document.head.appendChild(style);
@@ -2466,7 +2472,8 @@
               )}"
             >
           </label>
-                    <label>
+
+          <label>
             رقم الهاتف
             <input
               id="master-edit-phone"
