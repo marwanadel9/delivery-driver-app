@@ -674,131 +674,62 @@
       : '—';
   }
 
+  function normalizeArabicDigits(value) {
+    return String(value ?? '')
+      .replace(/[٠-٩]/g, (digit) => {
+        return String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit));
+      });
+  }
+
+  function normalizePlateName(value) {
+    return String(value ?? '')
+      .replace(/أ/g, 'ا')
+      .replace(/إ/g, 'ا')
+      .replace(/آ/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function normalizeArabicDigits(value) {
+    return String(value ?? '')
+      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+  }
+
+  function normalizePlateName(value) {
+    return String(value ?? '')
+      .replace(/أ/g, 'ا').replace(/إ/g, 'ا').replace(/آ/g, 'ا')
+      .replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
+  }
+
   function extractPlateNames(value) {
-    const text =
-      String(value ?? '').trim();
-
-    if (!text) {
-      return [];
-    }
-
-    const patterns = [
-      'أرجل دبوس',
-      'ارجل دبوس',
-      'صدور',
-      'أفخاذ',
-      'افخاذ',
-      'أجنحة',
-      'اجنحه',
-      'كبدة',
-      'كبده',
-      'قوانص',
-      'قلوب'
-    ];
-
-    const escaped =
-      patterns
-        .sort(
-          (a, b) =>
-            b.length - a.length
-        )
-        .map(
-          (item) =>
-            item.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              '\\$&'
-            )
-        )
-        .join('|');
-
-    return (
-      text.match(
-        new RegExp(
-          escaped,
-          'g'
-        )
-      ) || []
-    );
+    const text = String(value ?? '').trim();
+    if (!text) return [];
+    const patterns = ['أرجل دبوس','ارجل دبوس','صدور','أفخاذ','افخاذ','أجنحة','اجنحه','كبدة','كبده','قوانص','قلوب'];
+    const escaped = patterns.sort((a,b)=>b.length-a.length)
+      .map(item => item.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+    return text.match(new RegExp(escaped,'g')) || [];
   }
 
   function extractPlateQuantities(value) {
-    const text =
-      String(value ?? '').trim();
-
-    if (!text) {
-      return [];
-    }
-
-    const matches =
-      text.match(
-        /\d+\s*\+\s*\d+\s*(?:هدية|هديه)|\d+/g
-      ) || [];
-
-    return matches.map(
-      (item) =>
-        item
-          .replace(/\s+/g, ' ')
-          .trim()
-    );
+    const text = normalizeArabicDigits(value).replace(/هديّه|هديـة|هديه/g,'هدية').trim();
+    if (!text) return [];
+    return text.match(/\d+\s*\+\s*\d+\s*هدية|\d+\s*\+\s*\d+|\d+/g) || [];
   }
 
-  function formatPlateLines(
-    names,
-    quantities
-  ) {
-    const nameList =
-      extractPlateNames(names);
+  function plateSortOrder(name) {
+    const order = ['صدور','افخاذ','ارجل دبوس','اجنحه','كبده','قوانص','قلوب'];
+    const index = order.indexOf(normalizePlateName(name));
+    return index === -1 ? order.length : index;
+  }
 
-    const qtyList =
-      extractPlateQuantities(
-        quantities
-      );
-
-    const count =
-      Math.max(
-        nameList.length,
-        qtyList.length
-      );
-
-    if (!count) {
-      return '—';
-    }
-
-    const result = [];
-
-    for (
-      let i = 0;
-      i < count;
-      i += 1
-    ) {
-      const name =
-        nameList[i] || '';
-
-      const qty =
-        qtyList[i] || '';
-
-      if (!name && !qty) {
-        continue;
-      }
-
-      if (name && qty) {
-        result.push(
-          `🍽️ ${name} — ${qty}`
-        );
-      } else if (name) {
-        result.push(
-          `🍽️ ${name}`
-        );
-      } else {
-        result.push(
-          qty
-        );
-      }
-    }
-
-    return result.length
-      ? result.join('\n')
-      : '—';
+  function formatPlateLines(names, quantities) {
+    const nameList = extractPlateNames(names);
+    const qtyList = extractPlateQuantities(quantities);
+    if (!nameList.length) return '—';
+    const rows = nameList.map((name,index) => ({name, qty: qtyList[index] || '', originalIndex:index}));
+    rows.sort((a,b) => plateSortOrder(a.name) - plateSortOrder(b.name) || a.originalIndex - b.originalIndex);
+    return rows.filter(row => row.name || row.qty).map(row => row.name && row.qty ? `🍽️ ${row.name} — ${row.qty}` : row.name ? `🍽️ ${row.name}` : row.qty).join('\n') || '—';
   }
 
   function render() {
@@ -821,7 +752,8 @@
       getFilteredOrders();
 
     list.replaceChildren();
-        if (!shown.length) {
+
+    if (!shown.length) {
       const message =
         state.filter === 'done'
           ? 'لا توجد طلبات مسلّمة بعد'
@@ -1098,7 +1030,7 @@
             order,
             [
               'total',
-              'grand_total',
+                            'grand_total',
               'grandTotal',
               'amount'
             ]
@@ -1645,7 +1577,8 @@
       minute: '2-digit'
     });
   }
-    function masterDateInput(value) {
+
+  function masterDateInput(value) {
     if (!value) {
       return '';
     }
@@ -2468,7 +2401,7 @@
                 order.customer_name || ''
               )}"
             >
-                      </label>
+          </label>
 
           <label>
             رقم الهاتف
@@ -2645,7 +2578,6 @@
           </label>
 
         </div>
-
         <div class="master-edit-full">
           <label>
             رابط موقع العميل
