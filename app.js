@@ -218,110 +218,132 @@
     );
   };
 
-  const apiFetch = async (
-    path,
-    options = {},
-    retry = true
-  ) => {
-    const session = state.session;
-
-    if (!session?.access_token) {
+  async function refreshSession() {
+    if (!state.session?.refresh_token) {
       throw new Error('expired');
     }
 
+    const response = await fetch(
+      '/api/refresh',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          refresh_token:
+            state.session.refresh_token
+        })
+      }
+    );
+
+    const data =
+      await response
+        .json()
+        .catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || 'expired'
+      );
+    }
+
+    saveSession(
+      normalizeSession({
+        ...data,
+        username:
+          state.session.username,
+        email:
+          state.session.email,
+        mandoub_name:
+          state.session.mandoub_name,
+        sheet_name:
+          state.session.sheet_name,
+        can_call:
+          state.session.can_call
+      })
+    );
+  }
+
+  async function apiFetch(
+    path,
+    options = {},
+    retry = true
+  ) {
+    if (!state.session?.access_token) {
+      throw new Error('expired');
+    }
+
+    const expiresAt =
+      Number(state.session.expires_at);
+
+    if (
+      Number.isFinite(expiresAt) &&
+      expiresAt - 60 <
+        Date.now() / 1000
+    ) {
+      try {
+        await refreshSession();
+      } catch {
+        logout(
+          'انتهت الجلسة، يرجى تسجيل الدخول مجددًا'
+        );
+
+        throw new Error('expired');
+      }
+    }
+
     const headers = {
-      ...(options.body
-        ? {
-            'Content-Type':
-              'application/json'
-          }
-        : {}),
-      ...(options.headers || {}),
+      'Content-Type':
+        'application/json',
       Authorization:
-        `Bearer ${session.access_token}`
+        `Bearer ${state.session.access_token}`,
+      ...(options.headers || {})
     };
 
-    const response =
-      await fetch(
-        path,
-        {
-          ...options,
-          headers
-        }
-      );
+    const response = await fetch(
+      path,
+      {
+        ...options,
+        headers
+      }
+    );
 
     if (
       response.status === 401 &&
-      retry &&
-      session.refresh_token
+      retry
     ) {
       try {
-        const refreshResponse =
-          await fetch(
-            '/api/refresh',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type':
-                  'application/json'
-              },
-              body:
-                JSON.stringify({
-                  refresh_token:
-                    session.refresh_token
-                })
-            }
-          );
-
-        const refreshData =
-          await refreshResponse
-            .json()
-            .catch(
-              () => ({})
-            );
-
-        if (
-          refreshResponse.ok &&
-          refreshData?.access_token
-        ) {
-          const refreshed =
-            normalizeSession({
-              ...session,
-              ...refreshData
-            });
-
-          saveSession(refreshed);
-
-          return apiFetch(
-            path,
-            options,
-            false
-          );
-        }
+        await refreshSession();
       } catch {
+        logout(
+          'انتهت الجلسة، يرجى تسجيل الدخول مجددًا'
+        );
+
+        throw new Error('expired');
       }
 
-      saveSession(null);
-      throw new Error('expired');
+      return apiFetch(
+        path,
+        options,
+        false
+      );
     }
 
     const data =
       await response
         .json()
-        .catch(
-          () => ({})
-        );
+        .catch(() => ({}));
 
     if (!response.ok) {
       throw new Error(
-        data?.error ||
-        data?.message ||
-        'حدث خطأ أثناء الاتصال بالسيرفر'
+        data.error ||
+        'حدث خطأ غير متوقع'
       );
     }
 
     return data;
-  };
+  }
 
   function showLogin(message = '') {
     const loginView =
@@ -329,9 +351,6 @@
 
     const ordersView =
       $('orders-view');
-
-    const masterView =
-      $('master-view');
 
     if (loginView) {
       loginView.hidden = false;
@@ -341,19 +360,13 @@
       ordersView.hidden = true;
     }
 
-    if (masterView) {
-      masterView.hidden = true;
-    }
-
     const error =
       $('login-error');
 
     if (error) {
+      error.hidden = !message;
       error.textContent =
         message || '';
-
-      error.hidden =
-        !message;
     }
   }
 
@@ -364,38 +377,22 @@
     const ordersView =
       $('orders-view');
 
-    const masterView =
-      $('master-view');
-
     if (loginView) {
       loginView.hidden = true;
-    }
-
-    if (masterView) {
-      masterView.hidden = true;
     }
 
     if (ordersView) {
       ordersView.hidden = false;
     }
 
-    const name =
+    const driverName =
       $('driver-name');
 
-    if (name) {
-      name.textContent =
+    if (driverName) {
+      driverName.textContent =
         state.session?.mandoub_name ||
         state.session?.username ||
         'المندوب';
-    }
-
-    const sheet =
-      $('driver-sheet');
-
-    if (sheet) {
-      sheet.textContent =
-        state.session?.sheet_name ||
-        '';
     }
 
     loadOrders();
@@ -405,271 +402,103 @@
     const list =
       $('orders-list');
 
-    if (list) {
+    const refreshButton =
+      $('refresh-btn');
+
+    if (!list) {
+      return;
+    }
+
+    if (!state.orders.length) {
       list.innerHTML =
         '<p class="loading">جارٍ تحميل الطلبات…</p>';
     }
 
+    if (refreshButton) {
+      refreshButton.classList.add('spin');
+      refreshButton.disabled = true;
+    }
+
     try {
       const data =
-        await apiFetch(
-          `/api/orders?sheet=${encodeURIComponent(
-            state.session?.sheet_name || ''
-          )}`
-        );
+        await apiFetch('/api/orders');
 
-      state.orders =
+      const orders =
         Array.isArray(data)
           ? data
           : Array.isArray(data?.orders)
             ? data.orders
             : [];
 
+      state.orders = orders;
+
       state.sheet =
+        data?.sheet ||
+        data?.sheet_name ||
         state.session?.sheet_name ||
         '';
 
+      if (
+        data &&
+        !Array.isArray(data)
+      ) {
+        const returnedSession =
+          normalizeSession({
+            ...state.session,
+            ...data
+          });
+
+        if (
+          returnedSession.username ||
+          returnedSession.sheet_name
+        ) {
+          saveSession(
+            returnedSession
+          );
+        }
+      }
+
+      const sheetElement =
+        $('sheet-name');
+
+      if (sheetElement) {
+        sheetElement.textContent =
+          state.sheet
+            ? `القائمة: ${state.sheet}`
+            : 'قائمة الطلبات';
+      }
+
       render();
-
     } catch (error) {
       if (
         error.message === 'expired'
       ) {
-        logout(
-          'انتهت جلسة الدخول، يرجى تسجيل الدخول مرة أخرى'
-        );
-
         return;
       }
 
-      if (list) {
-        list.innerHTML =
-          `<p class="empty error-message">${error.message}</p>`;
-      }
-    }
-  }
-
-  async function setPayment(
-    order,
-    method,
-    button,
-    buttons
-  ) {
-    if (
-      isDelivered(
-        order.delivery_status
-      )
-    ) {
-      return;
-    }
-
-    buttons.forEach(
-      (item) => {
-        item.disabled = true;
-      }
-    );
-
-    try {
-      const data =
-        await apiFetch(
-          '/api/payment',
-          {
-            method: 'POST',
-            body:
-              JSON.stringify({
-                orderId: order.id,
-                payment_method:
-                  method
-              })
-          }
-        );
-
-      order.payment_method =
-        data?.order?.payment_method ||
-        method;
-
-      buttons.forEach(
-        (item) => {
-          item.classList.toggle(
-            'selected',
-            normalizePayment(
-              item.dataset.payment
-            ) === method
-          );
-        }
-      );
-
-      const current =
-        button
-          ?.closest('.payment-section')
-          ?.querySelector(
-            '.payment-current'
-          );
-
-      if (current) {
-        current.textContent =
-          `طريقة الدفع الحالية: ${paymentLabel(method)}`;
-      }
-
-      toast(
-        'تم حفظ طريقة الدفع ✅'
-      );
-
-    } catch (error) {
-      if (
-        error.message === 'expired'
-      ) {
-        logout(
-          'انتهت جلسة الدخول'
-        );
-
-        return;
-      }
-
-      toast(
-        error.message,
-        true
-      );
-
+      list.innerHTML =
+        `<p class="empty">
+          <span class="big">⚠️</span>
+          ${escapeHtml(error.message)}
+        </p>`;
     } finally {
-      if (
-        !isDelivered(
-          order.delivery_status
-        )
-      ) {
-        buttons.forEach(
-          (item) => {
-            item.disabled = false;
-          }
+      if (refreshButton) {
+        refreshButton.classList.remove(
+          'spin'
         );
+
+        refreshButton.disabled = false;
       }
     }
   }
 
-  async function markDelivered(
-    order,
-    button
-  ) {
-    if (
-      isDelivered(
-        order.delivery_status
-      )
-    ) {
-      return;
-    }
-
-    const oldText =
-      button.textContent;
-
-    button.disabled = true;
-    button.textContent =
-      'جارٍ التسليم…';
-
-    try {
-      const data =
-        await apiFetch(
-          '/api/deliver',
-          {
-            method: 'POST',
-            body:
-              JSON.stringify({
-                orderId: order.id
-              })
-          }
-        );
-
-      order.delivery_status =
-        data?.order?.delivery_status ||
-        'delivered';
-
-      button.textContent =
-        '✓ تم التسليم';
-
-      const card =
-        button.closest('.order-card');
-
-      if (card) {
-        card.classList.add(
-          'is-done'
-        );
-      }
-
-      const status =
-        card?.querySelector(
-          '[data-f="delivery_status"]'
-        );
-
-      if (status) {
-        status.textContent =
-          'تم التسليم';
-
-        status.classList.add(
-          'ok'
-        );
-      }
-
-      const paymentButtons =
-        card?.querySelectorAll(
-          '.payment-btn'
-        );
-
-      paymentButtons?.forEach(
-        (item) => {
-          item.disabled = true;
-        }
-      );
-
-      updateStats();
-
-      toast(
-        'تم تسجيل التسليم بنجاح ✅'
-      );
-
-    } catch (error) {
-      if (
-        error.message === 'expired'
-      ) {
-        logout(
-          'انتهت جلسة الدخول'
-        );
-
-        return;
-      }
-
-      button.disabled =
-        false;
-
-      button.textContent =
-        oldText;
-
-      toast(
-        error.message,
-        true
-      );
-    }
-  }
-
-  function logout(message = '') {
-    saveSession(null);
-
-    state.orders = [];
-    state.sheet = '';
-
-    if (
-      typeof saveMasterSession ===
-      'function'
-    ) {
-      saveMasterSession(null);
-    }
-
-    window.location.reload();
-
-    if (message) {
-      setTimeout(
-        () => showLogin(message),
-        100
-      );
-    }
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   function updateStats() {
@@ -1270,7 +1099,7 @@
             order,
             [
               'total',
-              'grand_total',
+                            'grand_total',
               'grandTotal',
               'amount'
             ]
@@ -1472,266 +1301,330 @@
     updateStats();
   }
 
-  const MASTER_SESSION_KEY =
-    'master_session';
+  async function setPayment(
+    order,
+    method,
+    clickedButton,
+    allButtons
+  ) {
+    if (
+      !method ||
+      isDelivered(
+        order.delivery_status
+      )
+    ) {
+      return;
+    }
 
-  const MASTER_USERNAME =
-    'zezo';
+    if (
+      normalizePayment(
+        order.payment_method
+      ) === method
+    ) {
+      return;
+    }
 
-  const masterState = {
-    session: null
-  };
+    allButtons.forEach(
+      (button) => {
+        button.disabled =
+          true;
+      }
+    );
 
-  state.masterOrders = [];
-  state.masterSession = null;
-  state.role = '';
-
-  function saveMasterSession(session) {
-    state.masterSession =
-      session;
-
-    if (session) {
-      localStorage.setItem(
-        MASTER_SESSION_KEY,
-        JSON.stringify(session)
+    try {
+      await apiFetch(
+        '/api/payment',
+        {
+          method: 'POST',
+          body:
+            JSON.stringify({
+              orderId:
+                order.id,
+              payment_method:
+                method
+            })
+        }
       );
-    } else {
-      localStorage.removeItem(
-        MASTER_SESSION_KEY
+
+      order.payment_method =
+        method;
+
+      allButtons.forEach(
+        (button) => {
+          button.classList.toggle(
+            'selected',
+            normalizePayment(
+              button.dataset.payment
+            ) === method
+          );
+        }
       );
+
+      const card =
+        clickedButton.closest(
+          '.order-card'
+        );
+
+      const current =
+        card?.querySelector(
+          '.payment-current'
+        );
+
+      if (current) {
+        current.textContent =
+          `طريقة الدفع الحالية: ${paymentLabel(method)}`;
+      }
+
+      toast(
+        `تم حفظ طريقة الدفع: ${paymentLabel(method)}`
+      );
+    } catch (error) {
+      if (
+        error.message ===
+        'expired'
+      ) {
+        return;
+      }
+
+      toast(
+        error.message,
+        true
+      );
+    } finally {
+      if (
+        !isDelivered(
+          order.delivery_status
+        )
+      ) {
+        allButtons.forEach(
+          (button) => {
+            button.disabled =
+              false;
+          }
+        );
+      }
     }
   }
 
-  function normalizeMasterSession(data) {
-    const expiresIn =
-      Number(
-        data?.expires_in
+  async function markDelivered(
+    order,
+    button
+  ) {
+    const number =
+      order.order_number ??
+      order.id ??
+      '';
+
+    const name =
+      order.customer_name ||
+      '';
+
+    const confirmed =
+      window.confirm(
+        `تأكيد تسليم الطلب #${number}${
+          name
+            ? ` للعميل ${name}`
+            : ''
+        }؟`
       );
 
-    let expiresAt =
-      Number(
-        data?.expires_at
+    if (!confirmed) {
+      return;
+    }
+
+    button.disabled =
+      true;
+
+    button.textContent =
+      'جارٍ التحديث…';
+
+    try {
+      await apiFetch(
+        '/api/deliver',
+        {
+          method: 'POST',
+          body:
+            JSON.stringify({
+              orderId:
+                order.id
+            })
+        }
       );
 
-    if (
-      !Number.isFinite(
-        expiresAt
-      )
-    ) {
-      expiresAt =
-        Date.now() / 1000 +
-        (
-          Number.isFinite(
-            expiresIn
-          )
-            ? expiresIn
-            : 3600
-        ) -
-        30;
+      order.delivery_status =
+        'delivered';
+
+      toast(
+        'تم تسجيل التسليم بنجاح ✅'
+      );
+
+      render();
+    } catch (error) {
+      if (
+        error.message ===
+        'expired'
+      ) {
+        return;
+      }
+
+      toast(
+        error.message,
+        true
+      );
+
+      button.disabled =
+        false;
+
+      button.textContent =
+        'تم التسليم';
+    }
+  }
+
+  function logout(
+    message = ''
+  ) {
+    saveSession(null);
+
+    state.orders = [];
+    state.sheet = '';
+    state.role = '';
+
+    const list =
+      $('orders-list');
+
+    if (list) {
+      list.replaceChildren();
+    }
+
+    showLogin(message);
+  }
+
+  const MASTER_SESSION_KEY = 'master_session';
+  const MASTER_USERNAME = 'zezo';
+
+  state.masterOrders = [];
+  state.role = '';
+
+  function normalizeMasterSession(value) {
+    if (!value || typeof value !== 'object') {
+      return null;
     }
 
     return {
-      access_token:
-        data?.access_token ||
-        '',
-      refresh_token:
-        data?.refresh_token ||
-        '',
-      username:
-        data?.username ||
-        MASTER_USERNAME,
-      expires_at:
-        expiresAt
+      access_token: String(value.access_token || ''),
+      refresh_token: String(value.refresh_token || ''),
+      expires_at: Number(value.expires_at || 0),
+      username: String(value.username || MASTER_USERNAME),
+      email: String(value.email || ''),
+      role: String(value.role || 'master_admin')
     };
+  }
+
+  function saveMasterSession(session) {
+    if (!session) {
+      localStorage.removeItem(MASTER_SESSION_KEY);
+      state.masterSession = null;
+      return;
+    }
+
+    const normalized = normalizeMasterSession(session);
+
+    if (!normalized?.access_token) {
+      localStorage.removeItem(MASTER_SESSION_KEY);
+      state.masterSession = null;
+      return;
+    }
+
+    state.masterSession = normalized;
+    localStorage.setItem(
+      MASTER_SESSION_KEY,
+      JSON.stringify(normalized)
+    );
   }
 
   function loadStoredMasterSession() {
     try {
-      const raw =
-        localStorage.getItem(
-          MASTER_SESSION_KEY
-        );
+      const raw = localStorage.getItem(MASTER_SESSION_KEY);
 
       if (!raw) {
         return null;
       }
 
-      const parsed =
-        JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const session = normalizeMasterSession(parsed);
 
-      if (
-        !parsed?.access_token
-      ) {
+      if (!session?.access_token) {
         return null;
       }
 
-      return normalizeMasterSession(
-        parsed
-      );
+      if (
+        session.expires_at &&
+        session.expires_at < Date.now() / 1000 + 30
+      ) {
+        localStorage.removeItem(MASTER_SESSION_KEY);
+        return null;
+      }
 
+      return session;
     } catch {
       return null;
     }
   }
 
-  async function masterFetch(
-    path,
-    options = {},
-    retry = true
-  ) {
-    const session =
-      state.masterSession;
-
-    if (
-      !session?.access_token
-    ) {
-      throw new Error(
-        'expired'
-      );
+  async function masterFetch(path, options = {}) {
+    if (!state.masterSession?.access_token) {
+      throw new Error('expired');
     }
 
     const headers = {
-      ...(options.body
-        ? {
-            'Content-Type':
-              'application/json'
-          }
-        : {}),
-      ...(options.headers || {}),
-      Authorization:
-        `Bearer ${session.access_token}`
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${state.masterSession.access_token}`,
+      ...(options.headers || {})
     };
 
-    const response =
-      await fetch(
-        path,
-        {
-          ...options,
-          headers
-        }
-      );
+    const response = await fetch(path, {
+      ...options,
+      headers
+    });
 
-    if (
-      response.status === 401 &&
-      retry &&
-      session.refresh_token
-    ) {
-      try {
-        const refreshResponse =
-          await fetch(
-            '/api/refresh',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type':
-                  'application/json'
-              },
-              body:
-                JSON.stringify({
-                  refresh_token:
-                    session.refresh_token
-                })
-            }
-          );
+    const data = await response.json().catch(() => ({}));
 
-        const refreshData =
-          await refreshResponse
-            .json()
-            .catch(
-              () => ({})
-            );
-
-        if (
-          refreshResponse.ok &&
-          refreshData?.access_token
-        ) {
-          const refreshed =
-            normalizeMasterSession({
-              ...session,
-              ...refreshData
-            });
-
-          saveMasterSession(
-            refreshed
-          );
-
-          return masterFetch(
-            path,
-            options,
-            false
-          );
-        }
-      } catch {
-      }
-
-      saveMasterSession(null);
-
-      throw new Error(
-        'expired'
-      );
+    if (response.status === 401) {
+      masterLogout('انتهت جلسة الماستر، يرجى تسجيل الدخول مجددًا');
+      throw new Error('expired');
     }
 
-    const data =
-      await response
-        .json()
-        .catch(
-          () => ({})
-        );
-
     if (!response.ok) {
-      throw new Error(
-        data?.error ||
-        data?.message ||
-        'حدث خطأ أثناء الاتصال بالسيرفر'
-      );
+      throw new Error(data.error || 'حدث خطأ غير متوقع');
     }
 
     return data;
   }
 
-  function masterEscape(value) {
-    return String(
-      value ?? ''
-    )
-      .replace(
-        /&/g,
-        '&amp;'
-      )
-      .replace(
-        /</g,
-        '&lt;'
-      )
-      .replace(
-        />/g,
-        '&gt;'
-      )
-      .replace(
-        /"/g,
-        '&quot;'
-      )
-      .replace(
-        /'/g,
-        '&#039;'
-      );
+  function masterMoney(value) {
+    const number = Number(
+      String(value ?? '').replace(/[^\d.-]/g, '')
+    );
+
+    if (!Number.isFinite(number)) {
+      return 0;
+    }
+
+    return number;
   }
 
-  function masterMoney(value) {
-    const number =
-      Number(
-        String(
-          value ?? ''
-        )
-          .replace(
-            /[^\d.-]/g,
-            ''
-          )
-      );
+  function masterDriver(order) {
+    const sheet = String(order.sheet_name || '').trim();
 
-    return Number.isFinite(
-      number
-    )
-      ? number
-      : 0;
+    if (sheet === 'Mandoub2') {
+      return 'مندوب 2';
+    }
+
+    if (sheet === 'Mandoub') {
+      return 'مندوب 1';
+    }
+
+    return sheet || 'غير محدد';
   }
 
   function masterDate(value) {
@@ -1739,27 +1632,19 @@
       return '—';
     }
 
-    const date =
-      new Date(value);
+    const date = new Date(value);
 
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
+    if (Number.isNaN(date.getTime())) {
       return String(value);
     }
 
-    return date.toLocaleString(
-      'ar-EG',
-      {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      }
-    );
+    return date.toLocaleString('ar-EG', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
   function masterDateInput(value) {
@@ -1767,176 +1652,241 @@
       return '';
     }
 
-    const date =
-      new Date(value);
+    const date = new Date(value);
 
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
-      return '';
+    if (Number.isNaN(date.getTime())) {
+      return String(value).slice(0, 10);
     }
 
-    const year =
-      date.getFullYear();
-
-    const month =
-      String(
-        date.getMonth() + 1
-      ).padStart(
-        2,
-        '0'
-      );
-
-    const day =
-      String(
-        date.getDate()
-      ).padStart(
-        2,
-        '0'
-      );
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
 
     return `${year}-${month}-${day}`;
   }
 
-  function masterDriver(order) {
-    const sheet =
-      String(
-        order?.sheet_name ||
-        ''
-      )
-        .trim()
-        .toLowerCase();
-
-    if (
-      sheet === 'mandoub2' ||
-      sheet === 'مندوب 2'
-    ) {
-      return 'مندوب 2';
-    }
-
-    if (
-      sheet === 'mandoub' ||
-      sheet === 'مندوب 1'
-    ) {
-      return 'مندوب 1';
-    }
-
-    return (
-      order?.mandoub_name ||
-      order?.driver_name ||
-      order?.sheet_name ||
-      '—'
-    );
-  }
-
   function masterPaymentText(value) {
-    const payment =
-      normalizePayment(
-        value
-      );
+    const payment = normalizePayment(value);
 
-    if (
-      payment === 'cash'
-    ) {
-      return '💵 دفع كاش';
+    if (payment === 'cash') {
+      return 'دفع كاش';
     }
 
-    if (
-      payment === 'bank_transfer'
-    ) {
-      return '🏦 تحويل بنكي';
+    if (payment === 'bank_transfer') {
+      return 'تحويل بنكي';
     }
 
     return 'غير محدد';
   }
 
   function masterStatusText(value) {
-    return isDelivered(
-      value
-    )
-      ? '✓ تم التسليم'
-      : '⏳ قيد التوصيل';
+    return isDelivered(value)
+      ? 'تم التسليم'
+      : 'قيد التوصيل';
+  }
+
+  function masterEscape(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function masterInjectStyles() {
+    if ($('master-runtime-style')) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = 'master-runtime-style';
+
+    style.textContent = `
+      .master-page{min-height:100vh;background:#f5f7f8;color:#172024;font-family:inherit}
+      .master-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;background:#fff;border-bottom:1px solid #e8edef;position:sticky;top:0;z-index:10}
+      .master-brand{display:flex;align-items:center;gap:12px}
+      .master-logo{width:46px;height:46px;border-radius:14px;background:#172024;color:#fff;display:flex;align-items:center;justify-content:center;font-size:25px}
+      .master-title{font-size:20px;font-weight:900}
+      .master-sub{font-size:12px;color:#7b878c;margin-top:4px}
+      .master-actions{display:flex;gap:8px;flex-wrap:wrap}
+      .master-btn{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:800}
+      .master-btn.secondary{background:#edf1f2;color:#26343a}
+      .master-btn.danger{background:#ffe9e9;color:#b42318}
+      .master-btn.primary{background:#172024;color:#fff}
+      .master-wrap{padding:20px;max-width:1500px;margin:auto}
+      .master-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:18px}
+      .master-stat{background:#fff;border:1px solid #e8edef;border-radius:16px;padding:15px}
+      .master-stat-label{font-size:12px;color:#7b878c;margin-bottom:8px}
+      .master-stat-value{font-size:22px;font-weight:900}
+      .master-filters{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;background:#fff;border:1px solid #e8edef;border-radius:16px;padding:14px;margin-bottom:18px}
+      .master-filter{display:flex;flex-direction:column;gap:6px}
+      .master-filter label{font-size:11px;color:#7b878c;font-weight:800}
+      .master-filter input,.master-filter select{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:9px;background:#fff}
+      .master-table-wrap{background:#fff;border:1px solid #e8edef;border-radius:16px;overflow:auto}
+      .master-table{width:100%;border-collapse:collapse;min-width:1050px}
+      .master-table th,.master-table td{padding:12px;border-bottom:1px solid #edf1f2;text-align:right;white-space:nowrap}
+      .master-table th{font-size:11px;color:#718087;background:#fafbfb}
+      .master-table td{font-size:12px}
+      .master-badge{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:750;white-space:nowrap}
+      .master-badge.ok{background:#e8f7ee;color:#16723b}
+      .master-badge.pending{background:#fff5dc;color:#8a5a00}
+      .master-badge.cash{background:#e9f7ed;color:#1d6e3b}
+      .master-badge.bank{background:#e9f0ff;color:#315b9a}
+      .master-view{border:0;background:#172024;color:#fff;border-radius:9px;padding:8px 11px;cursor:pointer;font-weight:700}
+      .master-empty{text-align:center;padding:50px 20px;color:#7a878c}
+      .master-modal{position:fixed;inset:0;z-index:100;background:rgba(8,18,22,.55);display:none;align-items:center;justify-content:center;padding:18px}
+      .master-modal.open{display:flex}
+      .master-modal-card{background:#fff;width:min(850px,100%);max-height:90vh;overflow:auto;border-radius:20px;box-shadow:0 25px 80px rgba(0,0,0,.25)}
+      .master-modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #e8edef;position:sticky;top:0;background:#fff;z-index:2}
+      .master-modal-close{border:0;background:#f0f3f4;border-radius:10px;width:38px;height:38px;cursor:pointer;font-size:18px}
+      .master-modal-body{padding:20px}
+      .master-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+      .master-detail{background:#f7f9fa;border-radius:12px;padding:12px}
+      .master-detail small{display:block;color:#77848a;font-size:11px;margin-bottom:5px}
+      .master-detail strong{display:block;white-space:pre-wrap;word-break:break-word}
+      .master-section{margin-top:14px;border:1px solid #e8edef;border-radius:13px;padding:13px}
+      .master-section-title{font-weight:800;margin-bottom:8px}
+      .master-section-content{white-space:pre-wrap;line-height:1.7;color:#39484e}
+      .master-actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+      .master-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+      .master-edit-form label{display:flex;flex-direction:column;gap:6px;font-weight:800;font-size:12px;color:#39484e}
+      .master-edit-form input,.master-edit-form textarea,.master-edit-form select{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:10px;font:inherit;background:#fff;color:#172024}
+      .master-edit-form textarea{min-height:82px;resize:vertical}
+      .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+      .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
+      @media(max-width:1050px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
+      @media(max-width:650px){.master-top{align-items:flex-start}.master-wrap{padding:12px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-filters{grid-template-columns:1fr 1fr}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:17px}.master-btn{padding:9px 11px}}
+    `;
+
+    document.head.appendChild(style);
   }
 
   function showMasterDashboard() {
-    const loginView =
-      $('login-view');
+    state.role = 'master_admin';
 
-    const ordersView =
-      $('orders-view');
-
-    const masterView =
-      $('master-view');
+    const loginView = $('login-view');
+    const ordersView = $('orders-view');
 
     if (loginView) {
-      loginView.hidden =
-        true;
+      loginView.hidden = true;
     }
 
     if (ordersView) {
-      ordersView.hidden =
-        true;
+      ordersView.hidden = true;
     }
 
-    if (masterView) {
-      masterView.hidden =
-        false;
-    }
+    masterInjectStyles();
 
-    const username =
-      $('master-user');
+    const shell = document.querySelector('.app-shell') || document.body;
 
-    if (username) {
-      username.textContent =
-        state.masterSession?.username ||
-        MASTER_USERNAME;
-    }
+    shell.innerHTML = `
+      <div class="master-page" id="master-page" dir="rtl">
+        <header class="master-top">
+          <div class="master-brand">
+            <div class="master-logo">🐔</div>
+            <div>
+              <div class="master-title">فروج الزين — الإدارة الرئيسية</div>
+              <div class="master-sub">لوحة تحكم خاصة بالماستر • ${masterEscape(state.masterSession?.username || MASTER_USERNAME)}</div>
+            </div>
+          </div>
+          <div class="master-actions">
+            <button class="master-btn secondary" id="master-refresh">↻ تحديث</button>
+            <button class="master-btn danger" id="master-logout">تسجيل الخروج</button>
+          </div>
+        </header>
 
-    setupMasterEvents();
+        <main class="master-wrap">
+          <section class="master-stats">
+            <div class="master-stat"><div class="master-stat-label">إجمالي فواتير الشهر</div><div class="master-stat-value" id="master-month-count">0</div></div>
+            <div class="master-stat"><div class="master-stat-label">إجمالي الشهر</div><div class="master-stat-value" id="master-month-total">0 درهم</div></div>
+            <div class="master-stat"><div class="master-stat-label">كاش</div><div class="master-stat-value" id="master-month-cash">0 درهم</div></div>
+            <div class="master-stat"><div class="master-stat-label">تحويل بنكي</div><div class="master-stat-value" id="master-month-bank">0 درهم</div></div>
+            <div class="master-stat"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div></div>
+          </section>
 
-    loadMasterOrders();
-  }
+          <section class="master-filters">
+            <div class="master-filter">
+              <label>رقم الفاتورة</label>
+              <input id="master-search-number" type="text" placeholder="ابحث برقم الفاتورة">
+            </div>
 
-  function setupMasterEvents() {
-    const close =
-      $('master-modal-close');
+            <div class="master-filter">
+              <label>اسم العميل</label>
+              <input id="master-search-name" type="text" placeholder="اسم العميل">
+            </div>
 
-    if (close) {
-      close.addEventListener(
-        'click',
-        closeMasterModal
-      );
-    }
+            <div class="master-filter">
+              <label>رقم الهاتف</label>
+              <input id="master-search-phone" type="text" placeholder="رقم الهاتف">
+            </div>
 
-    const modal =
-      $('master-modal');
+            <div class="master-filter">
+              <label>التاريخ</label>
+              <input id="master-search-date" type="date">
+            </div>
 
-    if (modal) {
-      modal.addEventListener(
-        'click',
-        (event) => {
-          if (
-            event.target ===
-            modal
-          ) {
-            closeMasterModal();
-          }
-        }
-      );
-    }
+            <div class="master-filter">
+              <label>المندوب</label>
+              <select id="master-filter-driver">
+                <option value="">الكل</option>
+                <option value="Mandoub">مندوب 1</option>
+                <option value="Mandoub2">مندوب 2</option>
+              </select>
+            </div>
 
-    const logout =
-      $('master-logout-btn');
+            <div class="master-filter">
+              <label>حالة التسليم</label>
+              <select id="master-filter-status">
+                <option value="">الكل</option>
+                <option value="pending">قيد التوصيل</option>
+                <option value="delivered">تم التسليم</option>
+              </select>
+            </div>
+          </section>
 
-    if (logout) {
-      logout.addEventListener(
-        'click',
-        () =>
-          masterLogout()
-      );
-    }
+          <section class="master-table-wrap">
+            <table class="master-table">
+              <thead>
+                <tr>
+                  <th>الفاتورة</th>
+                  <th>العميل</th>
+                  <th>الهاتف</th>
+                  <th>الإمارة / المنطقة</th>
+                  <th>المندوب</th>
+                  <th>الإجمالي</th>
+                  <th>الدفع</th>
+                  <th>الحالة</th>
+                  <th>التاريخ</th>
+                  <th>عرض</th>
+                </tr>
+              </thead>
+              <tbody id="master-orders-body"></tbody>
+            </table>
+          </section>
+        </main>
+
+        <div class="master-modal" id="master-modal">
+          <div class="master-modal-card">
+            <div class="master-modal-head">
+              <strong id="master-modal-title">تفاصيل الفاتورة</strong>
+              <button class="master-modal-close" id="master-modal-close">×</button>
+            </div>
+            <div class="master-modal-body" id="master-modal-body"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    $('master-refresh')?.addEventListener('click', loadMasterOrders);
+    $('master-logout')?.addEventListener('click', () => masterLogout());
+    $('master-modal-close')?.addEventListener('click', closeMasterModal);
+
+    $('master-modal')?.addEventListener('click', (event) => {
+      if (event.target.id === 'master-modal') {
+        closeMasterModal();
+      }
+    });
 
     [
       'master-search-number',
@@ -1945,344 +1895,159 @@
       'master-search-date',
       'master-filter-driver',
       'master-filter-status'
-    ].forEach(
-      (id) => {
-        $(id)?.addEventListener(
-          'input',
-          renderMasterOrders
-        );
-
-        $(id)?.addEventListener(
-          'change',
-          renderMasterOrders
-        );
-      }
-    );
+    ].forEach((id) => {
+      $(id)?.addEventListener('input', renderMasterOrders);
+      $(id)?.addEventListener('change', renderMasterOrders);
+    });
 
     loadMasterOrders();
   }
 
   async function loadMasterOrders() {
-    const body =
-      $('master-orders-body');
+    const body = $('master-orders-body');
 
     if (body) {
-      body.innerHTML =
-        '<tr><td colspan="10" class="master-empty">جارٍ تحميل الفواتير…</td></tr>';
+      body.innerHTML = '<tr><td colspan="10" class="master-empty">جارٍ تحميل الفواتير…</td></tr>';
     }
 
     try {
-      const data =
-        await masterFetch(
-          '/api/master/orders'
-        );
+      const data = await masterFetch('/api/master/orders');
 
-      state.masterOrders =
-        Array.isArray(data)
-          ? data
-          : Array.isArray(
-              data?.orders
-            )
-            ? data.orders
-            : [];
+      state.masterOrders = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.orders)
+          ? data.orders
+          : [];
 
       renderMasterOrders();
-
     } catch (error) {
-      if (
-        error.message !==
-          'expired' &&
-        body
-      ) {
-        body.innerHTML =
-          `<tr><td colspan="10" class="master-empty">${masterEscape(error.message)}</td></tr>`;
+      if (error.message !== 'expired' && body) {
+        body.innerHTML = `<tr><td colspan="10" class="master-empty">${masterEscape(error.message)}</td></tr>`;
       }
     }
   }
 
   function getMasterFilteredOrders() {
-    const number =
-      String(
-        $('master-search-number')?.value ||
-        ''
-      )
-        .trim()
-        .toLowerCase();
+    const number = String($('master-search-number')?.value || '').trim().toLowerCase();
+    const name = String($('master-search-name')?.value || '').trim().toLowerCase();
+    const phone = String($('master-search-phone')?.value || '').trim().toLowerCase();
+    const date = String($('master-search-date')?.value || '').trim();
+    const driver = String($('master-filter-driver')?.value || '').trim();
+    const status = String($('master-filter-status')?.value || '').trim();
 
-    const name =
-      String(
-        $('master-search-name')?.value ||
-        ''
-      )
-        .trim()
-        .toLowerCase();
+    return state.masterOrders.filter((order) => {
+      const orderNumber = String(order.order_number ?? order.id ?? '').toLowerCase();
+      const customerName = String(order.customer_name ?? '').toLowerCase();
+      const customerPhone = String(order.phone ?? '').toLowerCase();
 
-    const phone =
-      String(
-        $('master-search-phone')?.value ||
-        ''
-      )
-        .trim()
-        .toLowerCase();
-
-    const date =
-      String(
-        $('master-search-date')?.value ||
-        ''
-      )
-        .trim();
-
-    const driver =
-      String(
-        $('master-filter-driver')?.value ||
-        ''
-      )
-        .trim();
-
-    const status =
-      String(
-        $('master-filter-status')?.value ||
-        ''
-      )
-        .trim();
-
-    return state.masterOrders.filter(
-      (order) => {
-        const orderNumber =
-          String(
-            order.order_number ??
-            order.id ??
-            ''
-          )
-            .toLowerCase();
-
-        const customerName =
-          String(
-            order.customer_name ??
-            ''
-          )
-            .toLowerCase();
-
-        const customerPhone =
-          String(
-            order.phone ??
-            ''
-          )
-            .toLowerCase();
-
-        if (
-          number &&
-          !orderNumber.includes(
-            number
-          )
-        ) {
-          return false;
-        }
-
-        if (
-          name &&
-          !customerName.includes(
-            name
-          )
-        ) {
-          return false;
-        }
-
-        if (
-          phone &&
-          !customerPhone.includes(
-            phone
-          )
-        ) {
-          return false;
-        }
-
-        if (
-          date &&
-          masterDateInput(
-            order.created_at
-          ) !== date
-        ) {
-          return false;
-        }
-
-        if (
-          driver &&
-          String(
-            order.sheet_name ||
-            ''
-          ) !== driver
-        ) {
-          return false;
-        }
-
-        if (status) {
-          const delivered =
-            isDelivered(
-              order.delivery_status
-            );
-
-          if (
-            status ===
-              'delivered' &&
-            !delivered
-          ) {
-            return false;
-          }
-
-          if (
-            status ===
-              'pending' &&
-            delivered
-          ) {
-            return false;
-          }
-        }
-
-        return true;
+      if (number && !orderNumber.includes(number)) {
+        return false;
       }
-    );
+
+      if (name && !customerName.includes(name)) {
+        return false;
+      }
+
+      if (phone && !customerPhone.includes(phone)) {
+        return false;
+      }
+
+      if (date && masterDateInput(order.created_at) !== date) {
+        return false;
+      }
+
+      if (driver && String(order.sheet_name || '') !== driver) {
+        return false;
+      }
+
+      if (status) {
+        const delivered = isDelivered(order.delivery_status);
+
+        if (status === 'delivered' && !delivered) {
+          return false;
+        }
+
+        if (status === 'pending' && delivered) {
+          return false;
+        }
+      }
+
+      return true;
+    });
   }
 
   function renderMasterStats() {
-    const now =
-      new Date();
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
 
-    const year =
-      now.getFullYear();
+    const monthly = state.masterOrders.filter((order) => {
+      const date = new Date(order.created_at);
 
-    const month =
-      now.getMonth();
-
-    const monthly =
-      state.masterOrders.filter(
-        (order) => {
-          const date =
-            new Date(
-              order.created_at
-            );
-
-          return (
-            !Number.isNaN(
-              date.getTime()
-            ) &&
-            date.getFullYear() ===
-              year &&
-            date.getMonth() ===
-              month
-          );
-        }
+      return (
+        !Number.isNaN(date.getTime()) &&
+        date.getFullYear() === year &&
+        date.getMonth() === month
       );
+    });
 
-    const total =
-      monthly.reduce(
-        (sum, order) =>
-          sum +
-          masterMoney(
-            order.total
-          ),
-        0
-      );
+    const total = monthly.reduce(
+      (sum, order) => sum + masterMoney(order.total),
+      0
+    );
 
-    const cash =
-      monthly
-        .filter(
-          (order) =>
-            normalizePayment(
-              order.payment_method
-            ) === 'cash'
-        )
-        .reduce(
-          (sum, order) =>
-            sum +
-            masterMoney(
-              order.total
-            ),
-          0
-        );
+    const cash = monthly
+      .filter((order) => normalizePayment(order.payment_method) === 'cash')
+      .reduce((sum, order) => sum + masterMoney(order.total), 0);
 
-    const bank =
-      monthly
-        .filter(
-          (order) =>
-            normalizePayment(
-              order.payment_method
-            ) ===
-            'bank_transfer'
-        )
-        .reduce(
-          (sum, order) =>
-            sum +
-            masterMoney(
-              order.total
-            ),
-          0
-        );
+    const bank = monthly
+      .filter((order) => normalizePayment(order.payment_method) === 'bank_transfer')
+      .reduce((sum, order) => sum + masterMoney(order.total), 0);
 
-    const delivered =
-      monthly.filter(
-        (order) =>
-          isDelivered(
-            order.delivery_status
-          )
-      ).length;
+    const delivered = monthly.filter(
+      (order) => isDelivered(order.delivery_status)
+    ).length;
 
-    if (
-      $('master-month-count')
-    ) {
+    if ($('master-month-count')) {
       $('master-month-count').textContent =
-        monthly.length.toLocaleString(
-          'ar-EG'
-        );
+        monthly.length.toLocaleString('ar-EG');
     }
 
-    if (
-      $('master-month-total')
-    ) {
+    if ($('master-month-total')) {
       $('master-month-total').textContent =
         `${total.toLocaleString('ar-EG', {
           maximumFractionDigits: 2
         })} درهم`;
     }
 
-    if (
-      $('master-month-cash')
-    ) {
+    if ($('master-month-cash')) {
       $('master-month-cash').textContent =
         `${cash.toLocaleString('ar-EG', {
           maximumFractionDigits: 2
         })} درهم`;
     }
 
-    if (
-      $('master-month-bank')
-    ) {
+    if ($('master-month-bank')) {
       $('master-month-bank').textContent =
         `${bank.toLocaleString('ar-EG', {
           maximumFractionDigits: 2
         })} درهم`;
     }
 
-    if (
-      $('master-delivered')
-    ) {
+    if ($('master-delivered')) {
       $('master-delivered').textContent =
-        delivered.toLocaleString(
-          'ar-EG'
-        );
+        delivered.toLocaleString('ar-EG');
     }
   }
 
   function renderMasterOrders() {
-    const body =
-      $('master-orders-body');
+    const body = $('master-orders-body');
 
     if (!body) {
       return;
     }
 
-    const orders =
-      getMasterFilteredOrders();
+    const orders = getMasterFilteredOrders();
 
     renderMasterStats();
 
@@ -2295,45 +2060,34 @@
 
     body.innerHTML = '';
 
-    orders.forEach(
-      (order) => {
-        const payment =
-          normalizePayment(
-            order.payment_method
-          );
+    orders.forEach((order) => {
+      const payment =
+        normalizePayment(order.payment_method);
 
-        const delivered =
-          isDelivered(
-            order.delivery_status
-          );
+      const delivered =
+        isDelivered(order.delivery_status);
 
-        const tr =
-          document.createElement(
-            'tr'
-          );
+      const tr =
+        document.createElement('tr');
 
-        tr.innerHTML = `
+      tr.innerHTML = `
         <td>
           <strong>
             #${masterEscape(
-              order.order_number ??
-              order.id ??
-              ''
+              order.order_number ?? order.id ?? ''
             )}
           </strong>
         </td>
 
         <td>
           ${masterEscape(
-            order.customer_name ||
-            '—'
+            order.customer_name || '—'
           )}
         </td>
 
         <td>
           ${masterEscape(
-            order.phone ||
-            '—'
+            order.phone || '—'
           )}
         </td>
 
@@ -2344,12 +2098,10 @@
               order.area
             ]
               .filter(Boolean)
-              .join(' / ') ||
-            '—'
+              .join(' / ') || '—'
           )}
         </td>
-
-        <td>
+                <td>
           ${masterEscape(
             masterDriver(order)
           )}
@@ -2357,9 +2109,7 @@
 
         <td>
           <strong>
-            ${formatTotal(
-              order.total
-            )}
+            ${formatTotal(order.total)}
           </strong>
         </td>
 
@@ -2367,8 +2117,7 @@
           <span class="master-badge ${
             payment === 'cash'
               ? 'cash'
-              : payment ===
-                  'bank_transfer'
+              : payment === 'bank_transfer'
                 ? 'bank'
                 : ''
           }">
@@ -2396,9 +2145,7 @@
 
         <td>
           ${masterEscape(
-            masterDate(
-              order.created_at
-            )
+            masterDate(order.created_at)
           )}
         </td>
 
@@ -2413,26 +2160,20 @@
         </td>
       `;
 
-        const viewButton =
-          tr.querySelector(
-            '[data-master-view]'
-          );
+      const viewButton =
+        tr.querySelector(
+          '[data-master-view]'
+        );
 
-        if (viewButton) {
-          viewButton.addEventListener(
-            'click',
-            () =>
-              openMasterOrder(
-                order
-              )
-          );
-        }
-
-        body.appendChild(
-          tr
+      if (viewButton) {
+        viewButton.addEventListener(
+          'click',
+          () => openMasterOrder(order)
         );
       }
-    );
+
+      body.appendChild(tr);
+    });
   }
 
   function openMasterOrder(order) {
@@ -2445,28 +2186,21 @@
     const title =
       $('master-modal-title');
 
-    if (
-      !modal ||
-      !body
-    ) {
+    if (!modal || !body) {
       return;
     }
 
     const chickenWeights =
-      order.chicken_weights ||
-      '';
+      order.chicken_weights || '';
 
     const chickenQtys =
-      order.chicken_qtys ||
-      '';
+      order.chicken_qtys || '';
 
     const plateNames =
-      order.plate_names ||
-      '';
+      order.plate_names || '';
 
     const plateQtys =
-      order.plate_qtys ||
-      '';
+      order.plate_qtys || '';
 
     if (title) {
       title.textContent =
@@ -2484,8 +2218,7 @@
           <small>العميل</small>
           <strong>
             ${masterEscape(
-              order.customer_name ||
-              '—'
+              order.customer_name || '—'
             )}
           </strong>
         </div>
@@ -2494,8 +2227,7 @@
           <small>الهاتف</small>
           <strong>
             ${masterEscape(
-              order.phone ||
-              '—'
+              order.phone || '—'
             )}
           </strong>
         </div>
@@ -2504,8 +2236,7 @@
           <small>الإمارة</small>
           <strong>
             ${masterEscape(
-              order.emirate ||
-              '—'
+              order.emirate || '—'
             )}
           </strong>
         </div>
@@ -2514,8 +2245,7 @@
           <small>المنطقة</small>
           <strong>
             ${masterEscape(
-              order.area ||
-              '—'
+              order.area || '—'
             )}
           </strong>
         </div>
@@ -2524,9 +2254,7 @@
           <small>المندوب</small>
           <strong>
             ${masterEscape(
-              masterDriver(
-                order
-              )
+              masterDriver(order)
             )}
           </strong>
         </div>
@@ -2535,9 +2263,7 @@
           <small>التاريخ</small>
           <strong>
             ${masterEscape(
-              masterDate(
-                order.created_at
-              )
+              masterDate(order.created_at)
             )}
           </strong>
         </div>
@@ -2546,9 +2272,7 @@
           <small>الإجمالي</small>
           <strong>
             ${masterEscape(
-              formatTotal(
-                order.total
-              )
+              formatTotal(order.total)
             )}
           </strong>
         </div>
@@ -2579,8 +2303,7 @@
           <small>منسق الموعد</small>
           <strong>
             ${masterEscape(
-              order.appointment_coordinator ||
-              '—'
+              order.appointment_coordinator || '—'
             )}
           </strong>
         </div>
@@ -2589,30 +2312,48 @@
 
       <div class="master-section">
         <div class="master-section-title">
-          🍗 الدجاج الكامل
+          🍗 الدجاج الكامل — الأوزان
         </div>
 
-        <div class="master-section-content" style="white-space:pre-line;line-height:1.9;">
+        <div class="master-section-content">
           ${masterEscape(
-            formatChickenLines(
-              chickenWeights,
-              chickenQtys
-            )
+            chickenWeights || '—'
           )}
         </div>
       </div>
 
       <div class="master-section">
         <div class="master-section-title">
-          🍽️ المقطعات
+          📦 الدجاج الكامل — الكمية
         </div>
 
-        <div class="master-section-content" style="white-space:pre-line;line-height:1.9;">
+        <div class="master-section-content">
           ${masterEscape(
-            formatPlateLines(
-              plateNames,
-              plateQtys
-            )
+            chickenQtys || '—'
+          )}
+        </div>
+      </div>
+
+      <div class="master-section">
+        <div class="master-section-title">
+          🍽️ المقطعات — الأصناف
+        </div>
+
+        <div class="master-section-content">
+          ${masterEscape(
+            plateNames || '—'
+          )}
+        </div>
+      </div>
+
+      <div class="master-section">
+        <div class="master-section-title">
+          📦 المقطعات — الكمية
+        </div>
+
+        <div class="master-section-content">
+          ${masterEscape(
+            plateQtys || '—'
           )}
         </div>
       </div>
@@ -2624,8 +2365,7 @@
 
         <div class="master-section-content">
           ${masterEscape(
-            order.order_details ||
-            '—'
+            order.order_details || '—'
           )}
         </div>
       </div>
@@ -2637,8 +2377,7 @@
 
         <div class="master-section-content">
           ${masterEscape(
-            order.note ||
-            '—'
+            order.note || '—'
           )}
         </div>
       </div>
@@ -2650,15 +2389,11 @@
 
         <div class="master-section-content">
           ${
-            safeUrl(
-              order.location_url
-            )
+            safeUrl(order.location_url)
               ? `
                 <a
                   href="${masterEscape(
-                    safeUrl(
-                      order.location_url
-                    )
+                    safeUrl(order.location_url)
                   )}"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -2690,23 +2425,15 @@
 
     $('master-edit-order-btn')?.addEventListener(
       'click',
-      () =>
-        openMasterEdit(
-          order
-        )
+      () => openMasterEdit(order)
     );
 
     $('master-delete-order-btn')?.addEventListener(
       'click',
-      () =>
-        deleteMasterOrder(
-          order
-        )
+      () => deleteMasterOrder(order)
     );
 
-    modal.classList.add(
-      'open'
-    );
+    modal.classList.add('open');
   }
 
   function openMasterEdit(order) {
@@ -2740,8 +2467,7 @@
               id="master-edit-customer"
               type="text"
               value="${masterEscape(
-                order.customer_name ||
-                ''
+                order.customer_name || ''
               )}"
             >
           </label>
@@ -2752,8 +2478,7 @@
               id="master-edit-phone"
               type="text"
               value="${masterEscape(
-                order.phone ||
-                ''
+                order.phone || ''
               )}"
             >
           </label>
@@ -2764,8 +2489,7 @@
               id="master-edit-emirate"
               type="text"
               value="${masterEscape(
-                order.emirate ||
-                ''
+                order.emirate || ''
               )}"
             >
           </label>
@@ -2776,19 +2500,18 @@
               id="master-edit-area"
               type="text"
               value="${masterEscape(
-                order.area ||
-                ''
+                order.area || ''
               )}"
             >
           </label>
-                    <label>
+
+          <label>
             أوزان الدجاج الكامل
             <input
               id="master-edit-chicken-weights"
               type="text"
               value="${masterEscape(
-                order.chicken_weights ||
-                ''
+                order.chicken_weights || ''
               )}"
             >
           </label>
@@ -2799,8 +2522,7 @@
               id="master-edit-chicken-qtys"
               type="text"
               value="${masterEscape(
-                order.chicken_qtys ||
-                ''
+                order.chicken_qtys || ''
               )}"
             >
           </label>
@@ -2811,8 +2533,7 @@
               id="master-edit-plate-names"
               type="text"
               value="${masterEscape(
-                order.plate_names ||
-                ''
+                order.plate_names || ''
               )}"
             >
           </label>
@@ -2823,8 +2544,7 @@
               id="master-edit-plate-qtys"
               type="text"
               value="${masterEscape(
-                order.plate_qtys ||
-                ''
+                order.plate_qtys || ''
               )}"
             >
           </label>
@@ -2835,8 +2555,7 @@
               id="master-edit-total"
               type="text"
               value="${masterEscape(
-                order.total ||
-                ''
+                order.total || ''
               )}"
             >
           </label>
@@ -2847,8 +2566,7 @@
               id="master-edit-coordinator"
               type="text"
               value="${masterEscape(
-                order.appointment_coordinator ||
-                ''
+                order.appointment_coordinator || ''
               )}"
             >
           </label>
@@ -2887,8 +2605,7 @@
                 ${
                   normalizePayment(
                     order.payment_method
-                  ) ===
-                  'bank_transfer'
+                  ) === 'bank_transfer'
                     ? 'selected'
                     : ''
                 }
@@ -2938,8 +2655,7 @@
               id="master-edit-location"
               type="text"
               value="${masterEscape(
-                order.location_url ||
-                ''
+                order.location_url || ''
               )}"
             >
           </label>
@@ -2949,8 +2665,7 @@
           <label>
             تفاصيل الطلب
             <textarea id="master-edit-details">${masterEscape(
-              order.order_details ||
-              ''
+              order.order_details || ''
             )}</textarea>
           </label>
         </div>
@@ -2959,8 +2674,7 @@
           <label>
             الملاحظات
             <textarea id="master-edit-note">${masterEscape(
-              order.note ||
-              ''
+              order.note || ''
             )}</textarea>
           </label>
         </div>
@@ -2987,24 +2701,16 @@
 
     $('master-save-edit')?.addEventListener(
       'click',
-      () =>
-        saveMasterOrder(
-          order
-        )
+      () => saveMasterOrder(order)
     );
 
     $('master-cancel-edit')?.addEventListener(
       'click',
-      () =>
-        openMasterOrder(
-          order
-        )
+      () => openMasterOrder(order)
     );
   }
 
-  async function saveMasterOrder(
-    order
-  ) {
+  async function saveMasterOrder(order) {
     const button =
       $('master-save-edit');
 
@@ -3016,64 +2722,49 @@
 
     const updatedOrder = {
       customer_name:
-        $('master-edit-customer')?.value ||
-        '',
+        $('master-edit-customer')?.value || '',
 
       phone:
-        $('master-edit-phone')?.value ||
-        '',
+        $('master-edit-phone')?.value || '',
 
       emirate:
-        $('master-edit-emirate')?.value ||
-        '',
+        $('master-edit-emirate')?.value || '',
 
       area:
-        $('master-edit-area')?.value ||
-        '',
+        $('master-edit-area')?.value || '',
 
       chicken_weights:
-        $('master-edit-chicken-weights')?.value ||
-        '',
+        $('master-edit-chicken-weights')?.value || '',
 
       chicken_qtys:
-        $('master-edit-chicken-qtys')?.value ||
-        '',
+        $('master-edit-chicken-qtys')?.value || '',
 
       plate_names:
-        $('master-edit-plate-names')?.value ||
-        '',
+        $('master-edit-plate-names')?.value || '',
 
       plate_qtys:
-        $('master-edit-plate-qtys')?.value ||
-        '',
+        $('master-edit-plate-qtys')?.value || '',
 
       total:
-        $('master-edit-total')?.value ||
-        '',
+        $('master-edit-total')?.value || '',
 
       appointment_coordinator:
-        $('master-edit-coordinator')?.value ||
-        '',
+        $('master-edit-coordinator')?.value || '',
 
       location_url:
-        $('master-edit-location')?.value ||
-        '',
+        $('master-edit-location')?.value || '',
 
       order_details:
-        $('master-edit-details')?.value ||
-        '',
+        $('master-edit-details')?.value || '',
 
       note:
-        $('master-edit-note')?.value ||
-        '',
+        $('master-edit-note')?.value || '',
 
       payment_method:
-        $('master-edit-payment')?.value ||
-        '',
+        $('master-edit-payment')?.value || '',
 
       delivery_status:
-        $('master-edit-status')?.value ||
-        'pending'
+        $('master-edit-status')?.value || 'pending'
     };
 
     try {
@@ -3082,13 +2773,10 @@
           '/api/master/order/update',
           {
             method: 'POST',
-            body:
-              JSON.stringify({
-                orderId:
-                  order.id,
-                order:
-                  updatedOrder
-              })
+            body: JSON.stringify({
+              orderId: order.id,
+              order: updatedOrder
+            })
           }
         );
 
@@ -3109,8 +2797,7 @@
           ...state.masterOrders[index],
           ...updatedOrder,
           ...(saved &&
-          typeof saved ===
-            'object'
+          typeof saved === 'object'
             ? saved
             : {})
         };
@@ -3124,16 +2811,12 @@
         'تم تعديل الفاتورة بنجاح ✅'
       );
 
-      openMasterOrder(
-        current
-      );
-
+      openMasterOrder(current);
       renderMasterOrders();
 
     } catch (error) {
       if (
-        error.message ===
-        'expired'
+        error.message === 'expired'
       ) {
         return;
       }
@@ -3144,18 +2827,14 @@
       );
 
       if (button) {
-        button.disabled =
-          false;
-
+        button.disabled = false;
         button.textContent =
           '💾 حفظ التعديل';
       }
     }
   }
 
-  async function deleteMasterOrder(
-    order
-  ) {
+  async function deleteMasterOrder(order) {
     const number =
       order.order_number ??
       order.id ??
@@ -3183,9 +2862,7 @@
         $('master-delete-order-btn');
 
       if (button) {
-        button.disabled =
-          true;
-
+        button.disabled = true;
         button.textContent =
           'جارٍ الحذف…';
       }
@@ -3194,11 +2871,9 @@
         '/api/master/order/delete',
         {
           method: 'POST',
-          body:
-            JSON.stringify({
-              orderId:
-                order.id
-            })
+          body: JSON.stringify({
+            orderId: order.id
+          })
         }
       );
 
@@ -3210,7 +2885,6 @@
         );
 
       closeMasterModal();
-
       renderMasterOrders();
 
       toast(
@@ -3219,8 +2893,7 @@
 
     } catch (error) {
       if (
-        error.message ===
-        'expired'
+        error.message === 'expired'
       ) {
         return;
       }
@@ -3238,12 +2911,8 @@
     );
   }
 
-  function masterLogout(
-    message = ''
-  ) {
-    saveMasterSession(
-      null
-    );
+  function masterLogout(message = '') {
+    saveMasterSession(null);
 
     state.masterOrders = [];
     state.role = '';
@@ -3252,10 +2921,7 @@
 
     if (message) {
       setTimeout(
-        () =>
-          showLogin(
-            message
-          ),
+        () => showLogin(message),
         100
       );
     }
@@ -3279,8 +2945,7 @@
 
           const password =
             $('password')
-              ?.value ||
-            '';
+              ?.value || '';
 
           const error =
             $('login-error');
@@ -3348,9 +3013,7 @@
                     () => ({})
                   );
 
-              if (
-                !response.ok
-              ) {
+              if (!response.ok) {
                 throw new Error(
                   data.error ||
                   'تعذر تسجيل دخول الماستر'
@@ -3383,9 +3046,7 @@
               const passwordInput =
                 $('password');
 
-              if (
-                passwordInput
-              ) {
+              if (passwordInput) {
                 passwordInput.value =
                   '';
               }
@@ -3418,9 +3079,7 @@
                     () => ({})
                   );
 
-              if (
-                !response.ok
-              ) {
+              if (!response.ok) {
                 throw new Error(
                   data.error ||
                   'تعذر تسجيل الدخول'
@@ -3453,9 +3112,7 @@
               const passwordInput =
                 $('password');
 
-              if (
-                passwordInput
-              ) {
+              if (passwordInput) {
                 passwordInput.value =
                   '';
               }
@@ -3496,8 +3153,7 @@
     if (logoutButton) {
       logoutButton.addEventListener(
         'click',
-        () =>
-          logout()
+        () => logout()
       );
     }
 
@@ -3529,8 +3185,7 @@
                   (item) => {
                     item.classList.toggle(
                       'active',
-                      item ===
-                        tab
+                      item === tab
                     );
                   }
                 );
@@ -3554,7 +3209,6 @@
           state.masterSession?.access_token
         ) {
           loadMasterOrders();
-
           return;
         }
 
@@ -3626,9 +3280,7 @@
     if (
       session?.access_token
     ) {
-      saveSession(
-        session
-      );
+      saveSession(session);
 
       state.role =
         'driver';
