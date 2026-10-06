@@ -677,7 +677,7 @@
   function extractPlateNames(value) {
     const text =
       String(value ?? '')
-        .replace(/\\r/g, '')
+        .replace(/\r/g, '')
         .trim();
 
     if (!text) {
@@ -685,19 +685,75 @@
     }
 
     const lines = text
-      .split('\\n')
+      .split('\n')
       .map((line) =>
         line
-          .replace(/\\s+/g, ' ')
+          .replace(/\s+/g, ' ')
           .trim()
       )
       .filter(Boolean);
 
-    if (lines.length) {
+    if (lines.length > 1) {
       return lines;
     }
 
-    return [];
+    const singleLine = lines[0] || '';
+
+    const separated = singleLine
+      .split(/[،,|/]+/)
+      .map((line) =>
+        line
+          .replace(/\s+/g, ' ')
+          .trim()
+      )
+      .filter(Boolean);
+
+    if (separated.length > 1) {
+      return separated;
+    }
+
+    const knownNames = [
+      'أرجل دبوس',
+      'ارجل دبوس',
+      'أفخاذ',
+      'افخاذ',
+      'أجنحة',
+      'اجنحه',
+      'صدور',
+      'كبدة',
+      'كبده',
+      'قوانص',
+      'قلوب'
+    ];
+
+    const escaped =
+      knownNames
+        .sort(
+          (a, b) =>
+            b.length - a.length
+        )
+        .map(
+          (item) =>
+            item.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              '\\$&'
+            )
+        )
+        .join('|');
+
+    const knownMatches =
+      singleLine.match(
+        new RegExp(
+          escaped,
+          'g'
+        )
+      ) || [];
+
+    if (knownMatches.length) {
+      return knownMatches;
+    }
+
+    return [singleLine];
   }
 
   function normalizeArabicDigits(value) {
@@ -974,6 +1030,34 @@
           plateQtys
         );
 
+      const chickenSection =
+        node.querySelector(
+          '.chicken-section'
+        );
+
+      const cutsSection =
+        node.querySelector(
+          '.cuts-section'
+        );
+
+      const hasChicken =
+        chickenDisplay !== '—' &&
+        String(chickenDisplay).trim() !== '';
+
+      const hasCuts =
+        plateDisplay !== '—' &&
+        String(plateDisplay).trim() !== '';
+
+      if (chickenSection) {
+        chickenSection.style.display =
+          hasChicken ? '' : 'none';
+      }
+
+      if (cutsSection) {
+        cutsSection.style.display =
+          hasCuts ? '' : 'none';
+      }
+
       setText(
         node,
         'chicken_weights',
@@ -1006,7 +1090,7 @@
       if (chickenQtyElement) {
         const chickenQtyRow =
           chickenQtyElement.closest(
-            '.info-item, .order-section, .detail-row, .field-row'
+            '.info-item, .order-section, .detail-row, .field-row, .product-box'
           );
 
         if (chickenQtyRow) {
@@ -1024,7 +1108,7 @@
       if (plateQtyElement) {
         const plateQtyRow =
           plateQtyElement.closest(
-            '.info-item, .order-section, .detail-row, .field-row'
+            '.info-item, .order-section, .detail-row, .field-row, .product-box'
           );
 
         if (plateQtyRow) {
