@@ -1002,15 +1002,28 @@
         );
 
       if (chickenQtyElement) {
-        const chickenQtyRow =
-          chickenQtyElement.closest(
-            '.info-item, .order-section, .detail-row, .field-row'
-          );
+        const chickenQtyBox =
+          chickenQtyElement.closest('.product-box');
 
-        if (chickenQtyRow) {
-          chickenQtyRow.style.display = 'none';
+        if (chickenQtyBox) {
+          chickenQtyBox.style.display = 'none';
         } else {
           chickenQtyElement.style.display = 'none';
+        }
+      }
+
+      const chickenWeightElement =
+        node.querySelector(
+          '[data-f="chicken_weights"]'
+        );
+
+      if (chickenWeightElement) {
+        const chickenWeightBox =
+          chickenWeightElement.closest('.product-box');
+
+        if (chickenWeightBox) {
+          chickenWeightBox.style.gridColumn = '1 / -1';
+          chickenWeightBox.style.width = '100%';
         }
       }
 
@@ -1020,15 +1033,28 @@
         );
 
       if (plateQtyElement) {
-        const plateQtyRow =
-          plateQtyElement.closest(
-            '.info-item, .order-section, .detail-row, .field-row'
-          );
+        const plateQtyBox =
+          plateQtyElement.closest('.product-box');
 
-        if (plateQtyRow) {
-          plateQtyRow.style.display = 'none';
+        if (plateQtyBox) {
+          plateQtyBox.style.display = 'none';
         } else {
           plateQtyElement.style.display = 'none';
+        }
+      }
+
+      const plateNamesElement =
+        node.querySelector(
+          '[data-f="plate_names"]'
+        );
+
+      if (plateNamesElement) {
+        const plateNamesBox =
+          plateNamesElement.closest('.product-box');
+
+        if (plateNamesBox) {
+          plateNamesBox.style.gridColumn = '1 / -1';
+          plateNamesBox.style.width = '100%';
         }
       }
 
@@ -1104,7 +1130,7 @@
             order,
             [
               'total',
-                            'grand_total',
+              'grand_total',
               'grandTotal',
               'amount'
             ]
@@ -2197,7 +2223,8 @@
 
     const chickenWeights =
       order.chicken_weights || '';
-        const chickenQtys =
+
+    const chickenQtys =
       order.chicken_qtys || '';
 
     const plateNames =
@@ -2205,18 +2232,6 @@
 
     const plateQtys =
       order.plate_qtys || '';
-
-    const chickenDisplay =
-      formatChickenLines(
-        chickenWeights,
-        chickenQtys
-      );
-
-    const plateDisplay =
-      formatPlateLines(
-        plateNames,
-        plateQtys
-      );
 
     if (title) {
       title.textContent =
@@ -2328,24 +2343,48 @@
 
       <div class="master-section">
         <div class="master-section-title">
-          🍗 الدجاج الكامل
+          🍗 الدجاج الكامل — الأوزان
         </div>
 
         <div class="master-section-content">
           ${masterEscape(
-            chickenDisplay
+            chickenWeights || '—'
           )}
         </div>
       </div>
 
       <div class="master-section">
         <div class="master-section-title">
-          🍽️ المقطعات
+          📦 الدجاج الكامل — الكمية
         </div>
 
         <div class="master-section-content">
           ${masterEscape(
-            plateDisplay
+            chickenQtys || '—'
+          )}
+        </div>
+      </div>
+
+      <div class="master-section">
+        <div class="master-section-title">
+          🍽️ المقطعات — الأصناف
+        </div>
+
+        <div class="master-section-content">
+          ${masterEscape(
+            plateNames || '—'
+          )}
+        </div>
+      </div>
+
+      <div class="master-section">
+        <div class="master-section-title">
+          📦 المقطعات — الكمية
+        </div>
+
+        <div class="master-section-content">
+          ${masterEscape(
+            plateQtys || '—'
           )}
         </div>
       </div>
@@ -2701,8 +2740,7 @@
       () => openMasterOrder(order)
     );
   }
-
-  async function saveMasterOrder(order) {
+    async function saveMasterOrder(order) {
     const button =
       $('master-save-edit');
 
