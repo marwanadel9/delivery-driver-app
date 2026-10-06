@@ -430,7 +430,27 @@
             ? data.orders
             : [];
 
-      state.orders = orders;
+      state.orders = orders.sort((a, b) => {
+        const getInvoiceNumber = (order) => {
+          const value =
+            order?.order_number ??
+            order?.invoice_number ??
+            order?.invoiceNo ??
+            '';
+
+          const match =
+            String(value).match(/\d+/);
+
+          return match
+            ? Number(match[0])
+            : Number.MAX_SAFE_INTEGER;
+        };
+
+        return (
+          getInvoiceNumber(a) -
+          getInvoiceNumber(b)
+        );
+      });
 
       state.sheet =
         data?.sheet ||
