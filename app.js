@@ -676,49 +676,28 @@
 
   function extractPlateNames(value) {
     const text =
-      String(value ?? '').trim();
+      String(value ?? '')
+        .replace(/\\r/g, '')
+        .trim();
 
     if (!text) {
       return [];
     }
 
-    const patterns = [
-      'أرجل دبوس',
-      'ارجل دبوس',
-      'صدور',
-      'أفخاذ',
-      'افخاذ',
-      'أجنحة',
-      'اجنحه',
-      'كبدة',
-      'كبده',
-      'قوانص',
-      'قلوب'
-    ];
+    const lines = text
+      .split('\\n')
+      .map((line) =>
+        line
+          .replace(/\\s+/g, ' ')
+          .trim()
+      )
+      .filter(Boolean);
 
-    const escaped =
-      patterns
-        .sort(
-          (a, b) =>
-            b.length - a.length
-        )
-        .map(
-          (item) =>
-            item.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              '\\$&'
-            )
-        )
-        .join('|');
+    if (lines.length) {
+      return lines;
+    }
 
-    return (
-      text.match(
-        new RegExp(
-          escaped,
-          'g'
-        )
-      ) || []
-    );
+    return [];
   }
 
   function normalizeArabicDigits(value) {
