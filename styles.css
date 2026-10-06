@@ -1132,3 +1132,8 @@ button {
     padding: 12px;
   }
 }
+/* إخفاء خانات الكمية الفارغة من الفاتورة */
+.info-item:has([data-f="chicken_qtys"]),
+.info-item:has([data-f="plate_qtys"]) {
+  display: none !important;
+}
