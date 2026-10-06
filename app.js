@@ -691,45 +691,197 @@
       .trim();
   }
 
-  function normalizeArabicDigits(value) {
-    return String(value ?? '')
-      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
-  }
-
-  function normalizePlateName(value) {
-    return String(value ?? '')
-      .replace(/أ/g, 'ا').replace(/إ/g, 'ا').replace(/آ/g, 'ا')
-      .replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
-  }
-
   function extractPlateNames(value) {
     const text = String(value ?? '').trim();
-    if (!text) return [];
-    const patterns = ['أرجل دبوس','ارجل دبوس','صدور','أفخاذ','افخاذ','أجنحة','اجنحه','كبدة','كبده','قوانص','قلوب'];
-    const escaped = patterns.sort((a,b)=>b.length-a.length)
-      .map(item => item.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
-    return text.match(new RegExp(escaped,'g')) || [];
+
+    if (!text) {
+      return [];
+    }
+
+    const patterns = [
+      'أرجل دبوس',
+      'ارجل دبوس',
+      'صدور',
+      'أفخاذ',
+      'افخاذ',
+      'أجنحة',
+      'اجنحه',
+      'كبدة',
+      'كبده',
+      'قوانص',
+      'قلوب'
+    ];
+
+    const escaped = patterns
+      .sort((a, b) => b.length - a.length)
+      .map((item) => item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('|');
+
+    return text.match(new RegExp(escaped, 'g')) || [];
   }
 
   function extractPlateQuantities(value) {
-    const text = normalizeArabicDigits(value).replace(/هديّه|هديـة|هديه/g,'هدية').trim();
-    if (!text) return [];
+    const text = normalizeArabicDigits(value)
+      .replace(/هديّه|هديـة|هديه/g, 'هدية')
+      .trim();
+
+    if (!text) {
+      return [];
+    }
+
     return text.match(/\d+\s*\+\s*\d+\s*هدية|\d+\s*\+\s*\d+|\d+/g) || [];
   }
 
   function plateSortOrder(name) {
-    const order = ['صدور','افخاذ','ارجل دبوس','اجنحه','كبده','قوانص','قلوب'];
-    const index = order.indexOf(normalizePlateName(name));
+    const normalized = normalizePlateName(name);
+
+    const order = [
+      'صدور',
+      'افخاذ',
+      'ارجل دبوس',
+      'اجنحه',
+      'كبده',
+      'قوانص',
+      'قلوب'
+    ];
+
+    const index = order.indexOf(normalized);
+
     return index === -1 ? order.length : index;
   }
 
-  function formatPlateLines(names, quantities) {
+  function collectGiftText(value, output = []) {
+    if (value === null || value === undefined) {
+      return output;
+    }
+
+    if (typeof value === 'string' || typeof value === 'number') {
+      const text = String(value);
+
+      if (/هدي|هدية/i.test(text)) {
+        output.push(text);
+      }
+
+      return output;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => collectGiftText(item, output));
+      return output;
+    }
+
+    if (typeof value === 'object') {
+      Object.values(value).forEach((item) => {
+        collectGiftText(item, output);
+      });
+    }
+
+    return output;
+  }
+
+  function recoverGiftQuantities(order, nameList, qtyList) {
+    const result = [...qtyList];
+
+    if (!nameList.length) {
+      return result;
+    }
+
+    if (result.some((value) => /هدية|هديه/i.test(String(value)))) {
+      return result;
+    }
+
+    const giftTexts = collectGiftText(order);
+
+    if (!giftTexts.length) {
+      return result;
+    }
+
+    for (const giftText of giftTexts) {
+      const normalizedText = normalizeArabicDigits(giftText)
+        .replace(/هديّه|هديـة|هديه/g, 'هدية');
+
+      const giftMatch = normalizedText.match(
+        /(\d+)\s*\+\s*(\d+)\s*هدية|(\d+)\s*هدية/
+      );
+
+      if (!giftMatch) {
+        continue;
+      }
+
+      const giftValue = giftMatch[2] || giftMatch[3] || '';
+      const baseValue = giftMatch[1] || '';
+      const combined = baseValue
+        ? `${baseValue} + ${giftValue} هدية`
+        : `${giftValue} هدية`;
+
+      let targetIndex = -1;
+
+      for (let i = 0; i < nameList.length; i += 1) {
+        const normalizedName = normalizePlateName(nameList[i]);
+
+        if (normalizedText.includes(normalizedName)) {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (targetIndex === -1) {
+        targetIndex = Math.min(
+          Math.max(nameList.length - 1, 0),
+          result.length - 1
+        );
+      }
+
+      if (targetIndex >= 0) {
+        result[targetIndex] = combined;
+        break;
+      }
+    }
+
+    return result;
+  }
+
+  function formatPlateLines(names, quantities, order = null) {
     const nameList = extractPlateNames(names);
-    const qtyList = extractPlateQuantities(quantities);
-    if (!nameList.length) return '—';
-    const rows = nameList.map((name,index) => ({name, qty: qtyList[index] || '', originalIndex:index}));
-    rows.sort((a,b) => plateSortOrder(a.name) - plateSortOrder(b.name) || a.originalIndex - b.originalIndex);
-    return rows.filter(row => row.name || row.qty).map(row => row.name && row.qty ? `🍽️ ${row.name} — ${row.qty}` : row.name ? `🍽️ ${row.name}` : row.qty).join('\n') || '—';
+    let qtyList = extractPlateQuantities(quantities);
+
+    if (order) {
+      qtyList = recoverGiftQuantities(order, nameList, qtyList);
+    }
+
+    if (!nameList.length) {
+      return '—';
+    }
+
+    const rows = nameList.map((name, index) => ({
+      name,
+      qty: qtyList[index] || '',
+      originalIndex: index
+    }));
+
+    rows.sort((a, b) => {
+      const orderA = plateSortOrder(a.name);
+      const orderB = plateSortOrder(b.name);
+
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      return a.originalIndex - b.originalIndex;
+    });
+
+    return rows
+      .filter((row) => row.name || row.qty)
+      .map((row) => {
+        if (row.name && row.qty) {
+          return `🍽️ ${row.name} — ${row.qty}`;
+        }
+
+        return row.name
+          ? `🍽️ ${row.name}`
+          : row.qty;
+      })
+      .join('\n') || '—';
   }
 
   function render() {
@@ -895,7 +1047,8 @@
       const plateDisplay =
         formatPlateLines(
           plateNames,
-          plateQtys
+          plateQtys,
+          order
         );
 
       setText(
@@ -2578,6 +2731,7 @@
           </label>
 
         </div>
+
         <div class="master-edit-full">
           <label>
             رابط موقع العميل
