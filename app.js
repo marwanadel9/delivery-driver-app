@@ -792,7 +792,6 @@ function formatPlateLines(
 }
   names,
   quantities
-) {
   const nameList =
     extractPlateNames(names);
 
