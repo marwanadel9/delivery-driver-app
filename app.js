@@ -723,12 +723,7 @@
 
   function extractPlateQuantities(value) {
     const text =
-      String(value ?? '')
-        .replace(/[٠-٩]/g, (digit) =>
-          String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))
-        )
-        .replace(/هديّه|هديـة|هديه/g, 'هدية')
-        .trim();
+      String(value ?? '').trim();
 
     if (!text) {
       return [];
@@ -736,7 +731,7 @@
 
     const matches =
       text.match(
-        /\d+\s*\+\s*\d+\s*هدية|\d+\s*\+\s*\d+|\d+/g
+        /\d+\s*\+\s*\d+\s*(?:هدية|هديه)|\d+/g
       ) || [];
 
     return matches.map(
@@ -826,8 +821,7 @@
       getFilteredOrders();
 
     list.replaceChildren();
-
-    if (!shown.length) {
+        if (!shown.length) {
       const message =
         state.filter === 'done'
           ? 'لا توجد طلبات مسلّمة بعد'
@@ -996,6 +990,8 @@
         ''
       );
 
+      // إخفاء خانات الكمية المنفصلة فقط، بدون أي تغيير في تنسيق أو مقاسات الفاتورة.
+      // الكمية أصبحت معروضة داخل نفس خانة المنتج.
       const chickenQtyElement =
         node.querySelector(
           '[data-f="chicken_qtys"]'
@@ -1009,21 +1005,6 @@
           chickenQtyBox.style.display = 'none';
         } else {
           chickenQtyElement.style.display = 'none';
-        }
-      }
-
-      const chickenWeightElement =
-        node.querySelector(
-          '[data-f="chicken_weights"]'
-        );
-
-      if (chickenWeightElement) {
-        const chickenWeightBox =
-          chickenWeightElement.closest('.product-box');
-
-        if (chickenWeightBox) {
-          chickenWeightBox.style.gridColumn = '1 / -1';
-          chickenWeightBox.style.width = '100%';
         }
       }
 
@@ -1043,21 +1024,7 @@
         }
       }
 
-      const plateNamesElement =
-        node.querySelector(
-          '[data-f="plate_names"]'
-        );
-
-      if (plateNamesElement) {
-        const plateNamesBox =
-          plateNamesElement.closest('.product-box');
-
-        if (plateNamesBox) {
-          plateNamesBox.style.gridColumn = '1 / -1';
-          plateNamesBox.style.width = '100%';
-        }
-      }
-
+      // لا نغيّر أي CSS خاص بالكارت أو الـ Grid. فقط نسمح بظهور الأسطر المتعددة.
       [
         'chicken_weights',
         'chicken_qtys',
@@ -1073,9 +1040,6 @@
           if (element) {
             element.style.whiteSpace =
               'pre-line';
-
-            element.style.lineHeight =
-              '1.9';
           }
         }
       );
@@ -1679,7 +1643,7 @@
   }
 
   function masterDateInput(value) {
-    if (!value) {
+        if (!value) {
       return '';
     }
 
@@ -2502,8 +2466,7 @@
               )}"
             >
           </label>
-
-          <label>
+                    <label>
             رقم الهاتف
             <input
               id="master-edit-phone"
@@ -2740,7 +2703,8 @@
       () => openMasterOrder(order)
     );
   }
-    async function saveMasterOrder(order) {
+
+  async function saveMasterOrder(order) {
     const button =
       $('master-save-edit');
 
