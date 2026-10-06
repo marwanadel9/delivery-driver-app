@@ -218,132 +218,110 @@
     );
   };
 
-  async function refreshSession() {
-    if (!state.session?.refresh_token) {
-      throw new Error('expired');
-    }
-
-    const response = await fetch(
-      '/api/refresh',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          refresh_token:
-            state.session.refresh_token
-        })
-      }
-    );
-
-    const data =
-      await response
-        .json()
-        .catch(() => ({}));
-
-    if (!response.ok) {
-      throw new Error(
-        data.error || 'expired'
-      );
-    }
-
-    saveSession(
-      normalizeSession({
-        ...data,
-        username:
-          state.session.username,
-        email:
-          state.session.email,
-        mandoub_name:
-          state.session.mandoub_name,
-        sheet_name:
-          state.session.sheet_name,
-        can_call:
-          state.session.can_call
-      })
-    );
-  }
-
-  async function apiFetch(
+  const apiFetch = async (
     path,
     options = {},
     retry = true
-  ) {
-    if (!state.session?.access_token) {
+  ) => {
+    const session = state.session;
+
+    if (!session?.access_token) {
       throw new Error('expired');
     }
 
-    const expiresAt =
-      Number(state.session.expires_at);
-
-    if (
-      Number.isFinite(expiresAt) &&
-      expiresAt - 60 <
-        Date.now() / 1000
-    ) {
-      try {
-        await refreshSession();
-      } catch {
-        logout(
-          'انتهت الجلسة، يرجى تسجيل الدخول مجددًا'
-        );
-
-        throw new Error('expired');
-      }
-    }
-
     const headers = {
-      'Content-Type':
-        'application/json',
+      ...(options.body
+        ? {
+            'Content-Type':
+              'application/json'
+          }
+        : {}),
+      ...(options.headers || {}),
       Authorization:
-        `Bearer ${state.session.access_token}`,
-      ...(options.headers || {})
+        `Bearer ${session.access_token}`
     };
 
-    const response = await fetch(
-      path,
-      {
-        ...options,
-        headers
-      }
-    );
+    const response =
+      await fetch(
+        path,
+        {
+          ...options,
+          headers
+        }
+      );
 
     if (
       response.status === 401 &&
-      retry
+      retry &&
+      session.refresh_token
     ) {
       try {
-        await refreshSession();
-      } catch {
-        logout(
-          'انتهت الجلسة، يرجى تسجيل الدخول مجددًا'
-        );
+        const refreshResponse =
+          await fetch(
+            '/api/refresh',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json'
+              },
+              body:
+                JSON.stringify({
+                  refresh_token:
+                    session.refresh_token
+                })
+            }
+          );
 
-        throw new Error('expired');
+        const refreshData =
+          await refreshResponse
+            .json()
+            .catch(
+              () => ({})
+            );
+
+        if (
+          refreshResponse.ok &&
+          refreshData?.access_token
+        ) {
+          const refreshed =
+            normalizeSession({
+              ...session,
+              ...refreshData
+            });
+
+          saveSession(refreshed);
+
+          return apiFetch(
+            path,
+            options,
+            false
+          );
+        }
+      } catch {
       }
 
-      return apiFetch(
-        path,
-        options,
-        false
-      );
+      saveSession(null);
+      throw new Error('expired');
     }
 
     const data =
       await response
         .json()
-        .catch(() => ({}));
+        .catch(
+          () => ({})
+        );
 
     if (!response.ok) {
       throw new Error(
-        data.error ||
-        'حدث خطأ غير متوقع'
+        data?.error ||
+        data?.message ||
+        'حدث خطأ أثناء الاتصال بالسيرفر'
       );
     }
 
     return data;
-  }
+  };
 
   function showLogin(message = '') {
     const loginView =
@@ -351,6 +329,9 @@
 
     const ordersView =
       $('orders-view');
+
+    const masterView =
+      $('master-view');
 
     if (loginView) {
       loginView.hidden = false;
@@ -360,13 +341,19 @@
       ordersView.hidden = true;
     }
 
+    if (masterView) {
+      masterView.hidden = true;
+    }
+
     const error =
       $('login-error');
 
     if (error) {
-      error.hidden = !message;
       error.textContent =
         message || '';
+
+      error.hidden =
+        !message;
     }
   }
 
@@ -377,22 +364,38 @@
     const ordersView =
       $('orders-view');
 
+    const masterView =
+      $('master-view');
+
     if (loginView) {
       loginView.hidden = true;
+    }
+
+    if (masterView) {
+      masterView.hidden = true;
     }
 
     if (ordersView) {
       ordersView.hidden = false;
     }
 
-    const driverName =
+    const name =
       $('driver-name');
 
-    if (driverName) {
-      driverName.textContent =
+    if (name) {
+      name.textContent =
         state.session?.mandoub_name ||
         state.session?.username ||
         'المندوب';
+    }
+
+    const sheet =
+      $('driver-sheet');
+
+    if (sheet) {
+      sheet.textContent =
+        state.session?.sheet_name ||
+        '';
     }
 
     loadOrders();
@@ -402,103 +405,271 @@
     const list =
       $('orders-list');
 
-    const refreshButton =
-      $('refresh-btn');
-
-    if (!list) {
-      return;
-    }
-
-    if (!state.orders.length) {
+    if (list) {
       list.innerHTML =
         '<p class="loading">جارٍ تحميل الطلبات…</p>';
     }
 
-    if (refreshButton) {
-      refreshButton.classList.add('spin');
-      refreshButton.disabled = true;
-    }
-
     try {
       const data =
-        await apiFetch('/api/orders');
+        await apiFetch(
+          `/api/orders?sheet=${encodeURIComponent(
+            state.session?.sheet_name || ''
+          )}`
+        );
 
-      const orders =
+      state.orders =
         Array.isArray(data)
           ? data
           : Array.isArray(data?.orders)
             ? data.orders
             : [];
 
-      state.orders = orders;
-
       state.sheet =
-        data?.sheet ||
-        data?.sheet_name ||
         state.session?.sheet_name ||
         '';
 
-      if (
-        data &&
-        !Array.isArray(data)
-      ) {
-        const returnedSession =
-          normalizeSession({
-            ...state.session,
-            ...data
-          });
-
-        if (
-          returnedSession.username ||
-          returnedSession.sheet_name
-        ) {
-          saveSession(
-            returnedSession
-          );
-        }
-      }
-
-      const sheetElement =
-        $('sheet-name');
-
-      if (sheetElement) {
-        sheetElement.textContent =
-          state.sheet
-            ? `القائمة: ${state.sheet}`
-            : 'قائمة الطلبات';
-      }
-
       render();
+
     } catch (error) {
       if (
         error.message === 'expired'
       ) {
+        logout(
+          'انتهت جلسة الدخول، يرجى تسجيل الدخول مرة أخرى'
+        );
+
         return;
       }
 
-      list.innerHTML =
-        `<p class="empty">
-          <span class="big">⚠️</span>
-          ${escapeHtml(error.message)}
-        </p>`;
-    } finally {
-      if (refreshButton) {
-        refreshButton.classList.remove(
-          'spin'
-        );
-
-        refreshButton.disabled = false;
+      if (list) {
+        list.innerHTML =
+          `<p class="empty error-message">${error.message}</p>`;
       }
     }
   }
 
-  function escapeHtml(value) {
-    return String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+  async function setPayment(
+    order,
+    method,
+    button,
+    buttons
+  ) {
+    if (
+      isDelivered(
+        order.delivery_status
+      )
+    ) {
+      return;
+    }
+
+    buttons.forEach(
+      (item) => {
+        item.disabled = true;
+      }
+    );
+
+    try {
+      const data =
+        await apiFetch(
+          '/api/payment',
+          {
+            method: 'POST',
+            body:
+              JSON.stringify({
+                orderId: order.id,
+                payment_method:
+                  method
+              })
+          }
+        );
+
+      order.payment_method =
+        data?.order?.payment_method ||
+        method;
+
+      buttons.forEach(
+        (item) => {
+          item.classList.toggle(
+            'selected',
+            normalizePayment(
+              item.dataset.payment
+            ) === method
+          );
+        }
+      );
+
+      const current =
+        button
+          ?.closest('.payment-section')
+          ?.querySelector(
+            '.payment-current'
+          );
+
+      if (current) {
+        current.textContent =
+          `طريقة الدفع الحالية: ${paymentLabel(method)}`;
+      }
+
+      toast(
+        'تم حفظ طريقة الدفع ✅'
+      );
+
+    } catch (error) {
+      if (
+        error.message === 'expired'
+      ) {
+        logout(
+          'انتهت جلسة الدخول'
+        );
+
+        return;
+      }
+
+      toast(
+        error.message,
+        true
+      );
+
+    } finally {
+      if (
+        !isDelivered(
+          order.delivery_status
+        )
+      ) {
+        buttons.forEach(
+          (item) => {
+            item.disabled = false;
+          }
+        );
+      }
+    }
+  }
+
+  async function markDelivered(
+    order,
+    button
+  ) {
+    if (
+      isDelivered(
+        order.delivery_status
+      )
+    ) {
+      return;
+    }
+
+    const oldText =
+      button.textContent;
+
+    button.disabled = true;
+    button.textContent =
+      'جارٍ التسليم…';
+
+    try {
+      const data =
+        await apiFetch(
+          '/api/deliver',
+          {
+            method: 'POST',
+            body:
+              JSON.stringify({
+                orderId: order.id
+              })
+          }
+        );
+
+      order.delivery_status =
+        data?.order?.delivery_status ||
+        'delivered';
+
+      button.textContent =
+        '✓ تم التسليم';
+
+      const card =
+        button.closest('.order-card');
+
+      if (card) {
+        card.classList.add(
+          'is-done'
+        );
+      }
+
+      const status =
+        card?.querySelector(
+          '[data-f="delivery_status"]'
+        );
+
+      if (status) {
+        status.textContent =
+          'تم التسليم';
+
+        status.classList.add(
+          'ok'
+        );
+      }
+
+      const paymentButtons =
+        card?.querySelectorAll(
+          '.payment-btn'
+        );
+
+      paymentButtons?.forEach(
+        (item) => {
+          item.disabled = true;
+        }
+      );
+
+      updateStats();
+
+      toast(
+        'تم تسجيل التسليم بنجاح ✅'
+      );
+
+    } catch (error) {
+      if (
+        error.message === 'expired'
+      ) {
+        logout(
+          'انتهت جلسة الدخول'
+        );
+
+        return;
+      }
+
+      button.disabled =
+        false;
+
+      button.textContent =
+        oldText;
+
+      toast(
+        error.message,
+        true
+      );
+    }
+  }
+
+  function logout(message = '') {
+    saveSession(null);
+
+    state.orders = [];
+    state.sheet = '';
+
+    if (
+      typeof saveMasterSession ===
+      'function'
+    ) {
+      saveMasterSession(null);
+    }
+
+    window.location.reload();
+
+    if (message) {
+      setTimeout(
+        () => showLogin(message),
+        100
+      );
+    }
   }
 
   function updateStats() {
@@ -754,63 +925,46 @@
         quantities
       );
 
-    if (!nameList.length) {
+    const count =
+      Math.max(
+        nameList.length,
+        qtyList.length
+      );
+
+    if (!count) {
       return '—';
     }
 
-    /*
-     * الصحون لا نعرض لها أي علامة كرتونة/طبق.
-     *
-     * إذا كان عدد الكميات أكبر من عدد الأصناف بكمية واحدة
-     * فهذا يعني أن الكمية الزائدة هدية للصنف الأخير.
-     */
     const result = [];
 
     for (
       let i = 0;
-      i < nameList.length;
+      i < count;
       i += 1
     ) {
       const name =
         nameList[i] || '';
 
-      let qty =
+      const qty =
         qtyList[i] || '';
 
-      if (
-        i === nameList.length - 1 &&
-        qtyList.length > nameList.length
-      ) {
-        const extraQty =
-          qtyList
-            .slice(nameList.length)
-            .filter(Boolean)
-            .join(' + ');
-
-        if (extraQty) {
-          if (
-            /هدية|هديه/i.test(extraQty)
-          ) {
-            qty = qty
-              ? `${qty} + ${extraQty}`
-              : extraQty;
-          } else {
-            qty = qty
-              ? `${qty} + ${extraQty} هدية`
-              : `${extraQty} هدية`;
-          }
-        }
-      }
-
-      if (!name) {
+      if (!name && !qty) {
         continue;
       }
 
-      result.push(
-        qty
-          ? `${name} — ${qty}`
-          : name
-      );
+      if (name && qty) {
+        result.push(
+          `🍽️ ${name} — ${qty}`
+        );
+      } else if (name) {
+        result.push(
+          `🍽️ ${name}`
+        );
+      } else {
+        result.push(
+          qty
+        );
+      }
     }
 
     return result.length
@@ -1016,7 +1170,7 @@
       if (chickenQtyElement) {
         const chickenQtyRow =
           chickenQtyElement.closest(
-            '.product-box, .info-item, .order-section, .detail-row, .field-row'
+            '.info-item, .order-section, .detail-row, .field-row'
           );
 
         if (chickenQtyRow) {
@@ -1034,7 +1188,7 @@
       if (plateQtyElement) {
         const plateQtyRow =
           plateQtyElement.closest(
-            '.product-box, .info-item, .order-section, .detail-row, .field-row'
+            '.info-item, .order-section, .detail-row, .field-row'
           );
 
         if (plateQtyRow) {
@@ -1094,7 +1248,8 @@
           ]
         )
       );
-            setText(
+
+      setText(
         node,
         'note',
         firstValue(
@@ -1317,299 +1472,77 @@
     updateStats();
   }
 
-  async function setPayment(
-    order,
-    method,
-    clickedButton,
-    allButtons
-  ) {
-    if (
-      !method ||
-      isDelivered(
-        order.delivery_status
-      )
-    ) {
-      return;
-    }
-
-    if (
-      normalizePayment(
-        order.payment_method
-      ) === method
-    ) {
-      return;
-    }
-
-    allButtons.forEach(
-      (button) => {
-        button.disabled =
-          true;
-      }
-    );
-
-    try {
-      await apiFetch(
-        '/api/payment',
-        {
-          method: 'POST',
-          body:
-            JSON.stringify({
-              orderId:
-                order.id,
-              payment_method:
-                method
-            })
-        }
-      );
-
-      order.payment_method =
-        method;
-
-      allButtons.forEach(
-        (button) => {
-          button.classList.toggle(
-            'selected',
-            normalizePayment(
-              button.dataset.payment
-            ) === method
-          );
-        }
-      );
-
-      const card =
-        clickedButton.closest(
-          '.order-card'
-        );
-
-      const current =
-        card?.querySelector(
-          '.payment-current'
-        );
-
-      if (current) {
-        current.textContent =
-          `طريقة الدفع الحالية: ${paymentLabel(method)}`;
-      }
-
-      toast(
-        `تم حفظ طريقة الدفع: ${paymentLabel(method)}`
-      );
-    } catch (error) {
-      if (
-        error.message ===
-        'expired'
-      ) {
-        return;
-      }
-
-      toast(
-        error.message,
-        true
-      );
-    } finally {
-      if (
-        !isDelivered(
-          order.delivery_status
-        )
-      ) {
-        allButtons.forEach(
-          (button) => {
-            button.disabled =
-              false;
-          }
-        );
-      }
-    }
-  }
-
-  async function markDelivered(
-    order,
-    button
-  ) {
-    const number =
-      order.order_number ??
-      order.id ??
-      '';
-
-    const name =
-      order.customer_name ||
-      '';
-
-    const confirmed =
-      window.confirm(
-        `تأكيد تسليم الطلب #${number}${
-          name
-            ? ` للعميل ${name}`
-            : ''
-        }؟`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    button.disabled =
-      true;
-
-    button.textContent =
-      'جارٍ التحديث…';
-
-    try {
-      await apiFetch(
-        '/api/deliver',
-        {
-          method: 'POST',
-          body:
-            JSON.stringify({
-              orderId:
-                order.id
-            })
-        }
-      );
-
-      order.delivery_status =
-        'delivered';
-
-      toast(
-        'تم تسجيل التسليم بنجاح ✅'
-      );
-
-      render();
-    } catch (error) {
-      if (
-        error.message ===
-        'expired'
-      ) {
-        return;
-      }
-
-      toast(
-        error.message,
-        true
-      );
-
-      button.disabled =
-        false;
-
-      button.textContent =
-        'تم التسليم';
-    }
-  }
-
-  function logout(
-    message = ''
-  ) {
-    saveSession(null);
-
-    state.orders = [];
-    state.sheet = '';
-    state.role = '';
-
-    const list =
-      $('orders-list');
-
-    if (list) {
-      list.replaceChildren();
-    }
-
-    showLogin(message);
-  }
-
   const MASTER_SESSION_KEY =
     'master_session';
 
   const MASTER_USERNAME =
     'zezo';
 
+  const masterState = {
+    session: null
+  };
+
   state.masterOrders = [];
+  state.masterSession = null;
   state.role = '';
 
-  function normalizeMasterSession(
-    value
-  ) {
+  function saveMasterSession(session) {
+    state.masterSession =
+      session;
+
+    if (session) {
+      localStorage.setItem(
+        MASTER_SESSION_KEY,
+        JSON.stringify(session)
+      );
+    } else {
+      localStorage.removeItem(
+        MASTER_SESSION_KEY
+      );
+    }
+  }
+
+  function normalizeMasterSession(data) {
+    const expiresIn =
+      Number(
+        data?.expires_in
+      );
+
+    let expiresAt =
+      Number(
+        data?.expires_at
+      );
+
     if (
-      !value ||
-      typeof value !== 'object'
+      !Number.isFinite(
+        expiresAt
+      )
     ) {
-      return null;
+      expiresAt =
+        Date.now() / 1000 +
+        (
+          Number.isFinite(
+            expiresIn
+          )
+            ? expiresIn
+            : 3600
+        ) -
+        30;
     }
 
     return {
       access_token:
-        String(
-          value.access_token || ''
-        ),
-
+        data?.access_token ||
+        '',
       refresh_token:
-        String(
-          value.refresh_token || ''
-        ),
-
-      expires_at:
-        Number(
-          value.expires_at || 0
-        ),
-
+        data?.refresh_token ||
+        '',
       username:
-        String(
-          value.username ||
-          MASTER_USERNAME
-        ),
-
-      email:
-        String(
-          value.email || ''
-        ),
-
-      role:
-        String(
-          value.role ||
-          'master_admin'
-        )
+        data?.username ||
+        MASTER_USERNAME,
+      expires_at:
+        expiresAt
     };
-  }
-
-  function saveMasterSession(
-    session
-  ) {
-    if (!session) {
-      localStorage.removeItem(
-        MASTER_SESSION_KEY
-      );
-
-      state.masterSession =
-        null;
-
-      return;
-    }
-
-    const normalized =
-      normalizeMasterSession(
-        session
-      );
-
-    if (
-      !normalized?.access_token
-    ) {
-      localStorage.removeItem(
-        MASTER_SESSION_KEY
-      );
-
-      state.masterSession =
-        null;
-
-      return;
-    }
-
-    state.masterSession =
-      normalized;
-
-    localStorage.setItem(
-      MASTER_SESSION_KEY,
-      JSON.stringify(
-        normalized
-      )
-    );
   }
 
   function loadStoredMasterSession() {
@@ -1626,30 +1559,16 @@
       const parsed =
         JSON.parse(raw);
 
-      const session =
-        normalizeMasterSession(
-          parsed
-        );
-
       if (
-        !session?.access_token
+        !parsed?.access_token
       ) {
         return null;
       }
 
-      if (
-        session.expires_at &&
-        session.expires_at <
-          Date.now() / 1000 + 30
-      ) {
-        localStorage.removeItem(
-          MASTER_SESSION_KEY
-        );
+      return normalizeMasterSession(
+        parsed
+      );
 
-        return null;
-      }
-
-      return session;
     } catch {
       return null;
     }
@@ -1657,10 +1576,14 @@
 
   async function masterFetch(
     path,
-    options = {}
+    options = {},
+    retry = true
   ) {
+    const session =
+      state.masterSession;
+
     if (
-      !state.masterSession?.access_token
+      !session?.access_token
     ) {
       throw new Error(
         'expired'
@@ -1668,13 +1591,15 @@
     }
 
     const headers = {
-      'Content-Type':
-        'application/json',
-
+      ...(options.body
+        ? {
+            'Content-Type':
+              'application/json'
+          }
+        : {}),
+      ...(options.headers || {}),
       Authorization:
-        `Bearer ${state.masterSession.access_token}`,
-
-      ...(options.headers || {})
+        `Bearer ${session.access_token}`
     };
 
     const response =
@@ -1686,6 +1611,66 @@
         }
       );
 
+    if (
+      response.status === 401 &&
+      retry &&
+      session.refresh_token
+    ) {
+      try {
+        const refreshResponse =
+          await fetch(
+            '/api/refresh',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json'
+              },
+              body:
+                JSON.stringify({
+                  refresh_token:
+                    session.refresh_token
+                })
+            }
+          );
+
+        const refreshData =
+          await refreshResponse
+            .json()
+            .catch(
+              () => ({})
+            );
+
+        if (
+          refreshResponse.ok &&
+          refreshData?.access_token
+        ) {
+          const refreshed =
+            normalizeMasterSession({
+              ...session,
+              ...refreshData
+            });
+
+          saveMasterSession(
+            refreshed
+          );
+
+          return masterFetch(
+            path,
+            options,
+            false
+          );
+        }
+      } catch {
+      }
+
+      saveMasterSession(null);
+
+      throw new Error(
+        'expired'
+      );
+    }
+
     const data =
       await response
         .json()
@@ -1693,157 +1678,18 @@
           () => ({})
         );
 
-    if (
-      response.status === 401
-    ) {
-      masterLogout(
-        'انتهت جلسة الماستر، يرجى تسجيل الدخول مجددًا'
-      );
-
-      throw new Error(
-        'expired'
-      );
-    }
-
     if (!response.ok) {
       throw new Error(
-        data.error ||
-        'حدث خطأ غير متوقع'
+        data?.error ||
+        data?.message ||
+        'حدث خطأ أثناء الاتصال بالسيرفر'
       );
     }
 
     return data;
   }
 
-  function masterMoney(
-    value
-  ) {
-    const number =
-      Number(
-        String(
-          value ?? ''
-        ).replace(
-          /[^\d.-]/g,
-          ''
-        )
-      );
-
-    if (
-      !Number.isFinite(number)
-    ) {
-      return 0;
-    }
-
-    return number;
-  }
-
-  function masterDriver(
-    order
-  ) {
-    const sheet =
-      String(
-        order.sheet_name || ''
-      ).trim();
-
-    if (
-      sheet === 'Mandoub2'
-    ) {
-      return 'مندوب 2';
-    }
-
-    if (
-      sheet === 'Mandoub'
-    ) {
-      return 'مندوب 1';
-    }
-
-    return sheet || '—';
-  }
-
-  function masterPaymentText(
-    value
-  ) {
-    const payment =
-      normalizePayment(
-        value
-      );
-
-    if (
-      payment === 'cash'
-    ) {
-      return 'دفع كاش';
-    }
-
-    if (
-      payment ===
-      'bank_transfer'
-    ) {
-      return 'تحويل بنكي';
-    }
-
-    return 'غير محدد';
-  }
-
-  function masterDate(
-    value
-  ) {
-    if (!value) {
-      return '—';
-    }
-
-    const date =
-      new Date(value);
-
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
-      return String(value);
-    }
-
-    return date.toLocaleDateString(
-      'ar-EG'
-    );
-  }
-
-  function masterDateInput(
-    value
-  ) {
-    if (!value) {
-      return '';
-    }
-
-    const date =
-      new Date(value);
-
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
-      return '';
-    }
-
-    const year =
-      date.getFullYear();
-
-    const month =
-      String(
-        date.getMonth() + 1
-      ).padStart(2, '0');
-
-    const day =
-      String(
-        date.getDate()
-      ).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
-  }
-
-  function masterEscape(
-    value
-  ) {
+  function masterEscape(value) {
     return String(
       value ?? ''
     )
@@ -1869,381 +1715,228 @@
       );
   }
 
-  function masterLogout(
-    message = ''
-  ) {
-    saveMasterSession(
-      null
-    );
+  function masterMoney(value) {
+    const number =
+      Number(
+        String(
+          value ?? ''
+        )
+          .replace(
+            /[^\d.-]/g,
+            ''
+          )
+      );
 
-    state.masterOrders =
-      [];
+    return Number.isFinite(
+      number
+    )
+      ? number
+      : 0;
+  }
 
-    state.role =
-      '';
-
-    if (
-      $('master-view')
-    ) {
-      $('master-view').remove();
+  function masterDate(value) {
+    if (!value) {
+      return '—';
     }
 
-    showLogin(
-      message
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return String(value);
+    }
+
+    return date.toLocaleString(
+      'ar-EG',
+      {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }
     );
   }
 
-  function showMasterView() {
-    const existing =
-      $('master-view');
-
-    if (existing) {
-      existing.remove();
+  function masterDateInput(value) {
+    if (!value) {
+      return '';
     }
 
-    const wrapper =
-      document.createElement(
-        'div'
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return '';
+    }
+
+    const year =
+      date.getFullYear();
+
+    const month =
+      String(
+        date.getMonth() + 1
+      ).padStart(
+        2,
+        '0'
       );
 
-    wrapper.id =
-      'master-view';
-
-    wrapper.className =
-      'master-view';
-
-    wrapper.innerHTML = `
-      <div class="master-page">
-
-        <header class="master-header">
-
-          <div class="master-brand">
-            <div class="master-logo">
-              🐔
-            </div>
-
-            <div>
-              <strong>
-                فروج الزين
-              </strong>
-
-              <span>
-                لوحة التحكم
-              </span>
-            </div>
-          </div>
-
-          <div class="master-actions">
-
-            <button
-              id="master-refresh"
-              class="master-btn"
-              type="button"
-            >
-              ↻ تحديث
-            </button>
-
-            <button
-              id="master-logout"
-              class="master-btn danger"
-              type="button"
-            >
-              تسجيل الخروج
-            </button>
-
-          </div>
-
-        </header>
-
-        <main class="master-main">
-
-          <section class="master-title-row">
-
-            <div>
-              <span class="master-eyebrow">
-                الإدارة
-              </span>
-
-              <h1>
-                إدارة الفواتير
-              </h1>
-
-              <p>
-                عرض ومتابعة جميع الطلبات
-              </p>
-            </div>
-
-          </section>
-
-          <section class="master-stats">
-
-            <div class="master-stat">
-              <div class="master-stat-label">
-                عدد الفواتير
-              </div>
-
-              <div
-                class="master-stat-value"
-                id="master-month-count"
-              >
-                0
-              </div>
-            </div>
-
-            <div class="master-stat">
-              <div class="master-stat-label">
-                إجمالي الشهر
-              </div>
-
-              <div
-                class="master-stat-value"
-                id="master-month-total"
-              >
-                0 درهم
-              </div>
-            </div>
-
-            <div class="master-stat">
-              <div class="master-stat-label">
-                كاش
-              </div>
-
-              <div
-                class="master-stat-value"
-                id="master-month-cash"
-              >
-                0 درهم
-              </div>
-            </div>
-
-            <div class="master-stat">
-              <div class="master-stat-label">
-                تحويل بنكي
-              </div>
-
-              <div
-                class="master-stat-value"
-                id="master-month-bank"
-              >
-                0 درهم
-              </div>
-            </div>
-
-            <div class="master-stat">
-              <div class="master-stat-label">
-                تم التسليم
-              </div>
-
-              <div
-                class="master-stat-value"
-                id="master-delivered"
-              >
-                0
-              </div>
-            </div>
-
-          </section>
-
-          <section class="master-filters">
-
-            <div class="master-filter">
-              <label>
-                رقم الفاتورة
-              </label>
-
-              <input
-                id="master-search-number"
-                type="text"
-                placeholder="ابحث برقم الفاتورة"
-              >
-            </div>
-
-            <div class="master-filter">
-              <label>
-                اسم العميل
-              </label>
-
-              <input
-                id="master-search-name"
-                type="text"
-                placeholder="اسم العميل"
-              >
-            </div>
-
-            <div class="master-filter">
-              <label>
-                رقم الهاتف
-              </label>
-
-              <input
-                id="master-search-phone"
-                type="text"
-                placeholder="رقم الهاتف"
-              >
-            </div>
-
-            <div class="master-filter">
-              <label>
-                التاريخ
-              </label>
-
-              <input
-                id="master-search-date"
-                type="date"
-              >
-            </div>
-
-            <div class="master-filter">
-              <label>
-                المندوب
-              </label>
-
-              <select
-                id="master-filter-driver"
-              >
-                <option value="">
-                  الكل
-                </option>
-
-                <option value="Mandoub">
-                  مندوب 1
-                </option>
-
-                <option value="Mandoub2">
-                  مندوب 2
-                </option>
-              </select>
-            </div>
-
-            <div class="master-filter">
-              <label>
-                حالة التسليم
-              </label>
-
-              <select
-                id="master-filter-status"
-              >
-                <option value="">
-                  الكل
-                </option>
-
-                <option value="pending">
-                  قيد التوصيل
-                </option>
-
-                <option value="delivered">
-                  تم التسليم
-                </option>
-              </select>
-            </div>
-
-          </section>
-
-          <section class="master-table-wrap">
-
-            <table class="master-table">
-
-              <thead>
-
-                <tr>
-                  <th>الفاتورة</th>
-                  <th>العميل</th>
-                  <th>الهاتف</th>
-                  <th>الإمارة / المنطقة</th>
-                  <th>المندوب</th>
-                  <th>الإجمالي</th>
-                  <th>الدفع</th>
-                  <th>الحالة</th>
-                  <th>التاريخ</th>
-                  <th>عرض</th>
-                </tr>
-
-              </thead>
-
-              <tbody
-                id="master-orders-body"
-              ></tbody>
-
-            </table>
-
-          </section>
-
-        </main>
-
-        <div
-          class="master-modal"
-          id="master-modal"
-        >
-
-          <div
-            class="master-modal-card"
-          >
-
-            <div
-              class="master-modal-head"
-            >
-
-              <strong
-                id="master-modal-title"
-              >
-                تفاصيل الفاتورة
-              </strong>
-
-              <button
-                class="master-modal-close"
-                id="master-modal-close"
-              >
-                ×
-              </button>
-
-            </div>
-
-            <div
-              class="master-modal-body"
-              id="master-modal-body"
-            ></div>
-
-          </div>
-
-        </div>
-
-      </div>
-    `;
-
-    document.body.appendChild(
-      wrapper
+    const day =
+      String(
+        date.getDate()
+      ).padStart(
+        2,
+        '0'
+      );
+
+    return `${year}-${month}-${day}`;
+  }
+
+  function masterDriver(order) {
+    const sheet =
+      String(
+        order?.sheet_name ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      sheet === 'mandoub2' ||
+      sheet === 'مندوب 2'
+    ) {
+      return 'مندوب 2';
+    }
+
+    if (
+      sheet === 'mandoub' ||
+      sheet === 'مندوب 1'
+    ) {
+      return 'مندوب 1';
+    }
+
+    return (
+      order?.mandoub_name ||
+      order?.driver_name ||
+      order?.sheet_name ||
+      '—'
     );
+  }
 
-    $('master-refresh')
-      ?.addEventListener(
-        'click',
-        loadMasterOrders
+  function masterPaymentText(value) {
+    const payment =
+      normalizePayment(
+        value
       );
 
-    $('master-logout')
-      ?.addEventListener(
-        'click',
-        () => masterLogout()
-      );
+    if (
+      payment === 'cash'
+    ) {
+      return '💵 دفع كاش';
+    }
 
-    $('master-modal-close')
-      ?.addEventListener(
+    if (
+      payment === 'bank_transfer'
+    ) {
+      return '🏦 تحويل بنكي';
+    }
+
+    return 'غير محدد';
+  }
+
+  function masterStatusText(value) {
+    return isDelivered(
+      value
+    )
+      ? '✓ تم التسليم'
+      : '⏳ قيد التوصيل';
+  }
+
+  function showMasterDashboard() {
+    const loginView =
+      $('login-view');
+
+    const ordersView =
+      $('orders-view');
+
+    const masterView =
+      $('master-view');
+
+    if (loginView) {
+      loginView.hidden =
+        true;
+    }
+
+    if (ordersView) {
+      ordersView.hidden =
+        true;
+    }
+
+    if (masterView) {
+      masterView.hidden =
+        false;
+    }
+
+    const username =
+      $('master-user');
+
+    if (username) {
+      username.textContent =
+        state.masterSession?.username ||
+        MASTER_USERNAME;
+    }
+
+    setupMasterEvents();
+
+    loadMasterOrders();
+  }
+
+  function setupMasterEvents() {
+    const close =
+      $('master-modal-close');
+
+    if (close) {
+      close.addEventListener(
         'click',
         closeMasterModal
       );
+    }
 
-    $('master-modal')
-      ?.addEventListener(
+    const modal =
+      $('master-modal');
+
+    if (modal) {
+      modal.addEventListener(
         'click',
         (event) => {
           if (
-            event.target.id ===
-            'master-modal'
+            event.target ===
+            modal
           ) {
             closeMasterModal();
           }
         }
       );
+    }
+
+    const logout =
+      $('master-logout-btn');
+
+    if (logout) {
+      logout.addEventListener(
+        'click',
+        () =>
+          masterLogout()
+      );
+    }
 
     [
       'master-search-number',
@@ -2254,17 +1947,15 @@
       'master-filter-status'
     ].forEach(
       (id) => {
-        $(id)
-          ?.addEventListener(
-            'input',
-            renderMasterOrders
-          );
+        $(id)?.addEventListener(
+          'input',
+          renderMasterOrders
+        );
 
-        $(id)
-          ?.addEventListener(
-            'change',
-            renderMasterOrders
-          );
+        $(id)?.addEventListener(
+          'change',
+          renderMasterOrders
+        );
       }
     );
 
@@ -2292,13 +1983,12 @@
           : Array.isArray(
               data?.orders
             )
-              ? data.orders
-              : [];
+            ? data.orders
+            : [];
 
       renderMasterOrders();
 
     } catch (error) {
-
       if (
         error.message !==
           'expired' &&
@@ -2313,67 +2003,72 @@
   function getMasterFilteredOrders() {
     const number =
       String(
-        $('master-search-number')
-          ?.value || ''
+        $('master-search-number')?.value ||
+        ''
       )
         .trim()
         .toLowerCase();
 
     const name =
       String(
-        $('master-search-name')
-          ?.value || ''
+        $('master-search-name')?.value ||
+        ''
       )
         .trim()
         .toLowerCase();
 
     const phone =
       String(
-        $('master-search-phone')
-          ?.value || ''
+        $('master-search-phone')?.value ||
+        ''
       )
         .trim()
         .toLowerCase();
 
     const date =
       String(
-        $('master-search-date')
-          ?.value || ''
-      ).trim();
+        $('master-search-date')?.value ||
+        ''
+      )
+        .trim();
 
     const driver =
       String(
-        $('master-filter-driver')
-          ?.value || ''
-      ).trim();
+        $('master-filter-driver')?.value ||
+        ''
+      )
+        .trim();
 
     const status =
       String(
-        $('master-filter-status')
-          ?.value || ''
-      ).trim();
+        $('master-filter-status')?.value ||
+        ''
+      )
+        .trim();
 
     return state.masterOrders.filter(
       (order) => {
-
         const orderNumber =
           String(
             order.order_number ??
             order.id ??
             ''
-          ).toLowerCase();
+          )
+            .toLowerCase();
 
         const customerName =
           String(
             order.customer_name ??
             ''
-          ).toLowerCase();
+          )
+            .toLowerCase();
 
         const customerPhone =
           String(
             order.phone ??
             ''
-          ).toLowerCase();
+          )
+            .toLowerCase();
 
         if (
           number &&
@@ -2414,14 +2109,14 @@
         if (
           driver &&
           String(
-            order.sheet_name || ''
+            order.sheet_name ||
+            ''
           ) !== driver
         ) {
           return false;
         }
 
         if (status) {
-
           const delivered =
             isDelivered(
               order.delivery_status
@@ -2462,7 +2157,6 @@
     const monthly =
       state.masterOrders.filter(
         (order) => {
-
           const date =
             new Date(
               order.created_at
@@ -2482,10 +2176,7 @@
 
     const total =
       monthly.reduce(
-        (
-          sum,
-          order
-        ) =>
+        (sum, order) =>
           sum +
           masterMoney(
             order.total
@@ -2499,14 +2190,10 @@
           (order) =>
             normalizePayment(
               order.payment_method
-            ) ===
-            'cash'
+            ) === 'cash'
         )
         .reduce(
-          (
-            sum,
-            order
-          ) =>
+          (sum, order) =>
             sum +
             masterMoney(
               order.total
@@ -2524,10 +2211,7 @@
             'bank_transfer'
         )
         .reduce(
-          (
-            sum,
-            order
-          ) =>
+          (sum, order) =>
             sum +
             masterMoney(
               order.total
@@ -2546,8 +2230,7 @@
     if (
       $('master-month-count')
     ) {
-      $('master-month-count')
-        .textContent =
+      $('master-month-count').textContent =
         monthly.length.toLocaleString(
           'ar-EG'
         );
@@ -2556,8 +2239,7 @@
     if (
       $('master-month-total')
     ) {
-      $('master-month-total')
-        .textContent =
+      $('master-month-total').textContent =
         `${total.toLocaleString('ar-EG', {
           maximumFractionDigits: 2
         })} درهم`;
@@ -2566,8 +2248,7 @@
     if (
       $('master-month-cash')
     ) {
-      $('master-month-cash')
-        .textContent =
+      $('master-month-cash').textContent =
         `${cash.toLocaleString('ar-EG', {
           maximumFractionDigits: 2
         })} درهم`;
@@ -2576,8 +2257,7 @@
     if (
       $('master-month-bank')
     ) {
-      $('master-month-bank')
-        .textContent =
+      $('master-month-bank').textContent =
         `${bank.toLocaleString('ar-EG', {
           maximumFractionDigits: 2
         })} درهم`;
@@ -2586,8 +2266,7 @@
     if (
       $('master-delivered')
     ) {
-      $('master-delivered')
-        .textContent =
+      $('master-delivered').textContent =
         delivered.toLocaleString(
           'ar-EG'
         );
@@ -2618,7 +2297,6 @@
 
     orders.forEach(
       (order) => {
-
         const payment =
           normalizePayment(
             order.payment_method
@@ -2635,115 +2313,105 @@
           );
 
         tr.innerHTML = `
-          <td>
-            <strong>
-              #${masterEscape(
-                order.order_number ??
-                order.id ??
-                ''
-              )}
-            </strong>
-          </td>
-
-          <td>
-            ${masterEscape(
-              order.customer_name ||
-              '—'
+        <td>
+          <strong>
+            #${masterEscape(
+              order.order_number ??
+              order.id ??
+              ''
             )}
-          </td>
+          </strong>
+        </td>
 
-          <td>
-            ${masterEscape(
-              order.phone ||
-              '—'
+        <td>
+          ${masterEscape(
+            order.customer_name ||
+            '—'
+          )}
+        </td>
+
+        <td>
+          ${masterEscape(
+            order.phone ||
+            '—'
+          )}
+        </td>
+
+        <td>
+          ${masterEscape(
+            [
+              order.emirate,
+              order.area
+            ]
+              .filter(Boolean)
+              .join(' / ') ||
+            '—'
+          )}
+        </td>
+
+        <td>
+          ${masterEscape(
+            masterDriver(order)
+          )}
+        </td>
+
+        <td>
+          <strong>
+            ${formatTotal(
+              order.total
             )}
-          </td>
+          </strong>
+        </td>
 
-          <td>
+        <td>
+          <span class="master-badge ${
+            payment === 'cash'
+              ? 'cash'
+              : payment ===
+                  'bank_transfer'
+                ? 'bank'
+                : ''
+          }">
             ${masterEscape(
-              [
-                order.emirate,
-                order.area
-              ]
-                .filter(Boolean)
-                .join(
-                  ' / '
-                ) ||
-              '—'
-            )}
-          </td>
-
-          <td>
-            ${masterEscape(
-              masterDriver(
-                order
+              masterPaymentText(
+                order.payment_method
               )
             )}
-          </td>
+          </span>
+        </td>
 
-          <td>
-            <strong>
-              ${formatTotal(
-                order.total
-              )}
-            </strong>
-          </td>
+        <td>
+          <span class="master-badge ${
+            delivered
+              ? 'ok'
+              : 'pending'
+          }">
+            ${
+              delivered
+                ? '✓ تم التسليم'
+                : '⏳ قيد التوصيل'
+            }
+          </span>
+        </td>
 
-          <td>
-            <span
-              class="master-badge ${
-                payment ===
-                'cash'
-                  ? 'cash'
-                  : payment ===
-                    'bank_transfer'
-                    ? 'bank'
-                    : ''
-              }"
-            >
-              ${masterEscape(
-                masterPaymentText(
-                  order.payment_method
-                )
-              )}
-            </span>
-          </td>
+        <td>
+          ${masterEscape(
+            masterDate(
+              order.created_at
+            )
+          )}
+        </td>
 
-          <td>
-            <span
-              class="master-badge ${
-                delivered
-                  ? 'ok'
-                  : 'pending'
-              }"
-            >
-              ${
-                delivered
-                  ? '✓ تم التسليم'
-                  : '⏳ قيد التوصيل'
-              }
-            </span>
-          </td>
-
-          <td>
-            ${masterEscape(
-              masterDate(
-                order.created_at
-              )
-            )}
-          </td>
-
-          <td>
-            <button
-              class="master-view"
-              data-master-view="${masterEscape(
-                order.id
-              )}"
-            >
-              عرض
-            </button>
-          </td>
-        `;
+        <td>
+          <button
+            class="master-view"
+            data-master-view="${masterEscape(
+              order.id
+            )}">
+            عرض
+          </button>
+        </td>
+      `;
 
         const viewButton =
           tr.querySelector(
@@ -2766,85 +2434,54 @@
       }
     );
   }
-    function openMasterOrder(order) {
+
+  function openMasterOrder(order) {
     const modal =
       $('master-modal');
 
     const body =
       $('master-modal-body');
 
-    if (!modal || !body) {
+    const title =
+      $('master-modal-title');
+
+    if (
+      !modal ||
+      !body
+    ) {
       return;
     }
 
     const chickenWeights =
-      firstValue(
-        order,
-        [
-          'chicken_weights',
-          'chickenWeights',
-          'chicken_weight'
-        ]
-      );
+      order.chicken_weights ||
+      '';
 
     const chickenQtys =
-      firstValue(
-        order,
-        [
-          'chicken_qtys',
-          'chickenQtys',
-          'chicken_quantities'
-        ]
-      );
+      order.chicken_qtys ||
+      '';
 
     const plateNames =
-      firstValue(
-        order,
-        [
-          'plate_names',
-          'plateNames',
-          'plates'
-        ]
-      );
+      order.plate_names ||
+      '';
 
     const plateQtys =
-      firstValue(
-        order,
-        [
-          'plate_qtys',
-          'plateQtys',
-          'plate_quantities'
-        ]
-      );
+      order.plate_qtys ||
+      '';
 
-    const chickenDisplay =
-      formatChickenLines(
-        chickenWeights,
-        chickenQtys
-      );
-
-    const plateDisplay =
-      formatPlateLines(
-        plateNames,
-        plateQtys
-      );
+    if (title) {
+      title.textContent =
+        `الفاتورة #${
+          order.order_number ??
+          order.id ??
+          ''
+        }`;
+    }
 
     body.innerHTML = `
       <div class="master-detail-grid">
 
-        <div class="master-detail-item">
-          <span>رقم الفاتورة</span>
-          <strong>
-            #${masterEscape(
-              order.order_number ??
-              order.id ??
-              '—'
-            )}
-          </strong>
-        </div>
-
-        <div class="master-detail-item">
-          <span>اسم العميل</span>
+        <div class="master-detail">
+          <small>العميل</small>
           <strong>
             ${masterEscape(
               order.customer_name ||
@@ -2853,8 +2490,8 @@
           </strong>
         </div>
 
-        <div class="master-detail-item">
-          <span>رقم الهاتف</span>
+        <div class="master-detail">
+          <small>الهاتف</small>
           <strong>
             ${masterEscape(
               order.phone ||
@@ -2863,8 +2500,8 @@
           </strong>
         </div>
 
-        <div class="master-detail-item">
-          <span>الإمارة</span>
+        <div class="master-detail">
+          <small>الإمارة</small>
           <strong>
             ${masterEscape(
               order.emirate ||
@@ -2873,8 +2510,8 @@
           </strong>
         </div>
 
-        <div class="master-detail-item">
-          <span>المنطقة</span>
+        <div class="master-detail">
+          <small>المنطقة</small>
           <strong>
             ${masterEscape(
               order.area ||
@@ -2883,50 +2520,19 @@
           </strong>
         </div>
 
-        <div class="master-detail-item">
-          <span>المندوب</span>
+        <div class="master-detail">
+          <small>المندوب</small>
           <strong>
             ${masterEscape(
-              masterDriver(order)
-            )}
-          </strong>
-        </div>
-
-        <div class="master-detail-item">
-          <span>طريقة الدفع</span>
-          <strong>
-            ${masterEscape(
-              masterPaymentText(
-                order.payment_method
+              masterDriver(
+                order
               )
             )}
           </strong>
         </div>
 
-        <div class="master-detail-item">
-          <span>الحالة</span>
-          <strong>
-            ${
-              isDelivered(
-                order.delivery_status
-              )
-                ? '✓ تم التسليم'
-                : '⏳ قيد التوصيل'
-            }
-          </strong>
-        </div>
-
-        <div class="master-detail-item">
-          <span>الإجمالي</span>
-          <strong>
-            ${formatTotal(
-              order.total
-            )}
-          </strong>
-        </div>
-
-        <div class="master-detail-item">
-          <span>التاريخ</span>
+        <div class="master-detail">
+          <small>التاريخ</small>
           <strong>
             ${masterEscape(
               masterDate(
@@ -2936,325 +2542,974 @@
           </strong>
         </div>
 
-      </div>
-
-      <div class="master-detail-products">
-
-        <div class="master-detail-product">
-
-          <h3>
-            🍗 الدجاج الكامل
-          </h3>
-
-          <div class="master-product-lines">
+        <div class="master-detail">
+          <small>الإجمالي</small>
+          <strong>
             ${masterEscape(
-              chickenDisplay
-            ).replace(
-              /\n/g,
-              '<br>'
+              formatTotal(
+                order.total
+              )
             )}
-          </div>
-
+          </strong>
         </div>
 
-        <div class="master-detail-product">
-
-          <h3>
-            🍽️ المقطعات
-          </h3>
-
-          <div class="master-product-lines">
+        <div class="master-detail">
+          <small>طريقة الدفع</small>
+          <strong>
             ${masterEscape(
-              plateDisplay
-            ).replace(
-              /\n/g,
-              '<br>'
+              masterPaymentText(
+                order.payment_method
+              )
             )}
-          </div>
+          </strong>
+        </div>
 
+        <div class="master-detail">
+          <small>حالة التوصيل</small>
+          <strong>
+            ${masterEscape(
+              masterStatusText(
+                order.delivery_status
+              )
+            )}
+          </strong>
+        </div>
+
+        <div class="master-detail">
+          <small>منسق الموعد</small>
+          <strong>
+            ${masterEscape(
+              order.appointment_coordinator ||
+              '—'
+            )}
+          </strong>
         </div>
 
       </div>
 
-      <div class="master-detail-note">
+      <div class="master-section">
+        <div class="master-section-title">
+          🍗 الدجاج الكامل
+        </div>
 
-        <span>
-          ملاحظات
-        </span>
-
-        <strong>
+        <div class="master-section-content" style="white-space:pre-line;line-height:1.9;">
           ${masterEscape(
-            firstValue(
-              order,
-              [
-                'note',
-                'notes',
-                'remarks'
-              ]
-            ) ||
+            formatChickenLines(
+              chickenWeights,
+              chickenQtys
+            )
+          )}
+        </div>
+      </div>
+
+      <div class="master-section">
+        <div class="master-section-title">
+          🍽️ المقطعات
+        </div>
+
+        <div class="master-section-content" style="white-space:pre-line;line-height:1.9;">
+          ${masterEscape(
+            formatPlateLines(
+              plateNames,
+              plateQtys
+            )
+          )}
+        </div>
+      </div>
+
+      <div class="master-section">
+        <div class="master-section-title">
+          📝 تفاصيل الطلب
+        </div>
+
+        <div class="master-section-content">
+          ${masterEscape(
+            order.order_details ||
             '—'
           )}
-        </strong>
+        </div>
+      </div>
 
+      <div class="master-section">
+        <div class="master-section-title">
+          📌 الملاحظات
+        </div>
+
+        <div class="master-section-content">
+          ${masterEscape(
+            order.note ||
+            '—'
+          )}
+        </div>
+      </div>
+
+      <div class="master-section">
+        <div class="master-section-title">
+          📍 الموقع
+        </div>
+
+        <div class="master-section-content">
+          ${
+            safeUrl(
+              order.location_url
+            )
+              ? `
+                <a
+                  href="${masterEscape(
+                    safeUrl(
+                      order.location_url
+                    )
+                  )}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  فتح موقع العميل
+                </a>
+              `
+              : 'لا يوجد رابط موقع'
+          }
+        </div>
+      </div>
+
+      <div class="master-actions-row">
+        <button
+          class="master-btn primary"
+          id="master-edit-order-btn"
+        >
+          ✏️ تعديل الفاتورة
+        </button>
+
+        <button
+          class="master-btn danger"
+          id="master-delete-order-btn"
+        >
+          🗑️ حذف الفاتورة
+        </button>
       </div>
     `;
 
-    const title =
-      $('master-modal-title');
+    $('master-edit-order-btn')?.addEventListener(
+      'click',
+      () =>
+        openMasterEdit(
+          order
+        )
+    );
 
-    if (title) {
-      title.textContent =
-        `تفاصيل الفاتورة #${
-          order.order_number ??
-          order.id ??
-          ''
-        }`;
-    }
+    $('master-delete-order-btn')?.addEventListener(
+      'click',
+      () =>
+        deleteMasterOrder(
+          order
+        )
+    );
 
     modal.classList.add(
       'open'
     );
   }
 
-  function closeMasterModal() {
-    const modal =
-      $('master-modal');
+  function openMasterEdit(order) {
+    const body =
+      $('master-modal-body');
 
-    if (modal) {
-      modal.classList.remove(
-        'open'
-      );
-    }
-  }
+    const title =
+      $('master-modal-title');
 
-  async function masterLogin(
-    username,
-    password
-  ) {
-    const response =
-      await fetch(
-        '/api/master-login',
-        {
-          method: 'POST',
-
-          headers: {
-            'Content-Type':
-              'application/json'
-          },
-
-          body:
-            JSON.stringify({
-              username,
-              password
-            })
-        }
-      );
-
-    const data =
-      await response
-        .json()
-        .catch(
-          () => ({})
-        );
-
-    if (!response.ok) {
-      throw new Error(
-        data.error ||
-        'بيانات الدخول غير صحيحة'
-      );
-    }
-
-    saveMasterSession(
-      normalizeMasterSession(
-        data
-      )
-    );
-
-    state.role =
-      'master';
-
-    const loginView =
-      $('login-view');
-
-    if (loginView) {
-      loginView.hidden =
-        true;
-    }
-
-    showMasterView();
-  }
-
-  async function driverLogin(
-    username,
-    password
-  ) {
-    const response =
-      await fetch(
-        '/api/login',
-        {
-          method: 'POST',
-
-          headers: {
-            'Content-Type':
-              'application/json'
-          },
-
-          body:
-            JSON.stringify({
-              username,
-              password
-            })
-        }
-      );
-
-    const data =
-      await response
-        .json()
-        .catch(
-          () => ({})
-        );
-
-    if (!response.ok) {
-      throw new Error(
-        data.error ||
-        'اسم المستخدم أو كلمة المرور غير صحيحة'
-      );
-    }
-
-    saveSession(
-      normalizeSession(
-        data
-      )
-    );
-
-    state.role =
-      'driver';
-
-    showOrders();
-  }
-
-  function setupLogin() {
-    const form =
-      $('login-form');
-
-    if (!form) {
+    if (!body) {
       return;
     }
 
-    form.addEventListener(
-      'submit',
-      async (event) => {
-        event.preventDefault();
+    if (title) {
+      title.textContent =
+        `تعديل الفاتورة #${
+          order.order_number ??
+          order.id ??
+          ''
+        }`;
+    }
 
-        const username =
-          String(
-            $('username')?.value ||
-            ''
-          ).trim();
+    body.innerHTML = `
+      <div class="master-edit-form">
 
-        const password =
-          String(
-            $('password')?.value ||
-            ''
-          );
+        <div class="master-edit-grid">
 
-        const button =
-          $('login-btn');
+          <label>
+            اسم العميل
+            <input
+              id="master-edit-customer"
+              type="text"
+              value="${masterEscape(
+                order.customer_name ||
+                ''
+              )}"
+            >
+          </label>
 
-        const error =
-          $('login-error');
+          <label>
+            رقم الهاتف
+            <input
+              id="master-edit-phone"
+              type="text"
+              value="${masterEscape(
+                order.phone ||
+                ''
+              )}"
+            >
+          </label>
 
-        if (error) {
-          error.hidden =
-            true;
+          <label>
+            الإمارة
+            <input
+              id="master-edit-emirate"
+              type="text"
+              value="${masterEscape(
+                order.emirate ||
+                ''
+              )}"
+            >
+          </label>
 
-          error.textContent =
-            '';
-        }
+          <label>
+            المنطقة
+            <input
+              id="master-edit-area"
+              type="text"
+              value="${masterEscape(
+                order.area ||
+                ''
+              )}"
+            >
+          </label>
+                    <label>
+            أوزان الدجاج الكامل
+            <input
+              id="master-edit-chicken-weights"
+              type="text"
+              value="${masterEscape(
+                order.chicken_weights ||
+                ''
+              )}"
+            >
+          </label>
 
-        if (
-          !username ||
-          !password
-        ) {
-          if (error) {
-            error.hidden =
-              false;
+          <label>
+            كميات الدجاج الكامل
+            <input
+              id="master-edit-chicken-qtys"
+              type="text"
+              value="${masterEscape(
+                order.chicken_qtys ||
+                ''
+              )}"
+            >
+          </label>
 
-            error.textContent =
-              'اكتب اسم المستخدم وكلمة المرور.';
-          }
+          <label>
+            أصناف المقطعات
+            <input
+              id="master-edit-plate-names"
+              type="text"
+              value="${masterEscape(
+                order.plate_names ||
+                ''
+              )}"
+            >
+          </label>
 
-          return;
-        }
+          <label>
+            كميات المقطعات
+            <input
+              id="master-edit-plate-qtys"
+              type="text"
+              value="${masterEscape(
+                order.plate_qtys ||
+                ''
+              )}"
+            >
+          </label>
 
-        if (button) {
-          button.disabled =
-            true;
+          <label>
+            الإجمالي
+            <input
+              id="master-edit-total"
+              type="text"
+              value="${masterEscape(
+                order.total ||
+                ''
+              )}"
+            >
+          </label>
 
-          button.classList.add(
-            'loading'
-          );
-        }
+          <label>
+            منسق الموعد
+            <input
+              id="master-edit-coordinator"
+              type="text"
+              value="${masterEscape(
+                order.appointment_coordinator ||
+                ''
+              )}"
+            >
+          </label>
 
-        try {
+          <label>
+            طريقة الدفع
+            <select id="master-edit-payment">
+              <option
+                value=""
+                ${
+                  !normalizePayment(
+                    order.payment_method
+                  )
+                    ? 'selected'
+                    : ''
+                }
+              >
+                غير محدد
+              </option>
 
-          if (
-            username.toLowerCase() ===
-            MASTER_USERNAME
-          ) {
-            await masterLogin(
-              username,
-              password
-            );
-          } else {
-            await driverLogin(
-              username,
-              password
-            );
-          }
+              <option
+                value="cash"
+                ${
+                  normalizePayment(
+                    order.payment_method
+                  ) === 'cash'
+                    ? 'selected'
+                    : ''
+                }
+              >
+                💵 دفع كاش
+              </option>
 
-        } catch (err) {
+              <option
+                value="bank_transfer"
+                ${
+                  normalizePayment(
+                    order.payment_method
+                  ) ===
+                  'bank_transfer'
+                    ? 'selected'
+                    : ''
+                }
+              >
+                🏦 تحويل بنكي
+              </option>
+            </select>
+          </label>
 
-          if (error) {
-            error.hidden =
-              false;
+          <label>
+            حالة التسليم
+            <select id="master-edit-status">
+              <option
+                value="pending"
+                ${
+                  !isDelivered(
+                    order.delivery_status
+                  )
+                    ? 'selected'
+                    : ''
+                }
+              >
+                قيد التوصيل
+              </option>
 
-            error.textContent =
-              err.message ||
-              'حدث خطأ أثناء تسجيل الدخول.';
-          }
+              <option
+                value="delivered"
+                ${
+                  isDelivered(
+                    order.delivery_status
+                  )
+                    ? 'selected'
+                    : ''
+                }
+              >
+                تم التسليم
+              </option>
+            </select>
+          </label>
 
-        } finally {
+        </div>
 
-          if (button) {
-            button.disabled =
-              false;
+        <div class="master-edit-full">
+          <label>
+            رابط موقع العميل
+            <input
+              id="master-edit-location"
+              type="text"
+              value="${masterEscape(
+                order.location_url ||
+                ''
+              )}"
+            >
+          </label>
+        </div>
 
-            button.classList.remove(
-              'loading'
-            );
-          }
+        <div class="master-edit-full">
+          <label>
+            تفاصيل الطلب
+            <textarea id="master-edit-details">${masterEscape(
+              order.order_details ||
+              ''
+            )}</textarea>
+          </label>
+        </div>
 
-        }
-      }
+        <div class="master-edit-full">
+          <label>
+            الملاحظات
+            <textarea id="master-edit-note">${masterEscape(
+              order.note ||
+              ''
+            )}</textarea>
+          </label>
+        </div>
+
+        <div class="master-actions-row">
+
+          <button
+            class="master-btn primary"
+            id="master-save-edit"
+          >
+            💾 حفظ التعديل
+          </button>
+
+          <button
+            class="master-btn secondary"
+            id="master-cancel-edit"
+          >
+            رجوع
+          </button>
+
+        </div>
+      </div>
+    `;
+
+    $('master-save-edit')?.addEventListener(
+      'click',
+      () =>
+        saveMasterOrder(
+          order
+        )
+    );
+
+    $('master-cancel-edit')?.addEventListener(
+      'click',
+      () =>
+        openMasterOrder(
+          order
+        )
     );
   }
 
-  function setupOrders() {
+  async function saveMasterOrder(
+    order
+  ) {
+    const button =
+      $('master-save-edit');
 
-    $('refresh-btn')
-      ?.addEventListener(
+    if (button) {
+      button.disabled = true;
+      button.textContent =
+        'جارٍ الحفظ…';
+    }
+
+    const updatedOrder = {
+      customer_name:
+        $('master-edit-customer')?.value ||
+        '',
+
+      phone:
+        $('master-edit-phone')?.value ||
+        '',
+
+      emirate:
+        $('master-edit-emirate')?.value ||
+        '',
+
+      area:
+        $('master-edit-area')?.value ||
+        '',
+
+      chicken_weights:
+        $('master-edit-chicken-weights')?.value ||
+        '',
+
+      chicken_qtys:
+        $('master-edit-chicken-qtys')?.value ||
+        '',
+
+      plate_names:
+        $('master-edit-plate-names')?.value ||
+        '',
+
+      plate_qtys:
+        $('master-edit-plate-qtys')?.value ||
+        '',
+
+      total:
+        $('master-edit-total')?.value ||
+        '',
+
+      appointment_coordinator:
+        $('master-edit-coordinator')?.value ||
+        '',
+
+      location_url:
+        $('master-edit-location')?.value ||
+        '',
+
+      order_details:
+        $('master-edit-details')?.value ||
+        '',
+
+      note:
+        $('master-edit-note')?.value ||
+        '',
+
+      payment_method:
+        $('master-edit-payment')?.value ||
+        '',
+
+      delivery_status:
+        $('master-edit-status')?.value ||
+        'pending'
+    };
+
+    try {
+      const data =
+        await masterFetch(
+          '/api/master/order/update',
+          {
+            method: 'POST',
+            body:
+              JSON.stringify({
+                orderId:
+                  order.id,
+                order:
+                  updatedOrder
+              })
+          }
+        );
+
+      const saved =
+        data?.order ||
+        data?.data ||
+        data;
+
+      const index =
+        state.masterOrders.findIndex(
+          (item) =>
+            String(item.id) ===
+            String(order.id)
+        );
+
+      if (index !== -1) {
+        state.masterOrders[index] = {
+          ...state.masterOrders[index],
+          ...updatedOrder,
+          ...(saved &&
+          typeof saved ===
+            'object'
+            ? saved
+            : {})
+        };
+      }
+
+      const current =
+        state.masterOrders[index] ||
+        order;
+
+      toast(
+        'تم تعديل الفاتورة بنجاح ✅'
+      );
+
+      openMasterOrder(
+        current
+      );
+
+      renderMasterOrders();
+
+    } catch (error) {
+      if (
+        error.message ===
+        'expired'
+      ) {
+        return;
+      }
+
+      toast(
+        error.message,
+        true
+      );
+
+      if (button) {
+        button.disabled =
+          false;
+
+        button.textContent =
+          '💾 حفظ التعديل';
+      }
+    }
+  }
+
+  async function deleteMasterOrder(
+    order
+  ) {
+    const number =
+      order.order_number ??
+      order.id ??
+      '';
+
+    const customer =
+      order.customer_name ||
+      '';
+
+    const confirmed =
+      window.confirm(
+        `هل أنت متأكد من حذف الفاتورة #${number}${
+          customer
+            ? ` الخاصة بالعميل ${customer}`
+            : ''
+        }؟\n\nلا يمكن التراجع عن الحذف.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const button =
+        $('master-delete-order-btn');
+
+      if (button) {
+        button.disabled =
+          true;
+
+        button.textContent =
+          'جارٍ الحذف…';
+      }
+
+      await masterFetch(
+        '/api/master/order/delete',
+        {
+          method: 'POST',
+          body:
+            JSON.stringify({
+              orderId:
+                order.id
+            })
+        }
+      );
+
+      state.masterOrders =
+        state.masterOrders.filter(
+          (item) =>
+            String(item.id) !==
+            String(order.id)
+        );
+
+      closeMasterModal();
+
+      renderMasterOrders();
+
+      toast(
+        'تم حذف الفاتورة بنجاح ✅'
+      );
+
+    } catch (error) {
+      if (
+        error.message ===
+        'expired'
+      ) {
+        return;
+      }
+
+      toast(
+        error.message,
+        true
+      );
+    }
+  }
+
+  function closeMasterModal() {
+    $('master-modal')?.classList.remove(
+      'open'
+    );
+  }
+
+  function masterLogout(
+    message = ''
+  ) {
+    saveMasterSession(
+      null
+    );
+
+    state.masterOrders = [];
+    state.role = '';
+
+    window.location.reload();
+
+    if (message) {
+      setTimeout(
+        () =>
+          showLogin(
+            message
+          ),
+        100
+      );
+    }
+  }
+
+  function setupEvents() {
+    const loginForm =
+      $('login-form');
+
+    if (loginForm) {
+      loginForm.addEventListener(
+        'submit',
+        async (event) => {
+          event.preventDefault();
+
+          const username =
+            $('username')
+              ?.value
+              .trim()
+              .toLowerCase();
+
+          const password =
+            $('password')
+              ?.value ||
+            '';
+
+          const error =
+            $('login-error');
+
+          if (
+            !username ||
+            !password
+          ) {
+            if (error) {
+              error.textContent =
+                'يرجى إدخال اسم المستخدم وكلمة المرور';
+
+              error.hidden =
+                false;
+            }
+
+            return;
+          }
+
+          const button =
+            $('login-btn');
+
+          if (button) {
+            button.disabled =
+              true;
+
+            button.textContent =
+              'جارٍ تسجيل الدخول…';
+          }
+
+          if (error) {
+            error.hidden =
+              true;
+
+            error.textContent =
+              '';
+          }
+
+          try {
+            if (
+              username ===
+              MASTER_USERNAME
+            ) {
+              const response =
+                await fetch(
+                  '/api/master-login',
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type':
+                        'application/json'
+                    },
+                    body:
+                      JSON.stringify({
+                        username,
+                        password
+                      })
+                  }
+                );
+
+              const data =
+                await response
+                  .json()
+                  .catch(
+                    () => ({})
+                  );
+
+              if (
+                !response.ok
+              ) {
+                throw new Error(
+                  data.error ||
+                  'تعذر تسجيل دخول الماستر'
+                );
+              }
+
+              const masterSession =
+                normalizeMasterSession({
+                  ...data,
+                  username:
+                    data.username ||
+                    username
+                });
+
+              if (
+                !masterSession.access_token
+              ) {
+                throw new Error(
+                  'لم يتم إنشاء جلسة الماستر'
+                );
+              }
+
+              saveMasterSession(
+                masterSession
+              );
+
+              state.role =
+                'master_admin';
+
+              const passwordInput =
+                $('password');
+
+              if (
+                passwordInput
+              ) {
+                passwordInput.value =
+                  '';
+              }
+
+              showMasterDashboard();
+
+            } else {
+
+              const response =
+                await fetch(
+                  '/api/login',
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type':
+                        'application/json'
+                    },
+                    body:
+                      JSON.stringify({
+                        username,
+                        password
+                      })
+                  }
+                );
+
+              const data =
+                await response
+                  .json()
+                  .catch(
+                    () => ({})
+                  );
+
+              if (
+                !response.ok
+              ) {
+                throw new Error(
+                  data.error ||
+                  'تعذر تسجيل الدخول'
+                );
+              }
+
+              const session =
+                normalizeSession({
+                  ...data,
+                  username:
+                    data.username ||
+                    username
+                });
+
+              if (
+                !session.access_token
+              ) {
+                throw new Error(
+                  'لم يتم إنشاء جلسة دخول'
+                );
+              }
+
+              saveSession(
+                session
+              );
+
+              state.role =
+                'driver';
+
+              const passwordInput =
+                $('password');
+
+              if (
+                passwordInput
+              ) {
+                passwordInput.value =
+                  '';
+              }
+
+              showOrders();
+            }
+
+          } catch (
+            loginError
+          ) {
+
+            if (error) {
+              error.textContent =
+                loginError.message ||
+                'تعذر تسجيل الدخول';
+
+              error.hidden =
+                false;
+            }
+
+          } finally {
+
+            if (button) {
+              button.disabled =
+                false;
+
+              button.textContent =
+                'تسجيل الدخول';
+            }
+          }
+        }
+      );
+    }
+
+    const logoutButton =
+      $('logout-btn');
+
+    if (logoutButton) {
+      logoutButton.addEventListener(
+        'click',
+        () =>
+          logout()
+      );
+    }
+
+    const refreshButton =
+      $('refresh-btn');
+
+    if (refreshButton) {
+      refreshButton.addEventListener(
         'click',
         loadOrders
       );
-
-    $('logout-btn')
-      ?.addEventListener(
-        'click',
-        () => {
-          logout();
-        }
-      );
+    }
 
     document
       .querySelectorAll(
@@ -3271,15 +3526,14 @@
                   '.tab'
                 )
                 .forEach(
-                  (item) =>
-                    item.classList.remove(
-                      'active'
-                    )
+                  (item) => {
+                    item.classList.toggle(
+                      'active',
+                      item ===
+                        tab
+                    );
+                  }
                 );
-
-              tab.classList.add(
-                'active'
-              );
 
               state.filter =
                 tab.dataset.filter ||
@@ -3290,93 +3544,101 @@
           );
         }
       );
-  }
 
-  function restoreSession() {
-
-    const storedDriver =
-      localStorage.getItem(
-        SESSION_KEY
-      );
-
-    if (storedDriver) {
-      try {
-
-        const session =
-          normalizeSession(
-            JSON.parse(
-              storedDriver
-            )
-          );
+    document.addEventListener(
+      'visibilitychange',
+      () => {
 
         if (
-          session.access_token
+          !document.hidden &&
+          state.masterSession?.access_token
         ) {
-          if (
-            session.expires_at >
-            Date.now() / 1000 + 30
-          ) {
-            state.session =
-              session;
+          loadMasterOrders();
 
-            state.role =
-              'driver';
-
-            showOrders();
-
-            return true;
-          }
+          return;
         }
 
-      } catch {
-        localStorage.removeItem(
+        if (
+          !document.hidden &&
+          state.session?.access_token &&
+          !$('orders-view')?.hidden
+        ) {
+          loadOrders();
+        }
+      }
+    );
+  }
+
+  function loadStoredSession() {
+    try {
+      const raw =
+        localStorage.getItem(
           SESSION_KEY
         );
+
+      if (!raw) {
+        return null;
       }
+
+      const parsed =
+        JSON.parse(raw);
+
+      if (
+        !parsed?.access_token ||
+        !parsed?.refresh_token
+      ) {
+        return null;
+      }
+
+      return normalizeSession(
+        parsed
+      );
+
+    } catch {
+      return null;
     }
-
-    const master =
-      loadStoredMasterSession();
-
-    if (master) {
-      state.masterSession =
-        master;
-
-      state.role =
-        'master';
-
-      showMasterView();
-
-      return true;
-    }
-
-    return false;
   }
 
   function boot() {
+    setupEvents();
 
-    setupLogin();
-
-    setupOrders();
+    const masterSession =
+      loadStoredMasterSession();
 
     if (
-      !restoreSession()
+      masterSession?.access_token
     ) {
-      showLogin();
+      saveMasterSession(
+        masterSession
+      );
+
+      state.role =
+        'master_admin';
+
+      showMasterDashboard();
+
+      return;
     }
 
+    const session =
+      loadStoredSession();
+
+    if (
+      session?.access_token
+    ) {
+      saveSession(
+        session
+      );
+
+      state.role =
+        'driver';
+
+      showOrders();
+
+    } else {
+      showLogin();
+    }
   }
 
-  if (
-    document.readyState ===
-    'loading'
-  ) {
-    document.addEventListener(
-      'DOMContentLoaded',
-      boot
-    );
-  } else {
-    boot();
-  }
-
+  boot();
 })();
