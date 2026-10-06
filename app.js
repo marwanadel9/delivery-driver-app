@@ -675,13 +675,31 @@
   }
 
   function extractPlateNames(value) {
-    const text =
-      String(value ?? '').trim();
+    const raw = String(value ?? '')
+      .replace(/\r/g, '')
+      .trim();
 
-    if (!text) {
+    if (!raw) {
       return [];
     }
 
+    // نقرأ اسم كل مقطعة من نفس السطر الموجود في Excel.
+    // لا نعتمد على قائمة أسماء ثابتة، لذلك أي صنف جديد مثل
+    // "أفخاذ" أو أي اسم آخر موجود في Excel سيظهر كما هو.
+    const lines = raw
+      .split(/[\n]+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^Chicken\s*Carton\b/i.test(line));
+
+    if (lines.length > 1) {
+      return lines;
+    }
+
+    const text = lines[0] || raw;
+
+    // في بعض السجلات القديمة تكون الأسماء في سطر واحد.
+    // نحافظ على دعم الأسماء المعروفة بدون التأثير على الأسماء الجديدة.
     const patterns = [
       'أرجل دبوس',
       'ارجل دبوس',
@@ -696,29 +714,16 @@
       'قلوب'
     ];
 
-    const escaped =
-      patterns
-        .sort(
-          (a, b) =>
-            b.length - a.length
-        )
-        .map(
-          (item) =>
-            item.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              '\\$&'
-            )
-        )
-        .join('|');
+    const escaped = patterns
+      .sort((a, b) => b.length - a.length)
+      .map((item) =>
+        item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      )
+      .join('|');
 
-    return (
-      text.match(
-        new RegExp(
-          escaped,
-          'g'
-        )
-      ) || []
-    );
+    const knownNames = text.match(new RegExp(escaped, 'g')) || [];
+
+    return knownNames.length > 1 ? knownNames : [text];
   }
 
   function normalizeArabicDigits(value) {
@@ -3249,16 +3254,6 @@
         }
       }
     );
-
-    setInterval(() => {
-      if (
-        !document.hidden &&
-        state.session?.access_token &&
-        !$('orders-view')?.hidden
-      ) {
-        loadOrders();
-      }
-    }, 10000);
   }
 
   function loadStoredSession() {
