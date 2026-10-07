@@ -10,15 +10,31 @@
   <style>
     /* تكبير ووضوح بيانات الطلب فقط بدون تغيير باقي التصميم */
     .products-section-title strong {
-      font-size: 16px !important;
+      font-size: 18px !important;
       font-weight: 900 !important;
     }
 
     .product-value {
-      font-size: 17px !important;
+      font-size: 19px !important;
       font-weight: 900 !important;
-      line-height: 1.9 !important;
+      line-height: 2 !important;
       white-space: pre-line !important;
+    }
+
+    /* زر تم التسليم: أخضر قبل التسليم وأحمر بعد الضغط عليه */
+    .btn-deliver {
+      background: #16a34a !important;
+      color: #ffffff !important;
+      font-size: 16px !important;
+      font-weight: 900 !important;
+    }
+
+    .order-card.is-done .btn-deliver,
+    .btn-deliver:disabled {
+      background: #dc2626 !important;
+      color: #ffffff !important;
+      opacity: 1 !important;
+      cursor: default !important;
     }
   </style>
 </head>
