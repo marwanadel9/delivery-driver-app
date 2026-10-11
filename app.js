@@ -2038,6 +2038,90 @@
     }
   }
 
+  function masterNormalizeDuplicateValue(value) {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+      .replace(/\s+/g, ' ');
+  }
+
+  function masterInvoiceFingerprint(order) {
+    const invoiceNumber = masterNormalizeDuplicateValue(
+      order.order_number ?? order.invoice_number ?? order.invoice_no ?? ''
+    );
+
+    const fields = [
+      invoiceNumber,
+      order.customer_name,
+      order.emirate,
+      order.area,
+      order.chicken_weights,
+      order.chicken_qtys,
+      order.plate_names,
+      order.plate_qtys,
+      order.order_details,
+      masterMoney(order.total),
+      order.appointment_coordinator,
+      order.note
+    ];
+
+    return fields.map(masterNormalizeDuplicateValue).join('|');
+  }
+
+  function getMasterUniqueOrders() {
+    const unique = [];
+    const byFingerprint = new Map();
+
+    state.masterOrders.forEach((order) => {
+      const fingerprint = masterInvoiceFingerprint(order);
+      const existing = byFingerprint.get(fingerprint);
+
+      if (!existing) {
+        byFingerprint.set(fingerprint, order);
+        unique.push(order);
+        return;
+      }
+
+      const existingIsDriverOne = String(existing.sheet_name || '') === 'Mandoub';
+      const currentIsDriverOne = String(order.sheet_name || '') === 'Mandoub';
+      const existingIsDriverTwo = String(existing.sheet_name || '') === 'Mandoub2';
+      const currentIsDriverTwo = String(order.sheet_name || '') === 'Mandoub2';
+
+      let preferred = existing;
+      let secondary = order;
+
+      if (currentIsDriverOne && !existingIsDriverOne) {
+        preferred = order;
+        secondary = existing;
+        const index = unique.indexOf(existing);
+        if (index !== -1) unique[index] = order;
+        byFingerprint.set(fingerprint, order);
+      }
+
+      if (!String(preferred.phone || '').trim()) {
+        const phoneSource = [preferred, secondary].find((item) =>
+          String(item.phone || '').trim()
+        );
+        if (phoneSource) preferred.phone = phoneSource.phone;
+      }
+
+      if (isDelivered(secondary.delivery_status)) {
+        preferred.delivery_status = secondary.delivery_status;
+      }
+
+      if (!normalizePayment(preferred.payment_method) && normalizePayment(secondary.payment_method)) {
+        preferred.payment_method = secondary.payment_method;
+      }
+
+      if (!String(preferred.location_url || '').trim() && secondary.location_url) {
+        preferred.location_url = secondary.location_url;
+      }
+    });
+
+    return unique;
+  }
+
   function getMasterFilteredOrders() {
     const number = String($('master-search-number')?.value || '').trim().toLowerCase();
     const name = String($('master-search-name')?.value || '').trim().toLowerCase();
@@ -2046,7 +2130,7 @@
     const driver = String($('master-filter-driver')?.value || '').trim();
     const status = String($('master-filter-status')?.value || '').trim();
 
-    return state.masterOrders.filter((order) => {
+    return getMasterUniqueOrders().filter((order) => {
       const orderNumber = String(order.order_number ?? order.id ?? '').toLowerCase();
       const customerName = String(order.customer_name ?? '').toLowerCase();
       const customerPhone = String(order.phone ?? '').toLowerCase();
@@ -2092,7 +2176,7 @@
     const year = now.getFullYear();
     const month = now.getMonth();
 
-    const monthly = state.masterOrders.filter((order) => {
+    const monthly = getMasterUniqueOrders().filter((order) => {
       const date = new Date(order.created_at);
 
       return (
