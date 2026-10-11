@@ -1909,10 +1909,9 @@
 
         <main class="master-wrap">
           <section class="master-stats">
-            <div class="master-stat"><div class="master-stat-label">إجمالي فواتير الشهر</div><div class="master-stat-value" id="master-month-count">0</div></div>
-            <div class="master-stat"><div class="master-stat-label">إجمالي الشهر</div><div class="master-stat-value" id="master-month-total">0 درهم</div></div>
-            <div class="master-stat"><div class="master-stat-label">كاش</div><div class="master-stat-value" id="master-month-cash">0 درهم</div></div>
-            <div class="master-stat"><div class="master-stat-label">تحويل بنكي</div><div class="master-stat-value" id="master-month-bank">0 درهم</div></div>
+            <div class="master-stat"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div></div>
+            <div class="master-stat"><div class="master-stat-label">تحصيل كاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div></div>
+            <div class="master-stat"><div class="master-stat-label">تحصيل تحويل بنكي</div><div class="master-stat-value" id="master-total-bank">0 درهم</div></div>
             <div class="master-stat"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div></div>
           </section>
 
@@ -2172,66 +2171,36 @@
   }
 
   function renderMasterStats() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    const orders = getMasterUniqueOrders();
 
-    const monthly = getMasterUniqueOrders().filter((order) => {
-      const date = new Date(order.created_at);
-
-      return (
-        !Number.isNaN(date.getTime()) &&
-        date.getFullYear() === year &&
-        date.getMonth() === month
-      );
-    });
-
-    const total = monthly.reduce(
-      (sum, order) => sum + masterMoney(order.total),
-      0
-    );
-
-    const cash = monthly
+    const totalCash = orders
       .filter((order) => normalizePayment(order.payment_method) === 'cash')
       .reduce((sum, order) => sum + masterMoney(order.total), 0);
 
-    const bank = monthly
+    const totalBank = orders
       .filter((order) => normalizePayment(order.payment_method) === 'bank_transfer')
       .reduce((sum, order) => sum + masterMoney(order.total), 0);
 
-    const delivered = monthly.filter(
+    const delivered = orders.filter(
       (order) => isDelivered(order.delivery_status)
     ).length;
 
-    if ($('master-month-count')) {
-      $('master-month-count').textContent =
-        monthly.length.toLocaleString('ar-EG');
+    if ($('master-total-count')) {
+      $('master-total-count').textContent = orders.length.toLocaleString('ar-EG');
     }
 
-    if ($('master-month-total')) {
-      $('master-month-total').textContent =
-        `${total.toLocaleString('ar-EG', {
-          maximumFractionDigits: 2
-        })} درهم`;
+    if ($('master-total-cash')) {
+      $('master-total-cash').textContent =
+        `${totalCash.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
     }
 
-    if ($('master-month-cash')) {
-      $('master-month-cash').textContent =
-        `${cash.toLocaleString('ar-EG', {
-          maximumFractionDigits: 2
-        })} درهم`;
-    }
-
-    if ($('master-month-bank')) {
-      $('master-month-bank').textContent =
-        `${bank.toLocaleString('ar-EG', {
-          maximumFractionDigits: 2
-        })} درهم`;
+    if ($('master-total-bank')) {
+      $('master-total-bank').textContent =
+        `${totalBank.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
     }
 
     if ($('master-delivered')) {
-      $('master-delivered').textContent =
-        delivered.toLocaleString('ar-EG');
+      $('master-delivered').textContent = delivered.toLocaleString('ar-EG');
     }
   }
 
