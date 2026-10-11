@@ -1814,10 +1814,10 @@
     style.id = 'master-runtime-style';
 
     style.textContent = `
-      .master-page{min-height:100vh;background:#f5f7f8;color:#172024;font-family:inherit}
-      .master-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;background:#fff;border-bottom:1px solid #e8edef;position:sticky;top:0;z-index:10}
+      .master-page{min-height:100vh;background:linear-gradient(180deg,#f3f6fa 0%,#f8fafc 220px,#f5f7f8 100%);color:#172024;font-family:inherit}
+      .master-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;background:rgba(255,255,255,.96);border-bottom:1px solid #e3e9ef;box-shadow:0 4px 18px rgba(25,42,60,.04);position:sticky;top:0;z-index:10;backdrop-filter:blur(12px)}
       .master-brand{display:flex;align-items:center;gap:12px}
-      .master-logo{width:46px;height:46px;border-radius:14px;background:#172024;color:#fff;display:flex;align-items:center;justify-content:center;font-size:25px}
+      .master-logo{width:50px;height:50px;border-radius:16px;background:linear-gradient(135deg,#172b3a,#286a58);color:#fff;display:flex;align-items:center;justify-content:center;font-size:27px;box-shadow:0 7px 16px rgba(23,43,58,.18)}
       .master-title{font-size:20px;font-weight:900}
       .master-sub{font-size:12px;color:#7b878c;margin-top:4px}
       .master-actions{display:flex;gap:8px;flex-wrap:wrap}
@@ -1826,10 +1826,15 @@
       .master-btn.danger{background:#ffe9e9;color:#b42318}
       .master-btn.primary{background:#172024;color:#fff}
       .master-wrap{padding:20px;max-width:1500px;margin:auto}
-      .master-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:18px}
-      .master-stat{background:#fff;border:1px solid #e8edef;border-radius:16px;padding:15px}
-      .master-stat-label{font-size:12px;color:#7b878c;margin-bottom:8px}
-      .master-stat-value{font-size:22px;font-weight:900}
+      .master-stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;margin-bottom:22px}
+      .master-stat{position:relative;overflow:hidden;background:#fff;border:1px solid #e5ebf0;border-radius:18px;padding:18px 16px;min-height:94px;box-shadow:0 7px 22px rgba(30,49,67,.045);transition:transform .18s ease,box-shadow .18s ease}
+      .master-stat:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(30,49,67,.09)}
+      .master-stat:before{content:'';position:absolute;right:0;top:0;bottom:0;width:4px;background:#64748b}
+      .master-stat.cash:before{background:#16a36a}.master-stat.bank:before{background:#3974d6}.master-stat.count:before{background:#64748b}.master-stat.delivered:before{background:#8b5cf6}
+      .master-stat-label{font-size:12px;color:#64748b;font-weight:800;margin-bottom:12px}
+      .master-stat-value{font-size:22px;font-weight:900;line-height:1.35;letter-spacing:-.3px;color:#182630}
+      .master-stat.cash .master-stat-value{color:#128354}.master-stat.bank .master-stat-value{color:#285fbd}
+      .master-stat-hint{font-size:11px;color:#94a3b8;margin-top:5px}
       .master-filters{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;background:#fff;border:1px solid #e8edef;border-radius:16px;padding:14px;margin-bottom:18px}
       .master-filter{display:flex;flex-direction:column;gap:6px}
       .master-filter label{font-size:11px;color:#7b878c;font-weight:800}
@@ -1866,8 +1871,8 @@
       .master-edit-form textarea{min-height:82px;resize:vertical}
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
-      @media(max-width:1050px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
-      @media(max-width:650px){.master-top{align-items:flex-start}.master-wrap{padding:12px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-filters{grid-template-columns:1fr 1fr}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:17px}.master-btn{padding:9px 11px}}
+      @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
+      @media(max-width:650px){.master-top{align-items:flex-start;padding:14px 12px}.master-wrap{padding:12px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.master-stat{padding:13px 12px;min-height:84px;border-radius:14px}.master-stat-value{font-size:18px}.master-filters{grid-template-columns:1fr 1fr}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:17px}.master-btn{padding:9px 11px}}
     `;
 
     document.head.appendChild(style);
@@ -1909,10 +1914,12 @@
 
         <main class="master-wrap">
           <section class="master-stats">
-            <div class="master-stat"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div></div>
-            <div class="master-stat"><div class="master-stat-label">تحصيل كاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div></div>
-            <div class="master-stat"><div class="master-stat-label">تحصيل تحويل بنكي</div><div class="master-stat-value" id="master-total-bank">0 درهم</div></div>
-            <div class="master-stat"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div></div>
+            <div class="master-stat count"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">فاتورة بدون تكرار</div></div>
+            <div class="master-stat cash"><div class="master-stat-label">فواتير الكاش</div><div class="master-stat-value" id="master-cash-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
+            <div class="master-stat cash"><div class="master-stat-label">تحصيل الكاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div><div class="master-stat-hint">إجمالي المبالغ المسجلة كاش</div></div>
+            <div class="master-stat bank"><div class="master-stat-label">فواتير التحويل البنكي</div><div class="master-stat-value" id="master-bank-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
+            <div class="master-stat bank"><div class="master-stat-label">تحصيل التحويل البنكي</div><div class="master-stat-value" id="master-total-bank">0 درهم</div><div class="master-stat-hint">إجمالي المبالغ المحولة</div></div>
+            <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
           </section>
 
           <section class="master-filters">
@@ -2173,13 +2180,10 @@
   function renderMasterStats() {
     const orders = getMasterUniqueOrders();
 
-    const totalCash = orders
-      .filter((order) => normalizePayment(order.payment_method) === 'cash')
-      .reduce((sum, order) => sum + masterMoney(order.total), 0);
-
-    const totalBank = orders
-      .filter((order) => normalizePayment(order.payment_method) === 'bank_transfer')
-      .reduce((sum, order) => sum + masterMoney(order.total), 0);
+    const cashOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'cash');
+    const bankOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'bank_transfer');
+    const totalCash = cashOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
+    const totalBank = bankOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
 
     const delivered = orders.filter(
       (order) => isDelivered(order.delivery_status)
@@ -2187,6 +2191,14 @@
 
     if ($('master-total-count')) {
       $('master-total-count').textContent = orders.length.toLocaleString('ar-EG');
+    }
+
+    if ($('master-cash-count')) {
+      $('master-cash-count').textContent = cashOrders.length.toLocaleString('ar-EG');
+    }
+
+    if ($('master-bank-count')) {
+      $('master-bank-count').textContent = bankOrders.length.toLocaleString('ar-EG');
     }
 
     if ($('master-total-cash')) {
