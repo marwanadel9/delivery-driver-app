@@ -2150,7 +2150,7 @@
     const status = String($('master-filter-status')?.value || '').trim();
 
     const hasExplicitSearch = Boolean(number || name || phone || date || driver || status);
-    const today = masterDateInput(new Date().toISOString());
+    const today = masterDateInput(new Date());
 
     return getMasterUniqueOrders().filter((order) => {
       const orderNumber = String(order.order_number ?? order.id ?? '').toLowerCase();
