@@ -1194,6 +1194,64 @@ export default {
       }
 
       if (
+        path === "/api/master/transfer-received" &&
+        request.method === "POST"
+      ) {
+        const auth = await requireMaster(request, env);
+
+        if (auth.error) {
+          return json({ error: auth.error }, auth.status);
+        }
+
+        const body = await request.json().catch(function () {
+          return {};
+        });
+
+        const orderId = Number(body.orderId);
+        const received = body.received === true;
+
+        if (!Number.isInteger(orderId) || orderId <= 0) {
+          return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+        }
+
+        const rpcResponse = await supabaseRequest(
+          "/rest/v1/rpc/master_set_transfer_received",
+          {
+            method: "POST",
+            headers: {
+              apikey: env.SUPABASE_ANON_KEY,
+              Authorization: "Bearer " + auth.token,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              p_order_id: orderId,
+              p_received: received
+            })
+          }
+        );
+
+        const rpcData = await rpcResponse.json().catch(function () {
+          return null;
+        });
+
+        if (!rpcResponse.ok) {
+          return json({
+            error:
+              (rpcData && rpcData.message) ||
+              (rpcData && rpcData.hint) ||
+              (rpcData && rpcData.error) ||
+              "تعذر حفظ تأكيد استلام التحويل"
+          }, 400);
+        }
+
+        return json({
+          success: true,
+          order: rpcData,
+          bank_transfer_received: received
+        });
+      }
+
+      if (
         path === "/api/excel-sync" &&
         request.method === "POST"
       ) {
