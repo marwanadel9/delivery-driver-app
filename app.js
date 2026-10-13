@@ -1327,6 +1327,30 @@
         }
       }
 
+      // Optional villa gate photo: show only when the API returns a valid URL.
+      const gatePhotoUrl = safeUrl(
+        firstValue(order, ['gate_photo_url', 'gatePhotoUrl'])
+      );
+      const oldGatePhotoButton = node.querySelector('.gate-photo-btn');
+      if (oldGatePhotoButton) oldGatePhotoButton.remove();
+
+      if (gatePhotoUrl) {
+        const gatePhotoButton = document.createElement('a');
+        gatePhotoButton.className = 'gate-photo-btn';
+        gatePhotoButton.href = gatePhotoUrl;
+        gatePhotoButton.target = '_blank';
+        gatePhotoButton.rel = 'noopener noreferrer';
+        gatePhotoButton.textContent = '📷 عرض صورة بوابة الفيلا';
+        gatePhotoButton.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin:10px 0;padding:11px 14px;border-radius:10px;background:#e8f2ff;color:#1455b8;border:1px solid #b9d4ff;text-align:center;font-weight:800;text-decoration:none;';
+
+        const insertBefore = node.querySelector('.payment-current, .payment-buttons, .payment-options, .btn-deliver');
+        if (insertBefore && insertBefore.parentNode) {
+          insertBefore.parentNode.insertBefore(gatePhotoButton, insertBefore);
+        } else {
+          node.appendChild(gatePhotoButton);
+        }
+      }
+
       const payment =
         normalizePayment(
           order.payment_method
@@ -2149,27 +2173,10 @@
     const driver = String($('master-filter-driver')?.value || '').trim();
     const status = String($('master-filter-status')?.value || '').trim();
 
-    const hasExplicitSearch = Boolean(number || name || phone || date || driver || status);
-    const today = masterDateInput(new Date());
-
     return getMasterUniqueOrders().filter((order) => {
       const orderNumber = String(order.order_number ?? order.id ?? '').toLowerCase();
       const customerName = String(order.customer_name ?? '').toLowerCase();
       const customerPhone = String(order.phone ?? '').toLowerCase();
-
-      // العرض الافتراضي: فواتير اليوم كلها، ومعها الفواتير القديمة غير المسلّمة
-      // والتحويلات البنكية التي لم يتم تأكيد استلامها. البحث بالتاريخ يعرض الأرشيف كاملًا.
-      if (!hasExplicitSearch) {
-        const orderDate = masterDateInput(order.created_at);
-        const delivered = isDelivered(order.delivery_status);
-        const transferPending =
-          normalizePayment(order.payment_method) === 'bank_transfer' &&
-          order.bank_transfer_received !== true;
-
-        if (orderDate !== today && delivered && !transferPending) {
-          return false;
-        }
-      }
 
       if (number && !orderNumber.includes(number)) {
         return false;
@@ -2208,10 +2215,7 @@
   }
 
   function renderMasterStats() {
-    // اجعل بطاقات الملخص تتبع نفس الفواتير الظاهرة في الجدول:
-    // العرض الافتراضي يعرض فواتير اليوم والطلبات القديمة التي ما زالت معلقة،
-    // والبحث بالتاريخ يعرض فواتير التاريخ المختار فقط.
-    const orders = getMasterFilteredOrders();
+    const orders = getMasterUniqueOrders();
 
     const cashOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'cash');
     const bankOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'bank_transfer');
