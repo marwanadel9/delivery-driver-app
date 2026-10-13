@@ -1844,6 +1844,10 @@
       .master-table th,.master-table td{padding:12px;border-bottom:1px solid #edf1f2;text-align:right;white-space:nowrap}
       .master-table th{font-size:11px;color:#718087;background:#fafbfb}
       .master-table td{font-size:12px}
+      .master-table tbody tr.master-transfer-pending td{background:#fff0f0!important;color:#8f1d1d;border-bottom-color:#ffd2d2}
+      .master-table tbody tr.master-transfer-received td{background:#eaf8ef!important;color:#155b32;border-bottom-color:#c8ebd2}
+      .master-table tbody tr.master-transfer-pending:hover td{background:#ffe3e3!important}
+      .master-table tbody tr.master-transfer-received:hover td{background:#d9f2e1!important}
       .master-badge{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:750;white-space:nowrap}
       .master-badge.ok{background:#e8f7ee;color:#16723b}
       .master-badge.pending{background:#fff5dc;color:#8a5a00}
@@ -2252,6 +2256,12 @@
 
       const tr =
         document.createElement('tr');
+
+      if (payment === 'bank_transfer') {
+        tr.classList.add(order.bank_transfer_received === true
+          ? 'master-transfer-received'
+          : 'master-transfer-pending');
+      }
 
       tr.innerHTML = `
         <td>
