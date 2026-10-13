@@ -1850,6 +1850,7 @@
       .master-badge.cash{background:#e9f7ed;color:#1d6e3b}
       .master-badge.bank{background:#e9f0ff;color:#315b9a}
       .master-view{border:0;background:#172024;color:#fff;border-radius:9px;padding:8px 11px;cursor:pointer;font-weight:700}
+      .master-transfer-btn{border:0;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:800;font-size:11px;white-space:nowrap;background:#e8f7ee;color:#16723b}.master-transfer-btn.pending{background:#fff2d6;color:#8a5a00}.master-transfer-btn:disabled{opacity:.6;cursor:wait}.master-transfer-state{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:800;white-space:nowrap}.master-transfer-state.received{background:#e8f7ee;color:#16723b}.master-transfer-state.waiting{background:#fff2d6;color:#8a5a00}
       .master-empty{text-align:center;padding:50px 20px;color:#7a878c}
       .master-modal{position:fixed;inset:0;z-index:100;background:rgba(8,18,22,.55);display:none;align-items:center;justify-content:center;padding:18px}
       .master-modal.open{display:flex}
@@ -1918,7 +1919,7 @@
             <div class="master-stat cash"><div class="master-stat-label">فواتير الكاش</div><div class="master-stat-value" id="master-cash-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
             <div class="master-stat cash"><div class="master-stat-label">تحصيل الكاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div><div class="master-stat-hint">إجمالي المبالغ المسجلة كاش</div></div>
             <div class="master-stat bank"><div class="master-stat-label">فواتير التحويل البنكي</div><div class="master-stat-value" id="master-bank-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
-            <div class="master-stat bank"><div class="master-stat-label">تحصيل التحويل البنكي</div><div class="master-stat-value" id="master-total-bank">0 درهم</div><div class="master-stat-hint">إجمالي المبالغ المحولة</div></div>
+            <div class="master-stat bank"><div class="master-stat-label">تحصيل التحويل البنكي</div><div class="master-stat-value" id="master-total-bank">0 درهم</div><div class="master-stat-hint">إجمالي التحويلات المستلمة والمؤكدة فقط</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
           </section>
 
@@ -1973,6 +1974,7 @@
                   <th>المندوب</th>
                   <th>الإجمالي</th>
                   <th>الدفع</th>
+                  <th>استلام التحويل</th>
                   <th>الحالة</th>
                   <th>التاريخ</th>
                   <th>عرض</th>
@@ -2024,7 +2026,7 @@
     const body = $('master-orders-body');
 
     if (body) {
-      body.innerHTML = '<tr><td colspan="10" class="master-empty">جارٍ تحميل الفواتير…</td></tr>';
+      body.innerHTML = '<tr><td colspan="11" class="master-empty">جارٍ تحميل الفواتير…</td></tr>';
     }
 
     try {
@@ -2039,7 +2041,7 @@
       renderMasterOrders();
     } catch (error) {
       if (error.message !== 'expired' && body) {
-        body.innerHTML = `<tr><td colspan="10" class="master-empty">${masterEscape(error.message)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="11" class="master-empty">${masterEscape(error.message)}</td></tr>`;
       }
     }
   }
@@ -2116,6 +2118,10 @@
         preferred.delivery_status = secondary.delivery_status;
       }
 
+      if (secondary.bank_transfer_received === true) {
+        preferred.bank_transfer_received = true;
+      }
+
       if (!normalizePayment(preferred.payment_method) && normalizePayment(secondary.payment_method)) {
         preferred.payment_method = secondary.payment_method;
       }
@@ -2183,7 +2189,8 @@
     const cashOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'cash');
     const bankOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'bank_transfer');
     const totalCash = cashOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
-    const totalBank = bankOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
+    const receivedBankOrders = bankOrders.filter((order) => order.bank_transfer_received === true);
+    const totalBank = receivedBankOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
 
     const delivered = orders.filter(
       (order) => isDelivered(order.delivery_status)
@@ -2229,7 +2236,7 @@
 
     if (!orders.length) {
       body.innerHTML =
-        '<tr><td colspan="10" class="master-empty">لا توجد فواتير مطابقة للبحث.</td></tr>';
+        '<tr><td colspan="11" class="master-empty">لا توجد فواتير مطابقة للبحث.</td></tr>';
 
       return;
     }
@@ -2306,6 +2313,14 @@
         </td>
 
         <td>
+          ${payment === 'bank_transfer'
+            ? (order.bank_transfer_received === true
+              ? '<span class="master-transfer-state received">✓ تم الاستلام</span>'
+              : `<button class="master-transfer-btn pending" data-master-transfer="${masterEscape(order.id)}">تأكيد الاستلام</button>`)
+            : '<span class="master-transfer-state">—</span>'}
+        </td>
+
+        <td>
           <span class="master-badge ${
             delivered
               ? 'ok'
@@ -2348,8 +2363,69 @@
         );
       }
 
+      const transferButton = tr.querySelector('[data-master-transfer]');
+      if (transferButton) {
+        transferButton.addEventListener('click', () => setMasterTransferReceived(order, true, transferButton));
+      }
+
       body.appendChild(tr);
     });
+  }
+
+  async function setMasterTransferReceived(order, received, button) {
+    if (normalizePayment(order.payment_method) !== 'bank_transfer') {
+      toast('تأكيد الاستلام متاح لفواتير التحويل البنكي فقط', true);
+      return;
+    }
+
+    if (order.bank_transfer_received === received) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      received
+        ? `تأكيد استلام التحويل البنكي للفاتورة #${order.order_number ?? order.id ?? ''}؟
+
+بعد التأكيد سيُضاف المبلغ إلى إجمالي التحويلات المستلمة.`
+        : `إلغاء تأكيد استلام التحويل للفاتورة #${order.order_number ?? order.id ?? ''}؟`
+    );
+
+    if (!confirmed) return;
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'جارٍ الحفظ…';
+    }
+
+    const fingerprint = masterInvoiceFingerprint(order);
+    const matchingOrders = state.masterOrders.filter((item) =>
+      masterInvoiceFingerprint(item) === fingerprint &&
+      normalizePayment(item.payment_method) === 'bank_transfer'
+    );
+    const targets = matchingOrders.length ? matchingOrders : [order];
+
+    try {
+      for (const item of targets) {
+        await masterFetch('/api/master/transfer-received', {
+          method: 'POST',
+          body: JSON.stringify({ orderId: item.id, received })
+        });
+        item.bank_transfer_received = received;
+      }
+
+      order.bank_transfer_received = received;
+      renderMasterOrders();
+      toast(received ? 'تم تأكيد استلام التحويل وتحديث الإجمالي ✅' : 'تم إلغاء تأكيد استلام التحويل');
+    } catch (error) {
+      if (error.message !== 'expired') {
+        toast(error.message || 'تعذر حفظ تأكيد الاستلام', true);
+      }
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'تأكيد الاستلام';
+      }
+      await loadMasterOrders();
+    }
   }
 
   function openMasterOrder(order) {
