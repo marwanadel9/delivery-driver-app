@@ -2208,7 +2208,10 @@
   }
 
   function renderMasterStats() {
-    const orders = getMasterUniqueOrders();
+    // اجعل بطاقات الملخص تتبع نفس الفواتير الظاهرة في الجدول:
+    // العرض الافتراضي يعرض فواتير اليوم والطلبات القديمة التي ما زالت معلقة،
+    // والبحث بالتاريخ يعرض فواتير التاريخ المختار فقط.
+    const orders = getMasterFilteredOrders();
 
     const cashOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'cash');
     const bankOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'bank_transfer');
