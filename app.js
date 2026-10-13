@@ -2149,15 +2149,27 @@
     const driver = String($('master-filter-driver')?.value || '').trim();
     const status = String($('master-filter-status')?.value || '').trim();
 
-    return getMasterUniqueOrders().filter((order) => {
-      // عرض الفواتير التي تم توصيلها فقط في لوحة الماستر.
-      if (!isDelivered(order.delivery_status)) {
-        return false;
-      }
+    const hasExplicitSearch = Boolean(number || name || phone || date || driver || status);
+    const today = masterDateInput(new Date().toISOString());
 
+    return getMasterUniqueOrders().filter((order) => {
       const orderNumber = String(order.order_number ?? order.id ?? '').toLowerCase();
       const customerName = String(order.customer_name ?? '').toLowerCase();
       const customerPhone = String(order.phone ?? '').toLowerCase();
+
+      // العرض الافتراضي: فواتير اليوم كلها، ومعها الفواتير القديمة غير المسلّمة
+      // والتحويلات البنكية التي لم يتم تأكيد استلامها. البحث بالتاريخ يعرض الأرشيف كاملًا.
+      if (!hasExplicitSearch) {
+        const orderDate = masterDateInput(order.created_at);
+        const delivered = isDelivered(order.delivery_status);
+        const transferPending =
+          normalizePayment(order.payment_method) === 'bank_transfer' &&
+          order.bank_transfer_received !== true;
+
+        if (orderDate !== today && delivered && !transferPending) {
+          return false;
+        }
+      }
 
       if (number && !orderNumber.includes(number)) {
         return false;
