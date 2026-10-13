@@ -745,7 +745,7 @@ export default {
 
         const ordersResponse =
           await supabaseRequest(
-            "/rest/v1/orders?select=*&order=id.asc",
+            "/rest/v1/master_orders_archive?select=*&order=id.asc",
             {
               headers: {
                 apikey:
@@ -766,7 +766,7 @@ export default {
           return json(
             {
               error:
-                "تعذر تحميل فواتير الماستر"
+                "تعذر تحميل أرشيف فواتير الماستر. تأكد من تشغيل SQL الخاص بصلاحيات الأرشيف."
             },
             500
           );
@@ -1170,6 +1170,41 @@ export default {
           });
 
         if (!rpcResponse.ok) {
+          const archiveDeleteResponse =
+            await supabaseRequest(
+              "/rest/v1/master_orders_archive?id=eq." +
+                encodeURIComponent(orderId),
+              {
+                method: "DELETE",
+                headers: {
+                  apikey:
+                    env.SUPABASE_ANON_KEY,
+                  Authorization:
+                    "Bearer " +
+                    auth.token,
+                  Prefer:
+                    "return=representation"
+                }
+              }
+            );
+
+          const archivedRows =
+            await archiveDeleteResponse.json().catch(function () {
+              return [];
+            });
+
+          if (
+            archiveDeleteResponse.ok &&
+            Array.isArray(archivedRows) &&
+            archivedRows.length > 0
+          ) {
+            return json({
+              success: true,
+              data: archivedRows[0],
+              archived_only: true
+            });
+          }
+
           return json(
             {
               error:
@@ -1182,6 +1217,43 @@ export default {
                 "تعذر حذف الفاتورة"
             },
             400
+          );
+        }
+
+        const archiveDeleteResponse =
+          await supabaseRequest(
+            "/rest/v1/master_orders_archive?id=eq." +
+              encodeURIComponent(orderId),
+            {
+              method: "DELETE",
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  auth.token,
+                Prefer:
+                  "return=representation"
+              }
+            }
+          );
+
+        if (!archiveDeleteResponse.ok) {
+          const archiveError =
+            await archiveDeleteResponse.json().catch(function () {
+              return null;
+            });
+
+          return json(
+            {
+              error:
+                (archiveError &&
+                  (archiveError.message ||
+                    archiveError.hint ||
+                    archiveError.error)) ||
+                "تم حذف الفاتورة من الطلبات لكن تعذر حذف نسخة الأرشيف"
+            },
+            500
           );
         }
 
