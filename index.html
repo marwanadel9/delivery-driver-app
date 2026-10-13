@@ -36,6 +36,233 @@
       opacity: 1 !important;
       cursor: default !important;
     }
+
+    /* تحسين عرض المندوب على الهواتف دون تغيير وظائف الموقع */
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      overflow-x: hidden;
+    }
+
+    button, input, select, textarea, a {
+      touch-action: manipulation;
+    }
+
+    button, .call-btn, .location-btn, .phone-link {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    img, video, iframe {
+      max-width: 100%;
+    }
+
+    @media (max-width: 650px) {
+      .app-shell {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: clip;
+      }
+
+      .topbar-inner {
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 10px 12px;
+      }
+
+      .topbar-brand {
+        min-width: 0;
+      }
+
+      .driver-profile {
+        flex: 1 1 100%;
+        min-width: 0;
+        order: 3;
+      }
+
+      .topbar-actions {
+        margin-inline-start: auto;
+      }
+
+      .main-content {
+        width: 100%;
+        box-sizing: border-box;
+        padding-inline: 12px;
+      }
+
+      .welcome-section {
+        gap: 10px;
+        align-items: center;
+      }
+
+      .welcome-section h1 {
+        font-size: clamp(20px, 5.5vw, 26px);
+      }
+
+      .welcome-section p {
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      .orders-counter {
+        flex: 0 0 auto;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+
+      .stat-card {
+        min-width: 0;
+        padding: 12px;
+      }
+
+      .tabs {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        padding: 8px 0;
+        background: #f8fafc;
+      }
+
+      .tab {
+        min-width: 0;
+        padding: 10px 5px;
+        font-size: 12px;
+        white-space: normal;
+      }
+
+      .orders-list {
+        gap: 12px;
+      }
+
+      .order-card {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 13px;
+        border-radius: 16px;
+      }
+
+      .order-card-head,
+      .customer-row,
+      .order-total,
+      .payment-title,
+      .order-actions {
+        gap: 9px;
+      }
+
+      .customer-main {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .customer-main h2 {
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      .customer-location-grid,
+      .order-details {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .info-item {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .products-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+      }
+
+      .product-box {
+        min-width: 0;
+        padding: 10px;
+        overflow-wrap: anywhere;
+      }
+
+      .product-value {
+        display: block;
+        font-size: clamp(17px, 4.8vw, 19px) !important;
+        overflow-wrap: anywhere;
+      }
+
+      .payment-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .payment-btn {
+        min-width: 0;
+        min-height: 46px;
+        padding: 10px 7px;
+        gap: 5px;
+      }
+
+      .order-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .location-btn,
+      .btn-deliver {
+        min-width: 0;
+        min-height: 48px;
+        box-sizing: border-box;
+        justify-content: center;
+        padding: 11px 8px;
+        font-size: 14px;
+      }
+
+      .toast {
+        left: 12px;
+        right: 12px;
+        bottom: max(12px, env(safe-area-inset-bottom));
+        width: auto;
+        box-sizing: border-box;
+      }
+    }
+
+    @media (max-width: 380px) {
+      .main-content {
+        padding-inline: 9px;
+      }
+
+      .order-card {
+        padding: 10px;
+      }
+
+      .customer-location-grid,
+      .order-details {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .order-actions {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .master-top {
+        flex-wrap: wrap;
+      }
+    }
+
+    @supports (padding: max(0px)) {
+      .main-content {
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+      }
+    }
+
   </style>
 </head>
 <body>
