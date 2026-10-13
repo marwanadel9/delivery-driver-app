@@ -1373,7 +1373,7 @@ export default {
           return json({ error: "حجم الصورة يجب ألا يتجاوز 8 ميجابايت" }, 400);
         }
 
-        const bucketName = "صور البوابة 3";
+        const bucketName = "gate-photos 3";
         const objectPath = "invoices/" + invoiceNumber + "." + allowedTypes[mimeType];
         const storagePath = "/storage/v1/object/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
         const uploadResponse = await supabaseRequest(storagePath, {
