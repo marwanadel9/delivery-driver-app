@@ -1826,11 +1826,11 @@
       .master-btn.danger{background:#ffe9e9;color:#b42318}
       .master-btn.primary{background:#172024;color:#fff}
       .master-wrap{padding:20px;max-width:1500px;margin:auto}
-      .master-stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;margin-bottom:22px}
+      .master-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:22px}
       .master-stat{position:relative;overflow:hidden;background:#fff;border:1px solid #e5ebf0;border-radius:18px;padding:18px 16px;min-height:94px;box-shadow:0 7px 22px rgba(30,49,67,.045);transition:transform .18s ease,box-shadow .18s ease}
       .master-stat:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(30,49,67,.09)}
       .master-stat:before{content:'';position:absolute;right:0;top:0;bottom:0;width:4px;background:#64748b}
-      .master-stat.cash:before{background:#16a36a}.master-stat.bank:before{background:#3974d6}.master-stat.count:before{background:#64748b}.master-stat.delivered:before{background:#8b5cf6}
+      .master-stat.cash:before{background:#16a36a}.master-stat.bank:before{background:#3974d6}.master-stat.count:before{background:#64748b}.master-stat.delivered:before{background:#8b5cf6}.master-stat.pending-bank:before{background:#dc6262}.master-stat.collected:before{background:#0f8b8d}.master-stat.pending-bank .master-stat-value{color:#b42318}.master-stat.collected .master-stat-value{color:#087f80}
       .master-stat-label{font-size:12px;color:#64748b;font-weight:800;margin-bottom:12px}
       .master-stat-value{font-size:22px;font-weight:900;line-height:1.35;letter-spacing:-.3px;color:#182630}
       .master-stat.cash .master-stat-value{color:#128354}.master-stat.bank .master-stat-value{color:#285fbd}
@@ -1877,7 +1877,7 @@
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
       @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
-      @media(max-width:650px){.master-top{align-items:flex-start;padding:14px 12px}.master-wrap{padding:12px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.master-stat{padding:13px 12px;min-height:84px;border-radius:14px}.master-stat-value{font-size:18px}.master-filters{grid-template-columns:1fr 1fr}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:17px}.master-btn{padding:9px 11px}}
+      @media(max-width:650px){.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
     `;
 
     document.head.appendChild(style);
@@ -1919,11 +1919,14 @@
 
         <main class="master-wrap">
           <section class="master-stats">
-            <div class="master-stat count"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">فاتورة بدون تكرار</div></div>
+            <div class="master-stat count"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">عدد الفواتير بدون تكرار</div></div>
             <div class="master-stat cash"><div class="master-stat-label">فواتير الكاش</div><div class="master-stat-value" id="master-cash-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
-            <div class="master-stat cash"><div class="master-stat-label">تحصيل الكاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div><div class="master-stat-hint">إجمالي المبالغ المسجلة كاش</div></div>
+            <div class="master-stat cash"><div class="master-stat-label">إجمالي الكاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div><div class="master-stat-hint">إجمالي الفواتير المسجلة كاش</div></div>
             <div class="master-stat bank"><div class="master-stat-label">فواتير التحويل البنكي</div><div class="master-stat-value" id="master-bank-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
-            <div class="master-stat bank"><div class="master-stat-label">تحصيل التحويل البنكي</div><div class="master-stat-value" id="master-total-bank">0 درهم</div><div class="master-stat-hint">إجمالي التحويلات المستلمة والمؤكدة فقط</div></div>
+            <div class="master-stat bank"><div class="master-stat-label">إجمالي التحويلات</div><div class="master-stat-value" id="master-bank-all">0 درهم</div><div class="master-stat-hint">قيمة جميع فواتير التحويل البنكي</div></div>
+            <div class="master-stat bank"><div class="master-stat-label">التحويلات المستلمة</div><div class="master-stat-value" id="master-total-bank">0 درهم</div><div class="master-stat-hint">المبالغ المؤكد وصولها فقط</div></div>
+            <div class="master-stat pending-bank"><div class="master-stat-label">المتبقي من التحويلات</div><div class="master-stat-value" id="master-bank-pending">0 درهم</div><div class="master-stat-hint">تحويلات لم يتم تأكيد استلامها</div></div>
+            <div class="master-stat collected"><div class="master-stat-label">إجمالي المبالغ المسجلة/المستلمة</div><div class="master-stat-value" id="master-total-received">0 درهم</div><div class="master-stat-hint">الكاش المسجل + التحويلات المؤكدة</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
           </section>
 
@@ -2192,13 +2195,22 @@
 
     const cashOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'cash');
     const bankOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'bank_transfer');
+
+    // الكاش هنا هو إجمالي الفواتير المسجلة بطريقة دفع كاش.
+    // لا يوجد في البيانات الحالية حقل مستقل يؤكد تحصيل كل فاتورة كاش.
     const totalCash = cashOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
+    const totalBankAll = bankOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
     const receivedBankOrders = bankOrders.filter((order) => order.bank_transfer_received === true);
-    const totalBank = receivedBankOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
+    const totalBankReceived = receivedBankOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
+    const totalBankPending = Math.max(0, totalBankAll - totalBankReceived);
+    const totalReceived = totalCash + totalBankReceived;
 
     const delivered = orders.filter(
       (order) => isDelivered(order.delivery_status)
     ).length;
+
+    const moneyText = (value) =>
+      `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
 
     if ($('master-total-count')) {
       $('master-total-count').textContent = orders.length.toLocaleString('ar-EG');
@@ -2213,13 +2225,23 @@
     }
 
     if ($('master-total-cash')) {
-      $('master-total-cash').textContent =
-        `${totalCash.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+      $('master-total-cash').textContent = moneyText(totalCash);
+    }
+
+    if ($('master-bank-all')) {
+      $('master-bank-all').textContent = moneyText(totalBankAll);
     }
 
     if ($('master-total-bank')) {
-      $('master-total-bank').textContent =
-        `${totalBank.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+      $('master-total-bank').textContent = moneyText(totalBankReceived);
+    }
+
+    if ($('master-bank-pending')) {
+      $('master-bank-pending').textContent = moneyText(totalBankPending);
+    }
+
+    if ($('master-total-received')) {
+      $('master-total-received').textContent = moneyText(totalReceived);
     }
 
     if ($('master-delivered')) {
