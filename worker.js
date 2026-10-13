@@ -1324,6 +1324,83 @@ export default {
       }
 
       if (
+        path === "/api/gate-photo" &&
+        request.method === "POST"
+      ) {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+
+        if (secret !== env.EXCEL_SYNC_SECRET) {
+          return json({ error: "غير مصرح" }, 401);
+        }
+
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+          return json({ error: "إعداد رفع الصور غير مكتمل" }, 500);
+        }
+
+        const contentType = request.headers.get("Content-Type") || "";
+        if (!contentType.toLowerCase().includes("multipart/form-data")) {
+          return json({ error: "يجب إرسال الصورة بصيغة multipart/form-data" }, 400);
+        }
+
+        const form = await request.formData().catch(function () { return null; });
+        if (!form) {
+          return json({ error: "تعذر قراءة بيانات الصورة" }, 400);
+        }
+
+        const file = form.get("file");
+        const invoiceNumber = String(form.get("invoice_number") || "").trim();
+
+        if (!file || typeof file.arrayBuffer !== "function") {
+          return json({ error: "لم يتم اختيار صورة" }, 400);
+        }
+
+        if (!invoiceNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(invoiceNumber)) {
+          return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+        }
+
+        const mimeType = String(file.type || "").toLowerCase();
+        const allowedTypes = {
+          "image/jpeg": "jpg",
+          "image/png": "png",
+          "image/webp": "webp"
+        };
+
+        if (!allowedTypes[mimeType]) {
+          return json({ error: "الصيغ المسموحة: JPG وPNG وWEBP" }, 400);
+        }
+
+        if (file.size > 8 * 1024 * 1024) {
+          return json({ error: "حجم الصورة يجب ألا يتجاوز 8 ميجابايت" }, 400);
+        }
+
+        const bucketName = "صور البوابة 3";
+        const objectPath = "invoices/" + invoiceNumber + "." + allowedTypes[mimeType];
+        const storagePath = "/storage/v1/object/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
+        const uploadResponse = await supabaseRequest(storagePath, {
+          method: "POST",
+          headers: {
+            apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
+            "Content-Type": mimeType,
+            "x-upsert": "true",
+            "Cache-Control": "3600"
+          },
+          body: await file.arrayBuffer()
+        });
+
+        const uploadData = await uploadResponse.json().catch(function () { return null; });
+        if (!uploadResponse.ok) {
+          return json({
+            error: (uploadData && (uploadData.message || uploadData.error)) || "فشل رفع الصورة إلى التخزين السحابي"
+          }, 502);
+        }
+
+        const publicUrl = SUPABASE_URL + "/storage/v1/object/public/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
+
+        return json({ success: true, invoice_number: invoiceNumber, gate_photo_url: publicUrl });
+      }
+
+      if (
         path === "/api/excel-sync" &&
         request.method === "POST"
       ) {
