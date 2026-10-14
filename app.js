@@ -955,6 +955,18 @@
         orderNumber
       );
 
+      const prepaid = order.paid_in_advance === true || String(order.paid_in_advance).trim().toLowerCase() === 'true';
+      if (prepaid) {
+        const numberElement = node.querySelector('[data-f="order_number"]');
+        if (numberElement) {
+          const badge = document.createElement('span');
+          badge.className = 'paid-advance-badge';
+          badge.textContent = 'مدفوع';
+          badge.setAttribute('aria-label', 'مدفوع مقدمًا');
+          numberElement.insertAdjacentElement('beforebegin', badge);
+        }
+      }
+
       setText(
         node,
         'customer_name',
@@ -1176,18 +1188,12 @@
         legacyDetails
       );
 
-      setText(
-        node,
-        'appointment_coordinator',
-        firstValue(
-          order,
-          [
-            'appointment_coordinator',
-            'appointmentCoordinator',
-            'coordinator'
-          ]
-        )
-      );
+      const coordinatorField = node.querySelector('[data-f="appointment_coordinator"]');
+      if (coordinatorField) {
+        const coordinatorRow = coordinatorField.closest('.info-item, .order-section, .detail-row, .field-row, .master-detail');
+        if (coordinatorRow) coordinatorRow.style.display = 'none';
+        else coordinatorField.style.display = 'none';
+      }
 
       setText(
         node,
@@ -1924,10 +1930,13 @@
       .master-table tbody tr.master-transfer-pending:hover td{background:#ffe3e3!important}
       .master-table tbody tr.master-transfer-received:hover td{background:#d9f2e1!important}
       .master-badge{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:750;white-space:nowrap}
+      .master-badge.paid{background:#fff0f0;color:#c62828;border:1px solid #ffc7c7;box-shadow:0 2px 7px rgba(198,40,40,.10)}
+      .paid-advance-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#fff1f1,#ffe2e2);color:#c62828;border:1px solid #ffb9b9;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;box-shadow:0 3px 10px rgba(198,40,40,.10);white-space:nowrap}
+      .paid-advance-badge:before{content:'✓';display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#d92332;color:#fff;font-size:10px}
       .master-badge.ok{background:#e8f7ee;color:#16723b}
       .master-badge.pending{background:#fff5dc;color:#8a5a00}
       .master-badge.cash{background:#e9f7ed;color:#1d6e3b}
-      .master-badge.bank{background:#e9f0ff;color:#315b9a}.master-badge.advance{background:#e7f7f4;color:#086b61;border:1px solid #a9e4da}
+      .master-badge.bank{background:#e9f0ff;color:#315b9a}.master-badge.advance{background:#fff0f0;color:#c62828;border:1px solid #ffc7c7;box-shadow:0 2px 7px rgba(198,40,40,.10)}
       .master-view{border:0;background:#172024;color:#fff;border-radius:9px;padding:8px 11px;cursor:pointer;font-weight:700}
       .master-transfer-btn{border:0;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:800;font-size:11px;white-space:nowrap;background:#e8f7ee;color:#16723b}.master-transfer-btn.pending{background:#fff2d6;color:#8a5a00}.master-transfer-btn:disabled{opacity:.6;cursor:wait}.master-transfer-state{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:800;white-space:nowrap}.master-transfer-state.received{background:#e8f7ee;color:#16723b}.master-transfer-state.waiting{background:#fff2d6;color:#8a5a00}
       .master-empty{text-align:center;padding:50px 20px;color:#7a878c}
@@ -2535,7 +2544,7 @@
           }">
             ${masterEscape(
               paidInAdvance
-                ? 'متحول مقدم'
+                ? 'مدفوع'
                 : masterPaymentText(order.payment_method)
             )}
           </span>
@@ -2771,7 +2780,7 @@
         <div class="master-detail">
           <small>حالة الدفع</small>
           <strong>
-            ${masterEscape(order.paid_in_advance === true ? 'متحول مقدم' : '—')}
+            ${masterEscape((order.paid_in_advance === true || String(order.paid_in_advance).trim().toLowerCase() === 'true') ? 'مدفوع' : '—')}
           </strong>
         </div>
 
@@ -2782,15 +2791,6 @@
               masterStatusText(
                 order.delivery_status
               )
-            )}
-          </strong>
-        </div>
-
-        <div class="master-detail">
-          <small>منسق الموعد</small>
-          <strong>
-            ${masterEscape(
-              order.appointment_coordinator || '—'
             )}
           </strong>
         </div>
@@ -3048,17 +3048,6 @@
           </label>
 
           <label>
-            منسق الموعد
-            <input
-              id="master-edit-coordinator"
-              type="text"
-              value="${masterEscape(
-                order.appointment_coordinator || ''
-              )}"
-            >
-          </label>
-
-          <label>
             طريقة الدفع
             <select id="master-edit-payment">
               <option
@@ -3234,9 +3223,6 @@
 
       total:
         $('master-edit-total')?.value || '',
-
-      appointment_coordinator:
-        $('master-edit-coordinator')?.value || '',
 
       location_url:
         $('master-edit-location')?.value || '',
