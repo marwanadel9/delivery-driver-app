@@ -522,6 +522,18 @@
     }
   }
 
+  function deliveryFeeFromOrder(order) {
+    const explicit = Number(order?.delivery_fee ?? order?.deliveryFee ?? 0);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    const note = String(order?.note ?? order?.notes ?? order?.remarks ?? '');
+    const match = note.match(/\[\[DELIVERY_FEE:(\d+(?:\.\d+)?)\]\]/i);
+    return match ? Number(match[1]) || 0 : 0;
+  }
+
+  function cleanOrderNote(value) {
+    return String(value ?? '').replace(/\s*\[\[DELIVERY_FEE:\d+(?:\.\d+)?\]\]/ig, '').trim();
+  }
+
   function escapeHtml(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -1212,14 +1224,7 @@
       setText(
         node,
         'note',
-        firstValue(
-          order,
-          [
-            'note',
-            'notes',
-            'remarks'
-          ]
-        )
+        cleanOrderNote(firstValue(order, ['note', 'notes', 'remarks']))
       );
 
       setText(
@@ -1237,6 +1242,20 @@
           )
         )
       );
+
+      const deliveryFee = deliveryFeeFromOrder(order);
+      const existingFeeRow = node.querySelector('.delivery-fee-row');
+      if (existingFeeRow) existingFeeRow.remove();
+      if (deliveryFee > 0) {
+        const feeRow = document.createElement('div');
+        feeRow.className = 'delivery-fee-row';
+        feeRow.style.cssText = 'display:flex;justify-content:space-between;gap:12px;margin:8px 0;padding:9px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-weight:800;';
+        feeRow.innerHTML = `<span>🚚 رسوم التوصيل</span><span>${escapeHtml(formatTotal(deliveryFee))}</span>`;
+        const totalElement = node.querySelector('[data-f="total"]');
+        const totalRow = totalElement?.closest('.info-item, .order-section, .detail-row, .field-row, .product-box');
+        if (totalRow?.parentNode) totalRow.parentNode.insertBefore(feeRow, totalRow);
+        else node.appendChild(feeRow);
+      }
 
       const status =
         node.querySelector(
@@ -2555,6 +2574,7 @@
           <strong>
             ${formatTotal(order.total)}
           </strong>
+          ${deliveryFeeFromOrder(order) > 0 ? `<div style="margin-top:5px;color:#b45309;font-size:11px;font-weight:800">رسوم توصيل: ${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</div>` : ''}
         </td>
 
         <td>
@@ -2793,6 +2813,12 @@
           </strong>
         </div>
 
+        ${deliveryFeeFromOrder(order) > 0 ? `
+        <div class="master-detail" style="border:1px solid #fed7aa;background:#fff7ed">
+          <small style="color:#9a3412">رسوم التوصيل</small>
+          <strong style="color:#9a3412">${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</strong>
+        </div>` : ''}
+
         ${isPaidInAdvance(order) ? '' : `
         <div class="master-detail">
           <small>طريقة الدفع</small>
@@ -2889,7 +2915,7 @@
 
         <div class="master-section-content">
           ${masterEscape(
-            order.note || '—'
+            cleanOrderNote(order.note || order.notes || '—')
           )}
         </div>
       </div>
