@@ -985,10 +985,10 @@
         badge.className = 'paid-advance-badge';
         badge.textContent = 'مدفوع';
         badge.setAttribute('aria-label', 'مدفوع مقدمًا');
-        badge.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:#fff0f0;color:#c62828;border:1px solid #ffc7c7;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:900;white-space:nowrap;margin:4px 0 8px auto;';
+        badge.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;background:#c62828;color:#ffffff;border:3px solid #8e0000;border-radius:14px;padding:12px 20px;font-size:22px;line-height:1.3;font-weight:1000;letter-spacing:.2px;white-space:nowrap;width:fit-content;max-width:100%;box-shadow:0 4px 0 rgba(142,0,0,.18);margin:4px 0 12px auto;';
         const badgeMark = document.createElement('span');
         badgeMark.textContent = '✓';
-        badgeMark.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#c62828;color:#fff;font-size:10px;';
+        badgeMark.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;flex:0 0 26px;width:26px;height:26px;border-radius:50%;background:#ffffff;color:#c62828;font-size:19px;font-weight:1000;';
         badge.prepend(badgeMark);
         node.insertBefore(badge, node.firstChild);
       }
@@ -1227,34 +1227,39 @@
         cleanOrderNote(firstValue(order, ['note', 'notes', 'remarks']))
       );
 
+      const deliveryFee = deliveryFeeFromOrder(order);
+      const orderTotalRaw = Number(firstValue(order, ['total', 'grand_total', 'grandTotal', 'amount'])) || 0;
+      const productsTotal = Math.max(0, orderTotalRaw - deliveryFee);
+
       setText(
         node,
         'total',
-        formatTotal(
-          firstValue(
-            order,
-            [
-              'total',
-                            'grand_total',
-              'grandTotal',
-              'amount'
-            ]
-          )
-        )
+        formatTotal(deliveryFee > 0 ? productsTotal : orderTotalRaw)
       );
 
-      const deliveryFee = deliveryFeeFromOrder(order);
       const existingFeeRow = node.querySelector('.delivery-fee-row');
+      const existingGrandRow = node.querySelector('.delivery-grand-total-row');
       if (existingFeeRow) existingFeeRow.remove();
+      if (existingGrandRow) existingGrandRow.remove();
       if (deliveryFee > 0) {
-        const feeRow = document.createElement('div');
-        feeRow.className = 'delivery-fee-row';
-        feeRow.style.cssText = 'display:flex;justify-content:space-between;gap:12px;margin:8px 0;padding:9px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-weight:800;';
-        feeRow.innerHTML = `<span>🚚 رسوم التوصيل</span><span>${escapeHtml(formatTotal(deliveryFee))}</span>`;
         const totalElement = node.querySelector('[data-f="total"]');
         const totalRow = totalElement?.closest('.info-item, .order-section, .detail-row, .field-row, .product-box');
-        if (totalRow?.parentNode) totalRow.parentNode.insertBefore(feeRow, totalRow);
-        else node.appendChild(feeRow);
+        if (totalRow) {
+          const labels = totalRow.querySelectorAll('small, label, .label, [data-label]');
+          labels.forEach(label => {
+            if (/الإجمالي|اجمالي/.test(label.textContent || '')) label.textContent = 'إجمالي المنتجات';
+          });
+          const feeRow = document.createElement('div');
+          feeRow.className = 'delivery-fee-row';
+          feeRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0;padding:10px 12px;border-radius:12px;background:#fff8d9;border:1px solid #facc15;color:#854d0e;font-weight:900;';
+          feeRow.innerHTML = `<span>🚚 رسوم التوصيل</span><strong>${escapeHtml(formatTotal(deliveryFee))}</strong>`;
+          const grandRow = document.createElement('div');
+          grandRow.className = 'delivery-grand-total-row';
+          grandRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0;padding:10px 12px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-weight:900;';
+          grandRow.innerHTML = `<span>الإجمالي النهائي</span><strong>${escapeHtml(formatTotal(orderTotalRaw))}</strong>`;
+          totalRow.parentNode.insertBefore(feeRow, totalRow.nextSibling);
+          feeRow.parentNode.insertBefore(grandRow, feeRow.nextSibling);
+        }
       }
 
       const status =
@@ -2571,10 +2576,7 @@
         </td>
 
         <td>
-          <strong>
-            ${formatTotal(order.total)}
-          </strong>
-          ${deliveryFeeFromOrder(order) > 0 ? `<div style="margin-top:5px;color:#b45309;font-size:11px;font-weight:800">رسوم توصيل: ${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</div>` : ''}
+          ${deliveryFeeFromOrder(order) > 0 ? `<div style="font-size:11px;color:#64748b">إجمالي المنتجات: ${masterEscape(formatTotal((Number(order.total)||0)-deliveryFeeFromOrder(order)))}</div><div style="margin-top:5px;color:#a16207;font-size:11px;font-weight:900;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:5px 7px">🚚 رسوم التوصيل: ${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</div><strong style="display:block;margin-top:5px;color:#1d4ed8">الإجمالي النهائي: ${masterEscape(formatTotal(order.total))}</strong>` : `<strong>${formatTotal(order.total)}</strong>`}
         </td>
 
         <td>
@@ -2805,18 +2807,20 @@
         </div>
 
         <div class="master-detail">
-          <small>الإجمالي</small>
+          <small>${deliveryFeeFromOrder(order) > 0 ? 'إجمالي المنتجات' : 'الإجمالي'}</small>
           <strong>
-            ${masterEscape(
-              formatTotal(order.total)
-            )}
+            ${masterEscape(formatTotal((Number(order.total)||0)-deliveryFeeFromOrder(order)))}
           </strong>
         </div>
 
         ${deliveryFeeFromOrder(order) > 0 ? `
-        <div class="master-detail" style="border:1px solid #fed7aa;background:#fff7ed">
-          <small style="color:#9a3412">رسوم التوصيل</small>
-          <strong style="color:#9a3412">${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</strong>
+        <div class="master-detail" style="border:1px solid #facc15;background:#fef9c3">
+          <small style="color:#854d0e">🚚 رسوم التوصيل</small>
+          <strong style="color:#a16207">${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</strong>
+        </div>
+        <div class="master-detail" style="border:1px solid #bfdbfe;background:#eff6ff">
+          <small style="color:#1d4ed8">الإجمالي النهائي</small>
+          <strong style="color:#1d4ed8">${masterEscape(formatTotal(order.total))}</strong>
         </div>` : ''}
 
         ${isPaidInAdvance(order) ? '' : `
