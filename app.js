@@ -1884,7 +1884,7 @@
       .master-stat{position:relative;overflow:hidden;background:#fff;border:1px solid #e5ebf0;border-radius:18px;padding:18px 16px;min-height:94px;box-shadow:0 7px 22px rgba(30,49,67,.045);transition:transform .18s ease,box-shadow .18s ease}
       .master-stat:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(30,49,67,.09)}
       .master-stat:before{content:'';position:absolute;right:0;top:0;bottom:0;width:4px;background:#64748b}
-      .master-stat.cash:before{background:#16a36a}.master-stat.bank:before{background:#3974d6}.master-stat.count:before{background:#64748b}.master-stat.delivered:before{background:#8b5cf6}.master-stat.pending-bank:before{background:#dc6262}.master-stat.collected:before{background:#0f8b8d}.master-stat.pending-bank .master-stat-value{color:#b42318}.master-stat.collected .master-stat-value{color:#087f80}
+      .master-stat.cash:before{background:#16a36a}.master-stat.bank:before{background:#3974d6}.master-stat.count:before{background:#64748b}.master-stat.delivered:before{background:#8b5cf6}.master-stat.pending-bank:before{background:#dc6262}.master-stat.collected:before{background:#0f8b8d}.master-stat.prepaid:before{background:#dc2626}.master-stat.prepaid .master-stat-value{color:#dc2626}.master-stat.pending-bank .master-stat-value{color:#b42318}.master-stat.collected .master-stat-value{color:#087f80}
       .master-stat-label{font-size:12px;color:#64748b;font-weight:800;margin-bottom:12px}
       .master-stat-value{font-size:22px;font-weight:900;line-height:1.35;letter-spacing:-.3px;color:#182630}
       .master-stat.cash .master-stat-value{color:#128354}.master-stat.bank .master-stat-value{color:#285fbd}
@@ -2017,6 +2017,7 @@
 
         <main class="master-wrap">
           <section class="master-stats">
+            <div class="master-stat prepaid"><div class="master-stat-label">مدفوع مقدم</div><div class="master-stat-value" id="master-total-prepaid">0 درهم</div><div class="master-stat-hint" id="master-prepaid-hint">عدد الفواتير: ٠</div></div>
             <div class="master-stat count"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">عدد الفواتير بدون تكرار</div></div>
             <div class="master-stat cash"><div class="master-stat-label">فواتير الكاش</div><div class="master-stat-value" id="master-cash-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
             <div class="master-stat cash"><div class="master-stat-label">إجمالي الكاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div><div class="master-stat-hint">إجمالي الفواتير المسجلة كاش</div></div>
@@ -2341,9 +2342,12 @@
     // والبحث بالتاريخ يعرض فواتير التاريخ المختار فقط.
     const orders = getMasterFilteredOrders();
 
+    const prepaidOrders = orders.filter((order) => isPaidInAdvance(order));
     const cashOrders = orders.filter((order) => !isPaidInAdvance(order) && normalizePayment(order.payment_method) === 'cash');
     const bankOrders = orders.filter((order) => !isPaidInAdvance(order) && normalizePayment(order.payment_method) === 'bank_transfer');
 
+    // المدفوع مقدمًا فئة مستقلة، وتُضاف قيمتها إلى الإجمالي العام دون احتسابها كاش أو تحويل بنكي.
+    const totalPrepaid = prepaidOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
     // الكاش هنا هو إجمالي الفواتير المسجلة بطريقة دفع كاش.
     // لا يوجد في البيانات الحالية حقل مستقل يؤكد تحصيل كل فاتورة كاش.
     const totalCash = cashOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
@@ -2351,7 +2355,7 @@
     const receivedBankOrders = bankOrders.filter((order) => order.bank_transfer_received === true);
     const totalBankReceived = receivedBankOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
     const totalBankPending = Math.max(0, totalBankAll - totalBankReceived);
-    const totalReceived = totalCash + totalBankReceived;
+    const totalReceived = totalCash + totalBankReceived + totalPrepaid;
 
     const delivered = orders.filter(
       (order) => isDelivered(order.delivery_status)
@@ -2359,6 +2363,14 @@
 
     const moneyText = (value) =>
       `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+
+    if ($('master-total-prepaid')) {
+      $('master-total-prepaid').textContent = moneyText(totalPrepaid);
+    }
+
+    if ($('master-prepaid-hint')) {
+      $('master-prepaid-hint').textContent = `عدد الفواتير: ${prepaidOrders.length.toLocaleString('ar-EG')}`;
+    }
 
     if ($('master-total-count')) {
       $('master-total-count').textContent = orders.length.toLocaleString('ar-EG');
