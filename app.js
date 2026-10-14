@@ -1351,17 +1351,28 @@
         }
       }
 
+      const paidInAdvance =
+        order.paid_in_advance === true ||
+        String(order.paid_in_advance).trim().toLowerCase() === 'true';
+
       const payment =
         normalizePayment(
           order.payment_method
         );
+
+      const paymentSection =
+        node.querySelector('.payment-section');
+
+      if (paymentSection && paidInAdvance) {
+        paymentSection.style.display = 'none';
+      }
 
       const paymentCurrent =
         node.querySelector(
           '.payment-current'
         );
 
-      if (paymentCurrent) {
+      if (paymentCurrent && !paidInAdvance) {
         paymentCurrent.textContent =
           payment
             ? `طريقة الدفع الحالية: ${paymentLabel(payment)}`
@@ -1386,7 +1397,7 @@
           );
 
           button.disabled =
-            delivered;
+            delivered || paidInAdvance;
 
           button.addEventListener(
             'click',
@@ -2748,12 +2759,14 @@
           </strong>
         </div>
 
+        ${order.paid_in_advance === true || String(order.paid_in_advance).trim().toLowerCase() === 'true' ? '' : `
         <div class="master-detail">
           <small>طريقة الدفع</small>
           <strong>
             ${masterEscape(masterPaymentText(order.payment_method))}
           </strong>
         </div>
+        `}
 
         <div class="master-detail">
           <small>حالة الدفع</small>
