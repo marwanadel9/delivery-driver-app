@@ -1863,6 +1863,29 @@
       .master-filter{display:flex;flex-direction:column;gap:6px}
       .master-filter label{font-size:11px;color:#7b878c;font-weight:800}
       .master-filter input,.master-filter select{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:9px;background:#fff}
+
+      .master-orders-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;align-items:start;direction:rtl}
+      .master-old-transfer-panel{background:#fff;border:1px solid #f3c7c7;border-radius:16px;padding:14px;min-width:0;box-shadow:0 4px 18px rgba(160,30,30,.05)}
+      .master-old-transfer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+      .master-old-transfer-title{font-size:14px;font-weight:900;color:#9f2020;line-height:1.5}
+      .master-old-transfer-count{background:#fff0f0;color:#9f2020;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900;white-space:nowrap}
+      .master-old-transfer-note{font-size:11px;line-height:1.7;color:#8b5c5c;margin-bottom:12px}
+      .master-old-transfer-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 13px}
+      .master-old-transfer-stat{background:#fff5f5;border:1px solid #ffe0e0;border-radius:11px;padding:10px;min-width:0}
+      .master-old-transfer-stat-label{display:block;font-size:10px;line-height:1.5;color:#8b5c5c;font-weight:800;margin-bottom:5px}
+      .master-old-transfer-stat-value{display:block;font-size:16px;line-height:1.35;font-weight:900;color:#9f2020;overflow-wrap:anywhere}
+      .master-old-transfer-stat-value.money{font-size:14px}
+      .master-old-transfer-list{display:flex;flex-direction:column;gap:10px}
+      .master-old-transfer-card{border:1px solid #ffdada;background:#fff8f8;border-radius:12px;padding:11px;min-width:0}
+      .master-old-transfer-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+      .master-old-transfer-invoice{font-weight:900;color:#8f1d1d}
+      .master-old-transfer-age{font-size:10px;background:#ffe6c7;color:#854d0e;padding:4px 7px;border-radius:999px;white-space:nowrap}
+      .master-old-transfer-customer{font-size:12px;font-weight:800;color:#24323a;overflow-wrap:anywhere;margin-bottom:5px}
+      .master-old-transfer-meta{font-size:11px;line-height:1.7;color:#66747a;overflow-wrap:anywhere}
+      .master-old-transfer-amount{font-size:15px;font-weight:900;color:#b42318;margin:8px 0}
+      .master-old-transfer-card .master-transfer-btn{width:100%;min-height:38px}
+      .master-old-transfer-empty{text-align:center;color:#718087;font-size:12px;line-height:1.8;padding:20px 8px;background:#fafbfc;border-radius:12px}
+
       .master-table-wrap{background:#fff;border:1px solid #e8edef;border-radius:16px;overflow:auto}
       .master-table{width:100%;border-collapse:collapse;min-width:1050px}
       .master-table th,.master-table td{padding:12px;border-bottom:1px solid #edf1f2;text-align:right;white-space:nowrap}
@@ -1901,7 +1924,8 @@
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
       @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
-      @media(max-width:650px){.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
+      @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr)}.master-old-transfer-panel{order:0}.master-table-wrap{order:1}}
+      @media(max-width:650px){.master-old-transfer-panel{padding:12px;border-radius:13px}.master-old-transfer-title{font-size:13px}.master-old-transfer-card{padding:10px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
     `;
 
     document.head.appendChild(style);
@@ -1994,7 +2018,24 @@
             </div>
           </section>
 
-          <section class="master-table-wrap">
+          <div class="master-orders-layout">
+            <aside class="master-old-transfer-panel" id="master-old-transfer-panel" aria-label="التحويلات القديمة غير المستلمة">
+              <div class="master-old-transfer-head">
+                <div class="master-old-transfer-title">تحويلات الأيام السابقة غير المستلمة</div>
+                <span class="master-old-transfer-count" id="master-old-transfer-count">٠</span>
+              </div>
+              <div class="master-old-transfer-note">تظهر هنا فواتير التحويل البنكي من الأيام السابقة التي لم يتم تأكيد استلامها. فواتير اليوم تظل في الجدول الرئيسي.</div>
+              <div class="master-old-transfer-stats" aria-label="إحصائيات التحويلات القديمة">
+                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">عدد التحويلات المعلقة</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-count">٠</strong></div>
+                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">إجمالي المبالغ غير المستلمة</span><strong class="master-old-transfer-stat-value money" id="master-old-transfer-stat-total">٠ درهم</strong></div>
+                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">فواتير أمس</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-yesterday">٠</strong></div>
+                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">فواتير أول أمس والأقدم</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-older">٠</strong></div>
+              </div>
+              <div class="master-old-transfer-list" id="master-old-transfer-list">
+                <div class="master-old-transfer-empty">جاري تحميل التحويلات…</div>
+              </div>
+            </aside>
+            <section class="master-table-wrap">
             <table class="master-table">
               <thead>
                 <tr>
@@ -2013,7 +2054,8 @@
               </thead>
               <tbody id="master-orders-body"></tbody>
             </table>
-          </section>
+            </section>
+          </div>
         </main>
 
         <div class="master-modal" id="master-modal">
@@ -2190,6 +2232,12 @@
           normalizePayment(order.payment_method) === 'bank_transfer' &&
           order.bank_transfer_received !== true;
 
+        // الفواتير القديمة ذات التحويل البنكي غير المستلم تُعرض في لوحة مستقلة على اليمين.
+        // فواتير اليوم تظل في الجدول الرئيسي، وكذلك الفواتير القديمة غير المسلّمة التي ليست تحويلًا معلقًا.
+        if (orderDate !== today && transferPending) {
+          return false;
+        }
+
         if (orderDate !== today && delivered && !transferPending) {
           return false;
         }
@@ -2293,6 +2341,72 @@
     }
   }
 
+  function getMasterOldPendingTransfers() {
+    const today = masterDateInput(new Date());
+    return getMasterUniqueOrders()
+      .filter((order) =>
+        normalizePayment(order.payment_method) === 'bank_transfer' &&
+        order.bank_transfer_received !== true &&
+        masterDateInput(order.created_at) !== '' &&
+        masterDateInput(order.created_at) < today
+      )
+      .sort((a, b) => {
+        const da = masterDateInput(a.created_at);
+        const db = masterDateInput(b.created_at);
+        return da.localeCompare(db) || String(a.order_number || a.id || '').localeCompare(String(b.order_number || b.id || ''));
+      });
+  }
+
+  function renderMasterOldPendingTransfers() {
+    const list = $('master-old-transfer-list');
+    const count = $('master-old-transfer-count');
+    if (!list) return;
+
+    const orders = getMasterOldPendingTransfers();
+    const today = masterDateInput(new Date());
+    const yesterdayDate = new Date(`${today}T12:00:00`);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = masterDateInput(yesterdayDate);
+    const yesterdayOrders = orders.filter((order) => masterDateInput(order.created_at) === yesterday);
+    const olderOrders = orders.filter((order) => masterDateInput(order.created_at) < yesterday);
+    const totalPendingAmount = orders.reduce((sum, order) => sum + masterMoney(order.total), 0);
+    const moneyText = (value) => `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+
+    if (count) count.textContent = orders.length.toLocaleString('ar-EG');
+    if ($('master-old-transfer-stat-count')) $('master-old-transfer-stat-count').textContent = orders.length.toLocaleString('ar-EG');
+    if ($('master-old-transfer-stat-total')) $('master-old-transfer-stat-total').textContent = moneyText(totalPendingAmount);
+    if ($('master-old-transfer-stat-yesterday')) $('master-old-transfer-stat-yesterday').textContent = yesterdayOrders.length.toLocaleString('ar-EG');
+    if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = olderOrders.length.toLocaleString('ar-EG');
+
+    if (!orders.length) {
+      list.innerHTML = '<div class="master-old-transfer-empty">لا توجد تحويلات قديمة معلّقة حاليًا.</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    orders.forEach((order) => {
+      const card = document.createElement('article');
+      card.className = 'master-old-transfer-card';
+      const ageDays = Math.max(1, Math.floor((new Date(`${masterDateInput(new Date())}T12:00:00`).getTime() - new Date(`${masterDateInput(order.created_at)}T12:00:00`).getTime()) / 86400000));
+      const ageLabel = ageDays === 1 ? 'أمس' : ageDays === 2 ? 'أول أمس' : `منذ ${ageDays} يوم`;
+      card.innerHTML = `
+        <div class="master-old-transfer-card-top">
+          <span class="master-old-transfer-invoice">#${masterEscape(order.order_number ?? order.id ?? '')}</span>
+          <span class="master-old-transfer-age">${ageLabel}</span>
+        </div>
+        <div class="master-old-transfer-customer">${masterEscape(order.customer_name || '—')}</div>
+        <div class="master-old-transfer-meta">${masterEscape(order.phone || '—')}</div>
+        <div class="master-old-transfer-meta">${masterEscape([order.emirate, order.area].filter(Boolean).join(' / ') || '—')}</div>
+        <div class="master-old-transfer-meta">تاريخ الفاتورة: ${masterEscape(masterDate(order.created_at))}</div>
+        <div class="master-old-transfer-amount">${masterEscape(formatTotal(order.total))}</div>
+        <button class="master-transfer-btn pending" data-old-transfer="${masterEscape(order.id)}">تأكيد استلام التحويل</button>
+      `;
+      const button = card.querySelector('[data-old-transfer]');
+      if (button) button.addEventListener('click', () => setMasterTransferReceived(order, true, button));
+      list.appendChild(card);
+    });
+  }
+
   function renderMasterOrders() {
     const body = $('master-orders-body');
 
@@ -2302,6 +2416,7 @@
 
     const orders = getMasterFilteredOrders();
 
+    renderMasterOldPendingTransfers();
     renderMasterStats();
 
     if (!orders.length) {
