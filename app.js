@@ -1916,7 +1916,7 @@
       .master-badge.ok{background:#e8f7ee;color:#16723b}
       .master-badge.pending{background:#fff5dc;color:#8a5a00}
       .master-badge.cash{background:#e9f7ed;color:#1d6e3b}
-      .master-badge.bank{background:#e9f0ff;color:#315b9a}
+      .master-badge.bank{background:#e9f0ff;color:#315b9a}.master-badge.advance{background:#e7f7f4;color:#086b61;border:1px solid #a9e4da}
       .master-view{border:0;background:#172024;color:#fff;border-radius:9px;padding:8px 11px;cursor:pointer;font-weight:700}
       .master-transfer-btn{border:0;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:800;font-size:11px;white-space:nowrap;background:#e8f7ee;color:#16723b}.master-transfer-btn.pending{background:#fff2d6;color:#8a5a00}.master-transfer-btn:disabled{opacity:.6;cursor:wait}.master-transfer-state{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:800;white-space:nowrap}.master-transfer-state.received{background:#e8f7ee;color:#16723b}.master-transfer-state.waiting{background:#fff2d6;color:#8a5a00}
       .master-empty{text-align:center;padding:50px 20px;color:#7a878c}
@@ -2212,6 +2212,11 @@
         preferred.bank_transfer_received = true;
       }
 
+      // احتفظ بعلامة الدفع المقدم إذا كانت موجودة في أي نسخة مكررة للفاتورة.
+      if (secondary.paid_in_advance === true) {
+        preferred.paid_in_advance = true;
+      }
+
       if (!normalizePayment(preferred.payment_method) && normalizePayment(secondary.payment_method)) {
         preferred.payment_method = secondary.payment_method;
       }
@@ -2246,6 +2251,7 @@
         const orderDate = masterDateInput(order.created_at);
         const delivered = isDelivered(order.delivery_status);
         const transferPending =
+          order.paid_in_advance !== true &&
           normalizePayment(order.payment_method) === 'bank_transfer' &&
           order.bank_transfer_received !== true;
 
@@ -2302,8 +2308,8 @@
     // والبحث بالتاريخ يعرض فواتير التاريخ المختار فقط.
     const orders = getMasterFilteredOrders();
 
-    const cashOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'cash');
-    const bankOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'bank_transfer');
+    const cashOrders = orders.filter((order) => order.paid_in_advance !== true && normalizePayment(order.payment_method) === 'cash');
+    const bankOrders = orders.filter((order) => order.paid_in_advance !== true && normalizePayment(order.payment_method) === 'bank_transfer');
 
     // الكاش هنا هو إجمالي الفواتير المسجلة بطريقة دفع كاش.
     // لا يوجد في البيانات الحالية حقل مستقل يؤكد تحصيل كل فاتورة كاش.
@@ -2362,6 +2368,7 @@
     const today = masterDateInput(new Date());
     return getMasterUniqueOrders()
       .filter((order) =>
+        order.paid_in_advance !== true &&
         normalizePayment(order.payment_method) === 'bank_transfer' &&
         order.bank_transfer_received !== true &&
         masterDateInput(order.created_at) !== '' &&
@@ -2448,6 +2455,7 @@
     orders.forEach((order) => {
       const payment =
         normalizePayment(order.payment_method);
+      const paidInAdvance = order.paid_in_advance === true;
 
       const delivered =
         isDelivered(order.delivery_status);
@@ -2455,7 +2463,7 @@
       const tr =
         document.createElement('tr');
 
-      if (payment === 'bank_transfer') {
+      if (!paidInAdvance && payment === 'bank_transfer') {
         tr.classList.add(order.bank_transfer_received === true
           ? 'master-transfer-received'
           : 'master-transfer-pending');
@@ -2506,22 +2514,24 @@
 
         <td>
           <span class="master-badge ${
-            payment === 'cash'
-              ? 'cash'
-              : payment === 'bank_transfer'
-                ? 'bank'
-                : ''
+            paidInAdvance
+              ? 'advance'
+              : payment === 'cash'
+                ? 'cash'
+                : payment === 'bank_transfer'
+                  ? 'bank'
+                  : ''
           }">
             ${masterEscape(
-              masterPaymentText(
-                order.payment_method
-              )
+              paidInAdvance
+                ? 'متحول مقدم'
+                : masterPaymentText(order.payment_method)
             )}
           </span>
         </td>
 
         <td>
-          ${payment === 'bank_transfer'
+          ${!paidInAdvance && payment === 'bank_transfer'
             ? (order.bank_transfer_received === true
               ? '<span class="master-transfer-state received">✓ تم الاستلام</span>'
               : `<button class="master-transfer-btn pending" data-master-transfer="${masterEscape(order.id)}">تأكيد الاستلام</button>`)
@@ -2581,7 +2591,7 @@
   }
 
   async function setMasterTransferReceived(order, received, button) {
-    if (normalizePayment(order.payment_method) !== 'bank_transfer') {
+    if (order.paid_in_advance === true || normalizePayment(order.payment_method) !== 'bank_transfer') {
       toast('تأكيد الاستلام متاح لفواتير التحويل البنكي فقط', true);
       return;
     }
@@ -2608,6 +2618,7 @@
     const fingerprint = masterInvoiceFingerprint(order);
     const matchingOrders = state.masterOrders.filter((item) =>
       masterInvoiceFingerprint(item) === fingerprint &&
+      item.paid_in_advance !== true &&
       normalizePayment(item.payment_method) === 'bank_transfer'
     );
     const targets = matchingOrders.length ? matchingOrders : [order];
@@ -2740,11 +2751,14 @@
         <div class="master-detail">
           <small>طريقة الدفع</small>
           <strong>
-            ${masterEscape(
-              masterPaymentText(
-                order.payment_method
-              )
-            )}
+            ${masterEscape(masterPaymentText(order.payment_method))}
+          </strong>
+        </div>
+
+        <div class="master-detail">
+          <small>حالة الدفع</small>
+          <strong>
+            ${masterEscape(order.paid_in_advance === true ? 'متحول مقدم' : '—')}
           </strong>
         </div>
 
