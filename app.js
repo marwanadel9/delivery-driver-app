@@ -1864,7 +1864,24 @@
       .master-filter label{font-size:11px;color:#7b878c;font-weight:800}
       .master-filter input,.master-filter select{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:9px;background:#fff}
 
-      .master-orders-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;align-items:start;direction:rtl}
+      .master-orders-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px;align-items:start;direction:rtl}
+      .master-old-transfer-panel{padding:11px;border-radius:14px}
+      .master-old-transfer-head{margin-bottom:8px}
+      .master-old-transfer-title{font-size:12px}
+      .master-old-transfer-note{font-size:10px;line-height:1.55;margin-bottom:8px}
+      .master-old-transfer-stats{gap:6px;margin-bottom:9px}
+      .master-old-transfer-stat{padding:7px;border-radius:9px}
+      .master-old-transfer-stat-label{font-size:9px;margin-bottom:3px}
+      .master-old-transfer-stat-value{font-size:14px}
+      .master-old-transfer-stat-value.money{font-size:12px}
+      .master-old-transfer-list{gap:7px}
+      .master-old-transfer-card{padding:8px;border-radius:10px}
+      .master-old-transfer-card-top{margin-bottom:5px}
+      .master-old-transfer-invoice{font-size:12px}
+      .master-old-transfer-customer{font-size:11px;margin-bottom:3px}
+      .master-old-transfer-meta{font-size:10px;line-height:1.5}
+      .master-old-transfer-amount{font-size:13px;margin:5px 0}
+      .master-old-transfer-card .master-transfer-btn{min-height:32px;padding:6px 8px;font-size:10px}
       .master-old-transfer-panel{background:#fff;border:1px solid #f3c7c7;border-radius:16px;padding:14px;min-width:0;box-shadow:0 4px 18px rgba(160,30,30,.05)}
       .master-old-transfer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
       .master-old-transfer-title{font-size:14px;font-weight:900;color:#9f2020;line-height:1.5}
@@ -1923,9 +1940,9 @@
       .master-edit-form textarea{min-height:82px;resize:vertical}
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
-      @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
-      @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr)}.master-old-transfer-panel{order:0}.master-table-wrap{order:1}}
-      @media(max-width:650px){.master-old-transfer-panel{padding:12px;border-radius:13px}.master-old-transfer-title{font-size:13px}.master-old-transfer-card{padding:10px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
+      @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:270px minmax(0,1fr)}}
+      @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr);gap:10px}.master-old-transfer-panel{order:0;padding:10px}.master-table-wrap{order:1}}
+      @media(max-width:650px){.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
     `;
 
     document.head.appendChild(style);
