@@ -983,9 +983,9 @@
       if (prepaid) {
         const badge = document.createElement('span');
         badge.className = 'paid-advance-badge';
-        badge.textContent = 'مدفوع — متحول مقدم';
+        badge.textContent = 'مدفوع';
         badge.setAttribute('aria-label', 'مدفوع مقدمًا');
-        badge.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;gap:10px!important;background:#c62828!important;color:#ffffff!important;border:3px solid #8e0000!important;border-radius:14px!important;padding:12px 20px!important;font-size:22px!important;line-height:1.3!important;font-weight:1000!important;letter-spacing:.2px!important;white-space:nowrap!important;width:fit-content!important;max-width:100%!important;box-shadow:0 4px 0 rgba(142,0,0,.18)!important;margin:4px 0 12px auto!important;position:relative!important;z-index:5!important;min-height:48px!important;';
+        badge.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;gap:12px!important;background:linear-gradient(135deg,#087b3d,#16a34a)!important;color:#ffffff!important;border:3px solid #d1fae5!important;border-radius:16px!important;padding:14px 24px!important;font-size:30px!important;line-height:1.2!important;font-weight:1000!important;letter-spacing:.2px!important;white-space:nowrap!important;width:fit-content!important;max-width:100%!important;box-shadow:0 5px 0 rgba(5,100,48,.18)!important;margin:4px 0 12px auto!important;position:relative!important;z-index:5!important;min-height:58px!important;';
         const badgeMark = document.createElement('span');
         badgeMark.textContent = '✓';
         badgeMark.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;flex:0 0 26px;width:26px;height:26px;border-radius:50%;background:#ffffff;color:#c62828;font-size:19px;font-weight:1000;';
