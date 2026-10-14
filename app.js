@@ -1243,22 +1243,33 @@
       if (existingGrandRow) existingGrandRow.remove();
       if (deliveryFee > 0) {
         const totalElement = node.querySelector('[data-f="total"]');
-        const totalRow = totalElement?.closest('.info-item, .order-section, .detail-row, .field-row, .product-box');
-        if (totalRow) {
-          const labels = totalRow.querySelectorAll('small, label, .label, [data-label]');
-          labels.forEach(label => {
-            if (/الإجمالي|اجمالي/.test(label.textContent || '')) label.textContent = 'إجمالي المنتجات';
-          });
-          const feeRow = document.createElement('div');
-          feeRow.className = 'delivery-fee-row';
-          feeRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0;padding:10px 12px;border-radius:12px;background:#fff8d9;border:1px solid #facc15;color:#854d0e;font-weight:900;';
-          feeRow.innerHTML = `<span>🚚 رسوم التوصيل</span><strong>${escapeHtml(formatTotal(deliveryFee))}</strong>`;
-          const grandRow = document.createElement('div');
-          grandRow.className = 'delivery-grand-total-row';
-          grandRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0;padding:10px 12px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-weight:900;';
-          grandRow.innerHTML = `<span>الإجمالي النهائي</span><strong>${escapeHtml(formatTotal(orderTotalRaw))}</strong>`;
+        let totalRow = totalElement?.closest('.info-item, .order-section, .detail-row, .field-row, .product-box, .total-row, .order-total, .summary-row');
+        if (!totalRow && totalElement) {
+          totalRow = totalElement.parentElement;
+        }
+
+        const labels = totalRow?.querySelectorAll('small, label, .label, [data-label]') || [];
+        labels.forEach(label => {
+          if (/الإجمالي|اجمالي/.test(label.textContent || '')) label.textContent = 'إجمالي المنتجات';
+        });
+
+        const feeRow = document.createElement('div');
+        feeRow.className = 'delivery-fee-row';
+        feeRow.style.cssText = 'display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;margin:8px 0!important;padding:10px 12px!important;border-radius:12px!important;background:#fff8d9!important;border:1px solid #facc15!important;color:#854d0e!important;font-weight:900!important;box-sizing:border-box!important;width:100%!important;';
+        feeRow.innerHTML = `<span>🚚 رسوم التوصيل</span><strong>${escapeHtml(formatTotal(deliveryFee))}</strong>`;
+
+        const grandRow = document.createElement('div');
+        grandRow.className = 'delivery-grand-total-row';
+        grandRow.style.cssText = 'display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;margin:8px 0!important;padding:10px 12px!important;border-radius:12px!important;background:#eff6ff!important;border:1px solid #bfdbfe!important;color:#1d4ed8!important;font-weight:900!important;box-sizing:border-box!important;width:100%!important;';
+        grandRow.innerHTML = `<span>الإجمالي النهائي</span><strong>${escapeHtml(formatTotal(orderTotalRaw))}</strong>`;
+
+        if (totalRow?.parentNode) {
           totalRow.parentNode.insertBefore(feeRow, totalRow.nextSibling);
           feeRow.parentNode.insertBefore(grandRow, feeRow.nextSibling);
+        } else {
+          const fallback = node.querySelector('.order-card-body, .card-body, .order-content, .order-info') || node;
+          fallback.appendChild(feeRow);
+          fallback.appendChild(grandRow);
         }
       }
 
