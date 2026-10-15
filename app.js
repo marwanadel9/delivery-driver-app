@@ -135,10 +135,31 @@
       .stat-card{background:rgba(255,255,255,.86)!important;border-color:#d5e9d9!important}
       .stat-card strong{color:#14532d!important}
       @media(max-width:480px){.order-card{padding:8px!important;gap:5px!important}.customer-row{gap:7px!important}.customer-avatar{width:31px!important;height:31px!important;min-width:31px!important}.customer-main h2{font-size:13px!important}.info-item{padding:6px!important}.info-item strong{font-size:11px!important}.order-number strong{font-size:15px!important}.order-total strong{font-size:15px!important}}
+      /* الفاتورة مختصرة افتراضيًا؛ اضغط البطاقة لعرض كل التفاصيل ثم اضغط ثانية للإخفاء */
+      .order-card{cursor:pointer!important;scroll-margin-top:12px!important;transition:box-shadow .15s ease!important;transform:none!important}
+      .order-card:active{transform:none!important}
+      .order-card:not(.is-expanded) .customer-location-grid,
+      .order-card:not(.is-expanded) .products-section,
+      .order-card:not(.is-expanded) .order-details,
+      .order-card:not(.is-expanded) .payment-section,
+      .order-card:not(.is-expanded) .order-actions{display:none!important}
+      .order-card:not(.is-expanded) .order-total{margin-top:4px!important}
+      .order-card:not(.is-expanded) .customer-row{border-bottom:0!important;padding-bottom:0!important}
+      .order-card.is-expanded{box-shadow:0 5px 16px rgba(22,101,52,.10)!important}
+      .order-card .order-total{display:flex!important}
     `;
     document.head.appendChild(style);
   }
   installFroogNavyDriverTheme();
+
+  // Toggle invoice details only when the user clicks the card background/content.
+  // Buttons, links, payment controls and form fields keep their original actions.
+  document.addEventListener('click', (event) => {
+    const card = event.target.closest?.('.order-card');
+    if (!card) return;
+    if (event.target.closest('button, a, input, select, textarea, label')) return;
+    card.classList.toggle('is-expanded');
+  });
 
   const normalizePayment = (value) => {
     const v = String(value ?? '').trim().toLowerCase();
