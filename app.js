@@ -2461,6 +2461,12 @@
       });
   }
 
+  // تحويلات تاريخية مضافة للعرض في صفحة الماستر فقط؛ لا تنشئ فواتير ولا تعدّل قاعدة البيانات.
+  const MASTER_HISTORICAL_TRANSFERS = [
+    { customer_name: 'أمنه', total: 378, transfer_date: '10/08/2026' },
+    { customer_name: 'خالد الفلاسي', total: 160, transfer_date: '27/09/2026' }
+  ];
+
   function renderMasterOldPendingTransfers() {
     const list = $('master-old-transfer-list');
     const count = $('master-old-transfer-count');
@@ -2482,13 +2488,12 @@
     if ($('master-old-transfer-stat-yesterday')) $('master-old-transfer-stat-yesterday').textContent = yesterdayOrders.length.toLocaleString('ar-EG');
     if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = olderOrders.length.toLocaleString('ar-EG');
 
+    list.innerHTML = '';
+
     if (!orders.length) {
       list.innerHTML = '<div class="master-old-transfer-empty">لا توجد تحويلات قديمة معلّقة حاليًا.</div>';
-      return;
-    }
-
-    list.innerHTML = '';
-    orders.forEach((order) => {
+    } else {
+      orders.forEach((order) => {
       const card = document.createElement('article');
       card.className = 'master-old-transfer-card';
       const ageDays = Math.max(1, Math.floor((new Date(`${masterDateInput(new Date())}T12:00:00`).getTime() - new Date(`${masterDateInput(order.created_at)}T12:00:00`).getTime()) / 86400000));
@@ -2507,6 +2512,28 @@
       `;
       const button = card.querySelector('[data-old-transfer]');
       if (button) button.addEventListener('click', () => setMasterTransferReceived(order, true, button));
+      list.appendChild(card);
+      });
+    }
+
+    const historicalTitle = document.createElement('div');
+    historicalTitle.className = 'master-old-transfer-title';
+    historicalTitle.style.cssText = 'margin-top:14px;padding-top:12px;border-top:1px solid #e8edef;font-weight:900;color:#24343a';
+    historicalTitle.textContent = 'تحويلات تاريخية مضافة';
+    list.appendChild(historicalTitle);
+
+    MASTER_HISTORICAL_TRANSFERS.forEach((transfer) => {
+      const card = document.createElement('article');
+      card.className = 'master-old-transfer-card';
+      card.style.cssText = 'border-color:#c8ebd2;background:#f1fbf4';
+      card.innerHTML = `
+        <div class="master-old-transfer-card-top">
+          <span class="master-old-transfer-customer">${masterEscape(transfer.customer_name)}</span>
+          <span class="master-transfer-state received">✓ تحويل تاريخي</span>
+        </div>
+        <div class="master-old-transfer-meta">تاريخ التحويل: ${masterEscape(transfer.transfer_date)}</div>
+        <div class="master-old-transfer-amount">${masterEscape(formatTotal(transfer.total))}</div>
+      `;
       list.appendChild(card);
     });
   }
