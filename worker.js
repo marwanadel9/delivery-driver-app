@@ -1401,6 +1401,84 @@ export default {
       }
 
       if (
+        path === "/api/customer-balances-sync" &&
+        request.method === "POST"
+      ) {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+
+        if (secret !== env.EXCEL_SYNC_SECRET) {
+          return json({ error: "غير مصرح" }, 401);
+        }
+
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+          return json({ error: "إعداد مزامنة أرصدة العملاء غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
+        }
+
+        const body = await request.json().catch(function () { return null; });
+        const inputRows = Array.isArray(body)
+          ? body
+          : (body && Array.isArray(body.balances) ? body.balances : []);
+
+        if (!Array.isArray(inputRows)) {
+          return json({ error: "بيانات الأرصدة غير صحيحة" }, 400);
+        }
+
+        const balances = [];
+        for (const row of inputRows) {
+          if (!row || typeof row !== "object") continue;
+
+          const customerCode = String(row.customer_code || "").trim();
+          if (!customerCode) continue;
+
+          const amountAdded = Number(row.amount_added || 0);
+          const amountPaid = Number(row.amount_paid || 0);
+          if (!Number.isFinite(amountAdded) || !Number.isFinite(amountPaid)) {
+            return json({ error: "يوجد مبلغ غير صحيح للعميل " + customerCode }, 400);
+          }
+
+          balances.push({
+            customer_code: customerCode,
+            customer_name: String(row.customer_name || "").trim(),
+            phone: String(row.phone || "").trim(),
+            amount_added: amountAdded,
+            amount_paid: amountPaid,
+            notes: String(row.notes || "").trim(),
+            area: String(row.area || "").trim(),
+            emirate: String(row.emirate || "").trim(),
+            order_ref: String(row.order_ref || "").trim(),
+            updated_at: new Date().toISOString()
+          });
+        }
+
+        if (balances.length === 0) {
+          return json({ success: true, synced: 0, message: "لا توجد أرصدة لها أكواد عملاء" });
+        }
+
+        const balanceResponse = await supabaseRequest(
+          "/rest/v1/customer_balances?on_conflict=customer_code",
+          {
+            method: "POST",
+            headers: {
+              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+              Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
+              "Content-Type": "application/json",
+              Prefer: "resolution=merge-duplicates,return=representation"
+            },
+            body: JSON.stringify(balances)
+          }
+        );
+
+        const balanceData = await balanceResponse.json().catch(function () { return null; });
+        if (!balanceResponse.ok) {
+          return json({
+            error: (balanceData && (balanceData.message || balanceData.hint || balanceData.error)) || "فشلت مزامنة أرصدة العملاء"
+          }, 502);
+        }
+
+        return json({ success: true, synced: balances.length, data: balanceData });
+      }
+
+      if (
         path === "/api/excel-sync" &&
         request.method === "POST"
       ) {
