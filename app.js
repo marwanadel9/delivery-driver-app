@@ -2164,7 +2164,7 @@
               <div class="master-monthly-stat received"><span>تم استلامها</span><strong id="master-monthly-received">٠ درهم</strong></div>
             </div>
             <section class="master-monthly-section">
-              <div class="master-monthly-section-head pending"><span>⚠️ التحويلات التي لم يتم استلامها — تظهر في أعلى الصفحة</span><span id="master-monthly-pending-count">٠</span></div>
+              <div class="master-monthly-section-head pending"><span>⚠️ التحويلات غير المستلمة</span><span id="master-monthly-pending-count">٠</span></div>
               <div class="master-monthly-table-wrap"><table class="master-monthly-table"><thead><tr><th>الإمارة</th><th>الفاتورة</th><th>العميل</th><th>الهاتف</th><th>المنطقة</th><th>التاريخ</th><th>المبلغ</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody id="master-monthly-pending-body"><tr><td colspan="9" class="master-monthly-empty">جارٍ تحميل التحويلات…</td></tr></tbody></table></div>
             </section>
             <section class="master-monthly-section">
