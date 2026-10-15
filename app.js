@@ -967,11 +967,11 @@
       // Button is injected into the existing card, so no HTML template change is required.
       const departureBox = document.createElement('div');
       departureBox.className = 'driver-departure-box';
-      departureBox.style.cssText = 'display:flex;justify-content:flex-start;width:100%;box-sizing:border-box;margin:0 0 8px;padding:0;';
+      departureBox.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin:0 0 12px;padding:0;';
       const departureButton = document.createElement('button');
       departureButton.type = 'button';
       departureButton.className = 'driver-heading-button';
-      departureButton.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:7px;width:auto;min-width:170px;max-width:72%;min-height:40px;padding:8px 13px;margin-right:auto;margin-left:0;border:1px solid #bfdbfe;border-radius:11px;background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#175cd3;font-size:14px;font-weight:900;line-height:1.25;box-shadow:0 2px 0 rgba(37,99,235,.08);cursor:pointer;';
+      departureButton.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:54px;padding:12px 16px;border:1px solid #bfdbfe;border-radius:13px;background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#175cd3;font-size:17px;font-weight:900;box-shadow:0 3px 0 rgba(37,99,235,.10);cursor:pointer;';
       departureButton.innerHTML = '<span aria-hidden="true">🚗</span><span>متوجه للعميل</span>';
       departureBox.appendChild(departureButton);
       node.insertBefore(departureBox, node.firstChild);
@@ -2144,6 +2144,21 @@
       .master-page[data-view="balances"] #master-customer-balances{display:block}
       .master-page[data-view="departures"] .master-home-intro,.master-page[data-view="departures"] .master-stats,.master-page[data-view="departures"] .master-filters,.master-page[data-view="departures"] .master-orders-layout,.master-page[data-view="departures"] #master-customer-balances{display:none}
       .master-page[data-view="departures"] #master-driver-departures{display:block}
+      .master-monthly-transfers{display:none;background:#fff;border:1px solid #e2eaf2;border-radius:18px;padding:16px;box-shadow:0 8px 26px rgba(30,49,67,.05)}
+      .master-page[data-view="monthly-transfers"] .master-home-intro,.master-page[data-view="monthly-transfers"] .master-stats,.master-page[data-view="monthly-transfers"] .master-filters,.master-page[data-view="monthly-transfers"] .master-orders-layout,.master-page[data-view="monthly-transfers"] #master-customer-balances,.master-page[data-view="monthly-transfers"] #master-driver-departures{display:none!important}
+      .master-page[data-view="monthly-transfers"] #master-monthly-transfers{display:block!important}
+      .master-monthly-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+      .master-monthly-title{font-size:20px;font-weight:900;color:#102744;margin:0}
+      .master-monthly-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+      .master-monthly-controls input{border:1px solid #dbe5ef;border-radius:10px;padding:10px;font:inherit;min-height:42px;background:#fff}
+      .master-monthly-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
+      .master-monthly-stat{padding:13px;border-radius:13px;border:1px solid #e2eaf2;background:#f8fafc;min-width:0}
+      .master-monthly-stat.pending{background:#fff3f3;border-color:#fecaca}.master-monthly-stat.received{background:#effaf3;border-color:#bbf7d0}
+      .master-monthly-stat span{display:block;font-size:11px;font-weight:800;color:#64748b;margin-bottom:7px}.master-monthly-stat strong{display:block;font-size:20px;font-weight:900;color:#172b3a;overflow-wrap:anywhere}.master-monthly-stat.pending strong{color:#b42318}.master-monthly-stat.received strong{color:#16723b}
+      .master-monthly-section{margin-top:16px;border:1px solid #e5ebf0;border-radius:14px;overflow:hidden}
+      .master-monthly-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 14px;background:#f8fafc;border-bottom:1px solid #e5ebf0;font-weight:900}
+      .master-monthly-section-head.pending{background:#fff1f1;color:#a51d1d}.master-monthly-section-head.received{background:#effaf3;color:#166534}
+      .master-monthly-table-wrap{overflow:auto}.master-monthly-table{width:100%;min-width:850px;border-collapse:collapse}.master-monthly-table th,.master-monthly-table td{text-align:right;padding:11px 10px;border-bottom:1px solid #edf1f5;white-space:nowrap;font-size:12px}.master-monthly-table th{background:#fbfcfd;color:#64748b;font-size:11px}.master-monthly-table tbody tr:last-child td{border-bottom:0}.master-monthly-empty{text-align:center;padding:24px!important;color:#64748b;white-space:normal!important}.master-monthly-status{display:inline-flex;border-radius:999px;padding:5px 9px;font-weight:900;font-size:11px}.master-monthly-status.pending{background:#fff0f0;color:#b42318}.master-monthly-status.received{background:#e8f7ee;color:#16723b}
       .master-driver-departures{display:none;background:#fff;border:1px solid #dce8f1;border-radius:16px;padding:16px;box-shadow:0 6px 20px rgba(30,49,67,.05)}
       .master-departure-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
       .master-departure-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
@@ -2214,6 +2229,7 @@
           <button class="master-nav-btn" type="button" data-master-view-tab="home" aria-current="page">🏠 الرئيسية</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="orders">🧾 الطلبات والفواتير</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="transfers">🏦 تحويلات سابقة</button>
+          <button class="master-nav-btn" type="button" data-master-view-tab="monthly-transfers">📅 التحويلات الشهرية</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="balances">💰 أرصدة العملاء</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="departures">🚗 تحرك المندوبين</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="reports">📊 التقارير والإحصائيات</button>
@@ -2264,6 +2280,35 @@
               <div class="master-departure-stat"><span>آخر تحرك</span><strong id="master-departure-last">—</strong></div>
             </div>
             <div class="master-departure-list" id="master-departure-list"><div class="master-departure-empty">جارٍ تحميل التحركات…</div></div>
+          </section>
+
+          <section class="master-monthly-transfers" id="master-monthly-transfers" aria-label="التحويلات الشهرية">
+            <div class="master-monthly-head">
+              <div>
+                <h2 class="master-monthly-title">التحويلات البنكية الشهرية</h2>
+                <div style="font-size:12px;color:#64748b;line-height:1.8;margin-top:5px">التحويلات غير المستلمة تظهر أولًا، ثم جميع تحويلات الشهر مرتبة حسب الإمارة.</div>
+              </div>
+              <div class="master-monthly-controls">
+                <label for="master-transfer-month" style="font-size:12px;font-weight:800;color:#475569">الشهر</label>
+                <input id="master-transfer-month" type="month" aria-label="اختيار شهر التحويلات">
+                <button class="master-btn secondary" type="button" id="master-monthly-refresh">↻ تحديث البيانات</button>
+              </div>
+            </div>
+            <div class="master-monthly-summary">
+              <div class="master-monthly-stat"><span>عدد التحويلات</span><strong id="master-monthly-count">٠</strong></div>
+              <div class="master-monthly-stat"><span>إجمالي المبالغ</span><strong id="master-monthly-total">٠ درهم</strong></div>
+              <div class="master-monthly-stat pending"><span>غير مستلمة</span><strong id="master-monthly-pending">٠ درهم</strong></div>
+              <div class="master-monthly-stat received"><span>تم استلامها</span><strong id="master-monthly-received">٠ درهم</strong></div>
+            </div>
+            <section class="master-monthly-section">
+              <div class="master-monthly-section-head pending"><span>⚠️ التحويلات غير المستلمة</span><span id="master-monthly-pending-count">٠</span></div>
+              <div class="master-monthly-table-wrap"><table class="master-monthly-table"><thead><tr><th>الإمارة</th><th>الفاتورة</th><th>العميل</th><th>الهاتف</th><th>المنطقة</th><th>التاريخ</th><th>المبلغ</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody id="master-monthly-pending-body"><tr><td colspan="9" class="master-monthly-empty">جارٍ تحميل التحويلات…</td></tr></tbody></table></div>
+            </section>
+            <section class="master-monthly-section">
+              <div class="master-monthly-section-head"><span>جميع تحويلات الشهر — مرتبة حسب الإمارة</span><span id="master-monthly-all-count">٠</span></div>
+              <div class="master-monthly-table-wrap"><table class="master-monthly-table"><thead><tr><th>الإمارة</th><th>الفاتورة</th><th>العميل</th><th>الهاتف</th><th>المنطقة</th><th>التاريخ</th><th>المبلغ</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody id="master-monthly-all-body"><tr><td colspan="9" class="master-monthly-empty">جارٍ تحميل التحويلات…</td></tr></tbody></table></div>
+            </section>
+            <p class="master-month-note">تعتمد القائمة على فواتير التحويل البنكي المحمّلة في الماستر، وتستثني الفواتير المدفوعة مقدمًا.</p>
           </section>
 
           <section class="master-filters">
@@ -2361,6 +2406,8 @@
     $('master-refresh')?.addEventListener('click', loadMasterOrders);
     $('master-departures-refresh')?.addEventListener('click', loadMasterDepartures);
     $('master-balance-refresh')?.addEventListener('click', loadMasterCustomerBalances);
+    $('master-monthly-refresh')?.addEventListener('click', loadMasterOrders);
+    $('master-transfer-month')?.addEventListener('change', renderMasterMonthlyTransfers);
     $('master-balance-search')?.addEventListener('input', renderMasterCustomerBalances);
     $('master-logout')?.addEventListener('click', () => masterLogout());
     document.querySelectorAll('[data-master-view-tab]').forEach((button) => {
@@ -2389,6 +2436,9 @@
       $(id)?.addEventListener('change', renderMasterOrders);
     });
 
+    const monthPicker = $('master-transfer-month');
+    if (monthPicker) monthPicker.value = masterDateInput(new Date()).slice(0, 7);
+
     loadMasterOrders();
     loadMasterDepartures();
     if (state.masterDeparturePoll) clearInterval(state.masterDeparturePoll);
@@ -2398,7 +2448,7 @@
   }
 
   function setMasterView(view) {
-    const allowed = new Set(['home', 'orders', 'transfers', 'reports', 'balances', 'departures']);
+    const allowed = new Set(['home', 'orders', 'transfers', 'monthly-transfers', 'reports', 'balances', 'departures']);
     const nextView = allowed.has(view) ? view : 'home';
     const page = $('master-page');
     if (!page) return;
@@ -2411,6 +2461,7 @@
       }
     });
     if (nextView === 'transfers') renderMasterOldPendingTransfers();
+    if (nextView === 'monthly-transfers') renderMasterMonthlyTransfers();
     if (nextView === 'reports') renderMasterStats();
     if (nextView === 'balances') loadMasterCustomerBalances();
     if (nextView === 'departures') loadMasterDepartures();
@@ -2857,6 +2908,84 @@
     });
   }
 
+  function getMasterMonthlyBankTransfers() {
+    const month = String($('master-transfer-month')?.value || masterDateInput(new Date()).slice(0, 7));
+    const emirateCompare = new Intl.Collator('ar', { numeric: true, sensitivity: 'base' });
+    return getMasterUniqueOrders()
+      .filter((order) => {
+        if (isPaidInAdvance(order) || normalizePayment(order.payment_method) !== 'bank_transfer') return false;
+        const date = masterDateInput(order.created_at);
+        return date && date.slice(0, 7) === month;
+      })
+      .sort((a, b) => {
+        const aPending = a.bank_transfer_received !== true;
+        const bPending = b.bank_transfer_received !== true;
+        if (aPending !== bPending) return aPending ? -1 : 1;
+        const emirateOrder = emirateCompare.compare(String(a.emirate || 'غير محدد'), String(b.emirate || 'غير محدد'));
+        if (emirateOrder) return emirateOrder;
+        const areaOrder = emirateCompare.compare(String(a.area || ''), String(b.area || ''));
+        if (areaOrder) return areaOrder;
+        return masterDateInput(b.created_at).localeCompare(masterDateInput(a.created_at));
+      });
+  }
+
+  function renderMasterMonthlyTransfers() {
+    const pendingBody = $('master-monthly-pending-body');
+    const allBody = $('master-monthly-all-body');
+    if (!pendingBody || !allBody) return;
+
+    const transfers = getMasterMonthlyBankTransfers();
+    const pending = transfers.filter((order) => order.bank_transfer_received !== true);
+    const received = transfers.filter((order) => order.bank_transfer_received === true);
+    const sum = (rows) => rows.reduce((total, order) => total + masterMoney(order.total), 0);
+    const moneyText = (amount) => `${amount.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+
+    if ($('master-monthly-count')) $('master-monthly-count').textContent = transfers.length.toLocaleString('ar-EG');
+    if ($('master-monthly-total')) $('master-monthly-total').textContent = moneyText(sum(transfers));
+    if ($('master-monthly-pending')) $('master-monthly-pending').textContent = moneyText(sum(pending));
+    if ($('master-monthly-received')) $('master-monthly-received').textContent = moneyText(sum(received));
+    if ($('master-monthly-pending-count')) $('master-monthly-pending-count').textContent = `${pending.length.toLocaleString('ar-EG')} تحويل`;
+    if ($('master-monthly-all-count')) $('master-monthly-all-count').textContent = `${transfers.length.toLocaleString('ar-EG')} تحويل`;
+
+    const rowHtml = (order, index) => {
+      const isReceived = order.bank_transfer_received === true;
+      const invoice = order.order_number ?? order.invoice_number ?? order.invoice_no ?? order.id ?? '—';
+      const status = isReceived
+        ? '<span class="master-monthly-status received">✓ تم الاستلام</span>'
+        : '<span class="master-monthly-status pending">لم يُستلم</span>';
+      const buttonLabel = isReceived ? 'إلغاء التأكيد' : 'تأكيد الاستلام';
+      const buttonClass = isReceived ? 'master-transfer-btn' : 'master-transfer-btn pending';
+      return `<tr data-month-transfer-row="${masterEscape(order.id)}">
+        <td><strong>${masterEscape(order.emirate || 'غير محدد')}</strong></td>
+        <td>${masterEscape(invoice)}</td>
+        <td>${masterEscape(order.customer_name || '—')}</td>
+        <td dir="ltr">${masterEscape(order.phone || '—')}</td>
+        <td>${masterEscape(order.area || '—')}</td>
+        <td>${masterEscape(masterDate(order.created_at))}</td>
+        <td><strong>${masterEscape(moneyText(masterMoney(order.total)))}</strong></td>
+        <td>${status}</td>
+        <td><button type="button" class="${buttonClass}" data-month-transfer-action="${masterEscape(order.id)}">${buttonLabel}</button></td>
+      </tr>`;
+    };
+
+    pendingBody.innerHTML = pending.length
+      ? pending.map(rowHtml).join('')
+      : '<tr><td colspan="9" class="master-monthly-empty">ممتاز، لا توجد تحويلات غير مستلمة في هذا الشهر.</td></tr>';
+    allBody.innerHTML = transfers.length
+      ? transfers.map(rowHtml).join('')
+      : '<tr><td colspan="9" class="master-monthly-empty">لا توجد فواتير تحويل بنكي في الشهر المحدد.</td></tr>';
+
+    [pendingBody, allBody].forEach((body) => {
+      body.querySelectorAll('[data-month-transfer-action]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const id = String(button.dataset.monthTransferAction || '');
+          const order = transfers.find((item) => String(item.id) === id);
+          if (order) setMasterTransferReceived(order, order.bank_transfer_received !== true, button);
+        });
+      });
+    });
+  }
+
   function renderMasterOrders() {
     const body = $('master-orders-body');
 
@@ -2867,6 +2996,7 @@
     const orders = getMasterFilteredOrders();
 
     renderMasterOldPendingTransfers();
+    renderMasterMonthlyTransfers();
     renderMasterStats();
 
     if (!orders.length) {
