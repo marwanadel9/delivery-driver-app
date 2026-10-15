@@ -2008,12 +2008,36 @@
       .master-edit-form textarea{min-height:82px;resize:vertical}
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
+      .master-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:12px 20px;background:#fff;border-bottom:1px solid #e5ebf0;position:sticky;top:86px;z-index:9}
+      .master-nav-btn{border:1px solid #dbe5ef;border-radius:13px;min-height:48px;padding:10px 12px;background:#f8fafc;color:#334155;font-weight:900;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .15s,box-shadow .15s,border-color .15s}
+      .master-nav-btn:hover{transform:translateY(-1px);box-shadow:0 5px 15px rgba(20,45,70,.09)}
+      .master-nav-btn[aria-current="page"]{background:linear-gradient(135deg,#176b57,#15966d);color:#fff;border-color:#12835e;box-shadow:0 5px 14px rgba(22,163,106,.2)}
+      .master-home-intro{display:none;background:linear-gradient(135deg,#fff,#f0f7ff);border:1px solid #dce8f6;border-radius:18px;padding:18px 20px;margin-bottom:16px;box-shadow:0 6px 20px rgba(30,49,67,.04)}
+      .master-home-intro h2{font-size:18px;margin:0 0 6px;color:#102744}.master-home-intro p{font-size:12px;line-height:1.8;color:#64748b;margin:0 0 12px}
+      .master-home-cta{border:0;border-radius:10px;background:#176b57;color:#fff;padding:10px 15px;font-weight:900;cursor:pointer}
+      .master-page[data-view="home"] .master-home-intro{display:block}
+      .master-page[data-view="home"] .master-stats .master-stat:nth-child(1),.master-page[data-view="home"] .master-stats .master-stat:nth-child(3),.master-page[data-view="home"] .master-stats .master-stat:nth-child(5),.master-page[data-view="home"] .master-stats .master-stat:nth-child(6),.master-page[data-view="home"] .master-stats .master-stat:nth-child(9){display:none}
+      .master-page[data-view="home"] .master-stats{grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+      .master-page[data-view="home"] .master-filters,.master-page[data-view="home"] .master-orders-layout{display:none}
+      .master-page[data-view="orders"] .master-stats,.master-page[data-view="orders"] .master-home-intro,.master-page[data-view="orders"] #master-old-transfer-panel{display:none}
+      .master-page[data-view="orders"] .master-orders-layout{display:block}
+      .master-page[data-view="orders"] .master-filters{display:grid}
+      .master-page[data-view="transfers"] .master-stats,.master-page[data-view="transfers"] .master-home-intro,.master-page[data-view="transfers"] .master-filters,.master-page[data-view="transfers"] .master-table-wrap{display:none}
+      .master-page[data-view="transfers"] .master-orders-layout{display:block}
+      .master-page[data-view="transfers"] #master-old-transfer-panel{display:block;width:100%;max-width:980px;margin:0 auto}
+      .master-page[data-view="reports"] .master-home-intro,.master-page[data-view="reports"] .master-filters,.master-page[data-view="reports"] .master-orders-layout{display:none}
+      .master-page[data-view="reports"] .master-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+      .master-page[data-view="reports"] .master-stats .master-stat{display:block}
+      .master-page[data-view="reports"] .master-page-title{display:block}
+      .master-edit-row{display:flex;gap:6px;align-items:center}
+      .master-edit-btn{border:0;background:#e8f2ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:900;white-space:nowrap}
+      .master-edit-btn:hover{background:#dbeafe}
       @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:270px minmax(0,1fr)}}
       @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr);gap:10px}.master-old-transfer-panel{order:0;padding:10px}.master-table-wrap{order:1}}
       @media(max-width:650px){.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
+      @media(max-width:900px){.master-nav{grid-template-columns:repeat(2,minmax(0,1fr));top:78px;padding:10px;gap:7px}.master-nav-btn{min-height:44px;font-size:12px}.master-page[data-view="home"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-page[data-view="reports"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:650px){.master-nav{position:sticky;top:0;z-index:20;grid-template-columns:repeat(2,minmax(0,1fr));padding:8px}.master-nav-btn{font-size:11px;padding:9px 5px;min-height:42px}.master-home-intro{padding:14px}.master-page[data-view="home"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-page[data-view="home"] .master-stats .master-stat{display:block}.master-page[data-view="home"] .master-stats .master-stat:nth-child(1),.master-page[data-view="home"] .master-stats .master-stat:nth-child(3),.master-page[data-view="home"] .master-stats .master-stat:nth-child(5),.master-page[data-view="home"] .master-stats .master-stat:nth-child(6),.master-page[data-view="home"] .master-stats .master-stat:nth-child(9){display:none}.master-page[data-view="reports"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-row{align-items:stretch;flex-direction:column}.master-edit-row button{width:100%}}
     `;
-
-    style.textContent += "\n.master-nav{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;width:min(1800px,100%);margin:0 auto;padding:12px 24px 0}.master-nav-btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:10px;border:1px solid #dce6f2;border-radius:13px;font:inherit;font-weight:900;cursor:pointer;box-shadow:0 4px 12px #142d4b0d}.master-nav-btn[data-master-target=home]{background:linear-gradient(135deg,#42a5f5,#1976d2);color:white}.master-nav-btn[data-master-target=orders]{background:linear-gradient(135deg,#eef6ff,#fff);color:#1765c0}.master-nav-btn[data-master-target=balances]{background:linear-gradient(135deg,#21a765,#087c48);color:white}.master-nav-btn[data-master-target=drivers]{background:linear-gradient(135deg,#a78bfa,#7048d9);color:white}.master-nav-btn[data-master-target=reports]{background:linear-gradient(135deg,#ffad45,#f47712);color:white}.master-nav-btn[data-master-target=customers]{background:linear-gradient(135deg,#25b6b7,#07898d);color:white}.master-nav-btn[data-master-target=settings]{background:linear-gradient(135deg,#7c8998,#4b5867);color:white}.master-nav-btn.active{outline:3px solid #1f67b82a;filter:saturate(1.08)}.master-page-view[hidden]{display:none!important}.customer-balances-panel,.master-placeholder{background:#fff;border:1px solid #e3eaf3;border-radius:18px;padding:18px;box-shadow:0 8px 24px #142d4b0d}.customer-balances-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}.customer-balances-title{font-size:20px;font-weight:900;color:#102744}.customer-balances-stats,.master-placeholder-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}.customer-balance-stat,.master-placeholder-card{border:1px solid #e3eaf3;border-radius:14px;padding:15px;background:#f8fbff;min-width:0}.customer-balance-stat small,.master-placeholder-card small{display:block;color:#71839b;font-size:12px;font-weight:800;margin-bottom:8px}.customer-balance-stat strong,.master-placeholder-card strong{display:block;color:#126b49;font-size:21px;font-weight:900;overflow-wrap:anywhere}.customer-balance-stat.due strong,.master-placeholder-card.due strong,.customer-balance-amount{color:#c62828!important;font-weight:900}.customer-balances-tools{margin:12px 0}.customer-balances-tools input{width:100%;max-width:460px;box-sizing:border-box;border:1px solid #dce5ef;border-radius:11px;padding:12px;font:inherit}.customer-balances-table-wrap{overflow:auto;border:1px solid #e3eaf3;border-radius:13px}.customer-balances-table{width:100%;min-width:950px;border-collapse:collapse}.customer-balances-table th,.customer-balances-table td{padding:11px 10px;text-align:right;border-bottom:1px solid #edf1f6;white-space:nowrap;font-size:12px}.customer-balances-table th{background:#102744;color:#fff;font-weight:900}.customer-balances-empty{text-align:center!important;padding:22px!important;color:#71839b!important}.master-placeholder h2{margin:0 0 8px;color:#102744}.master-placeholder p{color:#71839b;line-height:1.7}@media(max-width:900px){.master-nav{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.master-nav-btn{font-size:11px;min-height:44px}}@media(max-width:650px){.master-nav{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px;gap:8px}.master-nav-btn{justify-content:flex-start;min-height:46px}.customer-balances-panel,.master-placeholder{padding:12px}.customer-balances-stats,.master-placeholder-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.customer-balance-stat,.master-placeholder-card{padding:11px}.customer-balance-stat strong,.master-placeholder-card strong{font-size:16px}}\n";
 
     document.head.appendChild(style);
   }
@@ -2037,7 +2061,7 @@
     const shell = document.querySelector('.app-shell') || document.body;
 
     shell.innerHTML = `
-      <div class="master-page" id="master-page" dir="rtl">
+      <div class="master-page" id="master-page" data-view="home" dir="rtl">
         <header class="master-top">
           <div class="master-brand">
             <div class="master-logo">🐔</div>
@@ -2052,18 +2076,19 @@
           </div>
         </header>
 
-        <nav class="master-nav" aria-label="أقسام الإدارة الرئيسية">
-          <button type="button" class="master-nav-btn active" data-master-target="home">⌂ الرئيسية</button>
-          <button type="button" class="master-nav-btn" data-master-target="orders">▤ الطلبات</button>
-          <button type="button" class="master-nav-btn" data-master-target="balances">＄ أرصدة العملاء</button>
-          <button type="button" class="master-nav-btn" data-master-target="drivers">🚚 المندوبون</button>
-          <button type="button" class="master-nav-btn" data-master-target="reports">▥ التقارير</button>
-          <button type="button" class="master-nav-btn" data-master-target="customers">♟ العملاء</button>
-          <button type="button" class="master-nav-btn" data-master-target="settings">⚙ الإعدادات</button>
+        <nav class="master-nav" aria-label="أقسام الماستر">
+          <button class="master-nav-btn" type="button" data-master-view-tab="home" aria-current="page">🏠 الرئيسية</button>
+          <button class="master-nav-btn" type="button" data-master-view-tab="orders">🧾 الطلبات والفواتير</button>
+          <button class="master-nav-btn" type="button" data-master-view-tab="transfers">🏦 تحويلات سابقة</button>
+          <button class="master-nav-btn" type="button" data-master-view-tab="reports">📊 التقارير والإحصائيات</button>
         </nav>
 
         <main class="master-wrap">
-          <section class="master-page-view" data-master-view="home">
+          <section class="master-home-intro">
+            <h2>ملخص الإدارة اليوم</h2>
+            <p>من هنا تقدر تراجع أهم أرقام الشغل بسرعة، وتدخل على الفواتير أو التحويلات السابقة من الأزرار بالأعلى. الأرقام تتحدث من بيانات الماستر الحالية.</p>
+            <button class="master-home-cta" type="button" data-master-go="orders">فتح الفواتير وإدارتها ←</button>
+          </section>
           <section class="master-stats">
             <div class="master-stat prepaid"><div class="master-stat-label">مدفوع مقدم</div><div class="master-stat-value" id="master-total-prepaid">0 درهم</div><div class="master-stat-hint" id="master-prepaid-hint">عدد الفواتير: ٠</div></div>
             <div class="master-stat count"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">عدد الفواتير بدون تكرار</div></div>
@@ -2076,18 +2101,7 @@
             <div class="master-stat collected"><div class="master-stat-label">إجمالي المبالغ المسجلة/المستلمة</div><div class="master-stat-value" id="master-total-received">0 درهم</div><div class="master-stat-hint">الكاش المسجل + التحويلات المؤكدة</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
           </section>
-          </section>
 
-          <section class="master-page-view" data-master-view="balances" hidden>
-            <section class="customer-balances-panel">
-              <div class="customer-balances-head"><div class="customer-balances-title">💳 أرصدة العملاء</div><button class="master-btn secondary" id="customer-balances-refresh" type="button">↻ تحديث الأرصدة</button></div>
-              <div class="customer-balances-stats"><div class="customer-balance-stat"><small>عدد العملاء</small><strong id="customer-balances-count">—</strong></div><div class="customer-balance-stat"><small>إجمالي المبالغ المضافة</small><strong id="customer-balances-added">—</strong></div><div class="customer-balance-stat due"><small>إجمالي الرصيد المتبقي</small><strong id="customer-balances-due">—</strong></div></div>
-              <div class="customer-balances-tools"><input id="customer-balances-search" type="search" placeholder="ابحث باسم العميل أو الكود أو الهاتف"></div>
-              <div class="customer-balances-table-wrap"><table class="customer-balances-table"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>الإمارة</th><th>المنطقة</th><th>المضاف</th><th>المدفوع</th><th>الرصيد المتبقي</th><th>ملاحظات</th></tr></thead><tbody id="customer-balances-body"><tr><td colspan="9" class="customer-balances-empty">جارٍ تحميل أرصدة العملاء…</td></tr></tbody></table></div>
-            </section>
-          </section>
-
-          <section class="master-page-view" data-master-view="orders" hidden>
           <section class="master-filters">
             <div class="master-filter">
               <label>رقم الفاتورة</label>
@@ -2131,10 +2145,10 @@
           <div class="master-orders-layout">
             <aside class="master-old-transfer-panel" id="master-old-transfer-panel" aria-label="التحويلات القديمة غير المستلمة">
               <div class="master-old-transfer-head">
-                <div class="master-old-transfer-title">تحويلات الأيام السابقة غير المستلمة</div>
+                <div class="master-old-transfer-title">التحويلات السابقة غير المستلمة</div>
                 <span class="master-old-transfer-count" id="master-old-transfer-count">٠</span>
               </div>
-              <div class="master-old-transfer-note">تظهر هنا فواتير التحويل البنكي من الأيام السابقة التي لم يتم تأكيد استلامها. فواتير اليوم تظل في الجدول الرئيسي.</div>
+              <div class="master-old-transfer-note">تظهر هنا التحويلات القديمة التي تحتاج مراجعة، بما فيها التحويلات التاريخية المسجلة لأمنه وخالد الفلاسي. فواتير اليوم موجودة في قسم الطلبات.</div>
               <div class="master-old-transfer-stats" aria-label="إحصائيات التحويلات القديمة">
                 <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">عدد التحويلات المعلقة</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-count">٠</strong></div>
                 <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">إجمالي المبالغ غير المستلمة</span><strong class="master-old-transfer-stat-value money" id="master-old-transfer-stat-total">٠ درهم</strong></div>
@@ -2159,19 +2173,13 @@
                   <th>استلام التحويل</th>
                   <th>الحالة</th>
                   <th>التاريخ</th>
-                  <th>عرض</th>
+                  <th>الإجراءات</th>
                 </tr>
               </thead>
               <tbody id="master-orders-body"></tbody>
             </table>
             </section>
           </div>
-          </section>
-
-          <section class="master-page-view" data-master-view="drivers" hidden><div class="master-placeholder"><h2>🚚 المندوبون</h2><p>ملخص الفواتير المسجلة لكل مندوب.</p><div class="master-placeholder-grid"><div class="master-placeholder-card"><small>مندوب 1</small><strong id="master-driver-one">—</strong></div><div class="master-placeholder-card"><small>مندوب 2</small><strong id="master-driver-two">—</strong></div></div></div></section>
-          <section class="master-page-view" data-master-view="reports" hidden><div class="master-placeholder"><h2>📊 التقارير</h2><div class="master-placeholder-grid"><div class="master-placeholder-card"><small>عدد الفواتير</small><strong id="master-report-count">—</strong></div><div class="master-placeholder-card"><small>إجمالي الكاش</small><strong id="master-report-cash">—</strong></div><div class="master-placeholder-card"><small>التحويلات المستلمة</small><strong id="master-report-bank">—</strong></div><div class="master-placeholder-card due"><small>التحويلات غير المستلمة</small><strong id="master-report-pending">—</strong></div><div class="master-placeholder-card"><small>المبالغ المضافة للعملاء</small><strong id="master-report-added">—</strong></div><div class="master-placeholder-card due"><small>الأرصدة المتبقية</small><strong id="master-report-due">—</strong></div></div></div></section>
-          <section class="master-page-view" data-master-view="customers" hidden><div class="master-placeholder"><h2>👥 العملاء</h2><div class="customer-balances-tools"><input id="master-customers-search" type="search" placeholder="ابحث باسم العميل أو الكود أو الهاتف"></div><div class="customer-balances-table-wrap"><table class="customer-balances-table"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>الإمارة</th><th>المنطقة</th><th>الرصيد الحالي</th></tr></thead><tbody id="master-customers-body"><tr><td colspan="6" class="customer-balances-empty">جارٍ تحميل العملاء…</td></tr></tbody></table></div></div></section>
-          <section class="master-page-view" data-master-view="settings" hidden><div class="master-placeholder"><h2>⚙️ الإعدادات</h2><p>إعدادات العرض والحماية. لا يتم تغيير مفاتيح الاتصال من هذه الصفحة.</p></div></section>
         </main>
 
         <div class="master-modal" id="master-modal">
@@ -2186,20 +2194,14 @@
       </div>
     `;
 
-    const activateMasterPage = (page) => {
-      document.querySelectorAll('[data-master-view]').forEach((view) => { view.hidden = view.getAttribute('data-master-view') !== page; });
-      document.querySelectorAll('[data-master-target]').forEach((button) => { const active = button.getAttribute('data-master-target') === page; button.classList.toggle('active', active); button.setAttribute('aria-current', active ? 'page' : 'false'); });
-      if (page === 'balances') loadCustomerBalances();
-      if (page === 'reports') updateMasterReports();
-      if (page === 'customers') renderMasterCustomers();
-      if (page === 'drivers') updateMasterDriverSummary();
-    };
-    document.querySelectorAll('[data-master-target]').forEach((button) => button.addEventListener('click', () => activateMasterPage(button.getAttribute('data-master-target'))));
-    $('master-customers-search')?.addEventListener('input', renderMasterCustomers);
-    $('master-refresh')?.addEventListener('click', () => { loadMasterOrders(); loadCustomerBalances(); });
-    $('customer-balances-refresh')?.addEventListener('click', loadCustomerBalances);
-    $('customer-balances-search')?.addEventListener('input', renderCustomerBalances);
+    $('master-refresh')?.addEventListener('click', loadMasterOrders);
     $('master-logout')?.addEventListener('click', () => masterLogout());
+    document.querySelectorAll('[data-master-view-tab]').forEach((button) => {
+      button.addEventListener('click', () => setMasterView(button.dataset.masterViewTab));
+    });
+    document.querySelectorAll('[data-master-go]').forEach((button) => {
+      button.addEventListener('click', () => setMasterView(button.dataset.masterGo));
+    });
     $('master-modal-close')?.addEventListener('click', closeMasterModal);
 
     $('master-modal')?.addEventListener('click', (event) => {
@@ -2221,35 +2223,25 @@
     });
 
     loadMasterOrders();
-    loadCustomerBalances();
   }
 
-  let masterCustomerBalances = [];
-  function customerBalanceMoney(value) { const n = Number(value || 0); return (Number.isFinite(n) ? n : 0).toLocaleString('ar-EG', { maximumFractionDigits: 2 }) + ' درهم'; }
-  async function loadCustomerBalances() {
-    const body = $('customer-balances-body'); if (body) body.innerHTML = '<tr><td colspan="9" class="customer-balances-empty">جارٍ تحميل أرصدة العملاء…</td></tr>';
-    try { const data = await masterFetch('/api/master/customer-balances'); masterCustomerBalances = Array.isArray(data?.balances) ? data.balances : (Array.isArray(data) ? data : []);
-      const count = $('customer-balances-count'), added = $('customer-balances-added'), due = $('customer-balances-due');
-      if (count) count.textContent = masterCustomerBalances.length.toLocaleString('ar-EG');
-      if (added) added.textContent = customerBalanceMoney(masterCustomerBalances.reduce((s,r) => s + Number(r.amount_added || 0), 0));
-      if (due) due.textContent = customerBalanceMoney(masterCustomerBalances.reduce((s,r) => s + Number(r.current_balance || 0), 0));
-      renderCustomerBalances(); renderMasterCustomers(); updateMasterReports();
-    } catch (error) { if (body && error.message !== 'expired') body.innerHTML = `<tr><td colspan="9" class="customer-balances-empty">تعذر تحميل الأرصدة: ${masterEscape(error.message)}</td></tr>`; }
+  function setMasterView(view) {
+    const allowed = new Set(['home', 'orders', 'transfers', 'reports']);
+    const nextView = allowed.has(view) ? view : 'home';
+    const page = $('master-page');
+    if (!page) return;
+    page.dataset.view = nextView;
+    document.querySelectorAll('[data-master-view-tab]').forEach((button) => {
+      if (button.dataset.masterViewTab === nextView) {
+        button.setAttribute('aria-current', 'page');
+      } else {
+        button.removeAttribute('aria-current');
+      }
+    });
+    if (nextView === 'transfers') renderMasterOldPendingTransfers();
+    if (nextView === 'reports') renderMasterStats();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  function renderCustomerBalances() {
-    const body = $('customer-balances-body'); if (!body) return; const q = String($('customer-balances-search')?.value || '').trim().toLowerCase();
-    const rows = masterCustomerBalances.filter(r => [r.customer_code,r.customer_name,r.phone,r.emirate,r.area,r.notes].some(v => String(v || '').toLowerCase().includes(q)));
-    if (!rows.length) { body.innerHTML = '<tr><td colspan="9" class="customer-balances-empty">لا توجد أرصدة مطابقة للبحث</td></tr>'; return; }
-    body.innerHTML = rows.map(r => `<tr><td>${masterEscape(r.customer_code || '—')}</td><td>${masterEscape(r.customer_name || '—')}</td><td>${masterEscape(r.phone || '—')}</td><td>${masterEscape(r.emirate || '—')}</td><td>${masterEscape(r.area || '—')}</td><td>${masterEscape(customerBalanceMoney(r.amount_added))}</td><td>${masterEscape(customerBalanceMoney(r.amount_paid))}</td><td class="customer-balance-amount">${masterEscape(customerBalanceMoney(r.current_balance))}</td><td>${masterEscape(r.notes || '—')}</td></tr>`).join('');
-  }
-  function renderMasterCustomers() {
-    const body = $('master-customers-body'); if (!body) return; const q = String($('master-customers-search')?.value || '').trim().toLowerCase();
-    const rows = masterCustomerBalances.filter(r => [r.customer_code,r.customer_name,r.phone,r.emirate,r.area].some(v => String(v || '').toLowerCase().includes(q)));
-    if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="customer-balances-empty">لا توجد بيانات مطابقة</td></tr>'; return; }
-    body.innerHTML = rows.map(r => `<tr><td>${masterEscape(r.customer_code || '—')}</td><td>${masterEscape(r.customer_name || '—')}</td><td>${masterEscape(r.phone || '—')}</td><td>${masterEscape(r.emirate || '—')}</td><td>${masterEscape(r.area || '—')}</td><td class="customer-balance-amount">${masterEscape(customerBalanceMoney(r.current_balance))}</td></tr>`).join('');
-  }
-  function updateMasterDriverSummary() { const rows = state.masterOrders || []; const val = o => String(o.sheet_name || o.driver_sheet || o.mandoub_name || o.driver_name || o.driver || '').toLowerCase(); const one = rows.filter(o => /mandoub2|مندوب ?2|zain2/.test(val(o)) ? false : /mandoub|مندوب ?1|zain/.test(val(o))).length; const two = rows.filter(o => /mandoub2|مندوب ?2|zain2/.test(val(o))).length; if ($('master-driver-one')) $('master-driver-one').textContent = one.toLocaleString('ar-EG') + ' فاتورة'; if ($('master-driver-two')) $('master-driver-two').textContent = two.toLocaleString('ar-EG') + ' فاتورة'; }
-  function updateMasterReports() { const set = (id,v) => { const e=$(id); if(e)e.textContent=v; }; const rows=state.masterOrders||[]; set('master-report-count',rows.length.toLocaleString('ar-EG')); const cash=rows.filter(o=>normalizePayment(o.payment_method)==='cash').reduce((s,o)=>s+masterMoney(o.total),0); const banks=rows.filter(o=>normalizePayment(o.payment_method)==='bank_transfer'); const got=banks.filter(o=>o.transfer_received===true||o.bank_transfer_received===true||o.transfer_status==='received').reduce((s,o)=>s+masterMoney(o.total),0); const due=banks.filter(o=>!(o.transfer_received===true||o.bank_transfer_received===true||o.transfer_status==='received')).reduce((s,o)=>s+masterMoney(o.total),0); set('master-report-cash',customerBalanceMoney(cash));set('master-report-bank',customerBalanceMoney(got));set('master-report-pending',customerBalanceMoney(due));set('master-report-added',customerBalanceMoney(masterCustomerBalances.reduce((s,r)=>s+Number(r.amount_added||0),0)));set('master-report-due',customerBalanceMoney(masterCustomerBalances.reduce((s,r)=>s+Number(r.current_balance||0),0))); }
 
   async function loadMasterOrders() {
     const body = $('master-orders-body');
@@ -2268,8 +2260,6 @@
           : [];
 
       renderMasterOrders();
-      updateMasterDriverSummary();
-      updateMasterReports();
     } catch (error) {
       if (error.message !== 'expired' && body) {
         body.innerHTML = `<tr><td colspan="11" class="master-empty">${masterEscape(error.message)}</td></tr>`;
@@ -2750,13 +2740,10 @@
         </td>
 
         <td>
-          <button
-            class="master-view"
-            data-master-view="${masterEscape(
-              order.id
-            )}">
-            عرض
-          </button>
+          <div class="master-edit-row">
+            <button class="master-view" data-master-view="${masterEscape(order.id)}" type="button">عرض</button>
+            <button class="master-edit-btn" data-master-edit="${masterEscape(order.id)}" type="button">✎ تعديل الفاتورة</button>
+          </div>
         </td>
       `;
 
@@ -2770,6 +2757,11 @@
           'click',
           () => openMasterOrder(order)
         );
+      }
+
+      const editButton = tr.querySelector('[data-master-edit]');
+      if (editButton) {
+        editButton.addEventListener('click', () => openMasterEdit(order));
       }
 
       const transferButton = tr.querySelector('[data-master-transfer]');
