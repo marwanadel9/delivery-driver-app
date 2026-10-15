@@ -724,36 +724,6 @@ export default {
       }
 
       if (
-        path === "/api/master/customer-balances" &&
-        request.method === "GET"
-      ) {
-        const auth = await requireMaster(request, env);
-        if (auth.error) {
-          return json({ error: auth.error }, auth.status);
-        }
-        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
-          return json({ error: "إعداد عرض أرصدة العملاء غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
-        }
-
-        const balanceResponse = await supabaseRequest(
-          "/rest/v1/customer_balances?select=customer_code,customer_name,phone,amount_added,amount_paid,current_balance,notes,area,emirate,order_ref,updated_at&order=customer_name.asc",
-          {
-            headers: {
-              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-              Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY
-            }
-          }
-        );
-        const balanceData = await balanceResponse.json().catch(function () { return null; });
-        if (!balanceResponse.ok) {
-          return json({
-            error: (balanceData && (balanceData.message || balanceData.hint || balanceData.error)) || "تعذر تحميل أرصدة العملاء"
-          }, 502);
-        }
-        return json({ success: true, balances: Array.isArray(balanceData) ? balanceData : [] });
-      }
-
-      if (
         path === "/api/master/orders" &&
         request.method === "GET"
       ) {
@@ -1428,6 +1398,35 @@ export default {
         const publicUrl = SUPABASE_URL + "/storage/v1/object/public/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
 
         return json({ success: true, invoice_number: invoiceNumber, gate_photo_url: publicUrl });
+      }
+
+      if (
+        path === "/api/master/customer-balances" &&
+        request.method === "GET"
+      ) {
+        const auth = await requireMaster(request, env);
+        if (auth.error) {
+          return json({ error: auth.error }, auth.status);
+        }
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+          return json({ error: "إعداد عرض أرصدة العملاء غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
+        }
+        const response = await supabaseRequest(
+          "/rest/v1/customer_balances?select=customer_code,customer_name,phone,amount_added,amount_paid,current_balance,notes,area,emirate,order_ref,updated_at&order=customer_name.asc",
+          {
+            headers: {
+              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+              Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY
+            }
+          }
+        );
+        const rows = await response.json().catch(function () { return null; });
+        if (!response.ok) {
+          return json({
+            error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر تحميل أرصدة العملاء"
+          }, 502);
+        }
+        return json({ success: true, balances: Array.isArray(rows) ? rows : [] });
       }
 
       if (
