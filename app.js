@@ -967,11 +967,11 @@
       // Button is injected into the existing card, so no HTML template change is required.
       const departureBox = document.createElement('div');
       departureBox.className = 'driver-departure-box';
-      departureBox.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin:0 0 12px;padding:0;';
+      departureBox.style.cssText = 'display:flex;justify-content:flex-start;width:100%;box-sizing:border-box;margin:0 0 8px;padding:0;';
       const departureButton = document.createElement('button');
       departureButton.type = 'button';
       departureButton.className = 'driver-heading-button';
-      departureButton.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:54px;padding:12px 16px;border:1px solid #bfdbfe;border-radius:13px;background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#175cd3;font-size:17px;font-weight:900;box-shadow:0 3px 0 rgba(37,99,235,.10);cursor:pointer;';
+      departureButton.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:7px;width:auto;min-width:170px;max-width:72%;min-height:40px;padding:8px 13px;margin-right:auto;margin-left:0;border:1px solid #bfdbfe;border-radius:11px;background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#175cd3;font-size:14px;font-weight:900;line-height:1.25;box-shadow:0 2px 0 rgba(37,99,235,.08);cursor:pointer;';
       departureButton.innerHTML = '<span aria-hidden="true">🚗</span><span>متوجه للعميل</span>';
       departureBox.appendChild(departureButton);
       node.insertBefore(departureBox, node.firstChild);
