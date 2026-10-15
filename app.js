@@ -1999,6 +1999,19 @@
       .master-detail small{display:block;color:#77848a;font-size:11px;margin-bottom:5px}
       .master-detail strong{display:block;white-space:pre-wrap;word-break:break-word}
       .master-section{margin-top:14px;border:1px solid #e8edef;border-radius:13px;padding:13px}
+      /* Professional compact invoice details */
+      .master-modal-card{width:min(760px,100%);max-height:88vh;border:1px solid #e5ebf0}
+      .master-modal-head{padding:12px 16px}
+      .master-modal-body{padding:14px}
+      .master-detail-grid{gap:8px}
+      .master-detail{padding:10px 12px;border:1px solid #edf1f4;border-radius:11px}
+      .master-detail small{font-size:10px;margin-bottom:4px}
+      .master-detail strong{font-size:13px;line-height:1.5}
+      .master-section{margin-top:9px;padding:11px 13px;border-radius:11px}
+      .master-section-title{font-size:12px;margin-bottom:6px}
+      .master-section-content{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+      .master-actions-row{position:sticky;bottom:-14px;background:rgba(255,255,255,.97);padding:10px 0 2px;margin-top:10px;z-index:2}
+      .master-actions-row .master-btn{flex:1;min-height:42px}
       .master-section-title{font-weight:800;margin-bottom:8px}
       .master-section-content{white-space:pre-wrap;line-height:1.7;color:#39484e}
       .master-actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
@@ -2008,7 +2021,7 @@
       .master-edit-form textarea{min-height:82px;resize:vertical}
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
-      .master-nav{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;padding:12px 20px;background:#fff;border-bottom:1px solid #e5ebf0;position:sticky;top:86px;z-index:9}
+      .master-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:12px 20px;background:#fff;border-bottom:1px solid #e5ebf0;position:sticky;top:86px;z-index:9}
       .master-nav-btn{border:1px solid #dbe5ef;border-radius:13px;min-height:48px;padding:10px 12px;background:#f8fafc;color:#334155;font-weight:900;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .15s,box-shadow .15s,border-color .15s}
       .master-nav-btn:hover{transform:translateY(-1px);box-shadow:0 5px 15px rgba(20,45,70,.09)}
       .master-nav-btn[aria-current="page"]{background:linear-gradient(135deg,#176b57,#15966d);color:#fff;border-color:#12835e;box-shadow:0 5px 14px rgba(22,163,106,.2)}
@@ -2039,25 +2052,9 @@
       .master-balance-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.master-balance-table{width:100%;min-width:850px;border-collapse:collapse}.master-balance-table th{background:#102744;color:#fff;padding:12px 10px;text-align:right;font-size:12px;white-space:nowrap}.master-balance-table td{padding:11px 10px;border-bottom:1px solid #e8eef4;font-size:12px}.master-balance-table tr:nth-child(even){background:#f8fafc}.master-balance-empty{text-align:center;padding:24px;color:#64748b}
       @media(max-width:650px){.master-balance-stats{grid-template-columns:1fr 1fr;gap:8px}.master-balance-stat{padding:11px}.master-balance-value{font-size:17px}.master-customer-balances{padding:10px}.master-balance-toolbar{align-items:stretch}.master-balance-search{min-width:100%}}
       .master-page[data-view="reports"] .master-page-title{display:block}
-      .master-monthly-transfers{display:none;background:#fff;border:1px solid #e2eaf2;border-radius:18px;padding:16px;box-shadow:0 8px 26px rgba(30,49,67,.05)}
-      .master-page[data-view="monthly-transfers"] .master-home-intro,.master-page[data-view="monthly-transfers"] .master-stats,.master-page[data-view="monthly-transfers"] .master-filters,.master-page[data-view="monthly-transfers"] .master-orders-layout,.master-page[data-view="monthly-transfers"] #master-customer-balances{display:none!important}
-      .master-page[data-view="monthly-transfers"] #master-monthly-transfers{display:block!important}
-      .master-monthly-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
-      .master-monthly-title{font-size:20px;font-weight:900;color:#102744;margin:0}
-      .master-monthly-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-      .master-monthly-controls input{border:1px solid #dbe5ef;border-radius:10px;padding:10px;font:inherit;min-height:42px;background:#fff}
-      .master-monthly-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
-      .master-monthly-stat{padding:13px;border-radius:13px;border:1px solid #e2eaf2;background:#f8fafc;min-width:0}
-      .master-monthly-stat.pending{background:#fff3f3;border-color:#fecaca}.master-monthly-stat.received{background:#effaf3;border-color:#bbf7d0}
-      .master-monthly-stat span{display:block;font-size:11px;font-weight:800;color:#64748b;margin-bottom:7px}.master-monthly-stat strong{display:block;font-size:20px;font-weight:900;color:#172b3a;overflow-wrap:anywhere}.master-monthly-stat.pending strong{color:#b42318}.master-monthly-stat.received strong{color:#16723b}
-      .master-monthly-section{margin-top:16px;border:1px solid #e5ebf0;border-radius:14px;overflow:hidden}
-      .master-monthly-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 14px;background:#f8fafc;border-bottom:1px solid #e5ebf0;font-weight:900}
-      .master-monthly-section-head.pending{background:#fff1f1;color:#a51d1d}.master-monthly-section-head.received{background:#effaf3;color:#166534}
-      .master-monthly-table-wrap{overflow:auto}.master-monthly-table{width:100%;min-width:850px;border-collapse:collapse}.master-monthly-table th,.master-monthly-table td{text-align:right;padding:11px 10px;border-bottom:1px solid #edf1f5;white-space:nowrap;font-size:12px}.master-monthly-table th{background:#fbfcfd;color:#64748b;font-size:11px}.master-monthly-table tbody tr:last-child td{border-bottom:0}.master-monthly-empty{text-align:center;padding:24px!important;color:#64748b;white-space:normal!important}.master-monthly-status{display:inline-flex;border-radius:999px;padding:5px 9px;font-weight:900;font-size:11px}.master-monthly-status.pending{background:#fff0f0;color:#b42318}.master-monthly-status.received{background:#e8f7ee;color:#16723b}
       .master-edit-row{display:flex;gap:6px;align-items:center}
       .master-edit-btn{border:0;background:#e8f2ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:900;white-space:nowrap}
       .master-edit-btn:hover{background:#dbeafe}
-      @media(max-width:700px){.master-monthly-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-monthly-stat{padding:10px}.master-monthly-stat strong{font-size:16px}.master-monthly-transfers{padding:10px}.master-monthly-title{font-size:17px}.master-monthly-controls{width:100%}.master-monthly-controls input{flex:1;min-width:140px}}
       @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:270px minmax(0,1fr)}}
       @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr);gap:10px}.master-old-transfer-panel{order:0;padding:10px}.master-table-wrap{order:1}}
       @media(max-width:650px){.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
@@ -2106,7 +2103,6 @@
           <button class="master-nav-btn" type="button" data-master-view-tab="home" aria-current="page">🏠 الرئيسية</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="orders">🧾 الطلبات والفواتير</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="transfers">🏦 تحويلات سابقة</button>
-          <button class="master-nav-btn" type="button" data-master-view-tab="monthly-transfers">📅 التحويلات الشهرية</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="balances">💰 أرصدة العملاء</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="reports">📊 التقارير والإحصائيات</button>
         </nav>
@@ -2143,35 +2139,6 @@
               <button class="master-btn secondary" type="button" id="master-balance-refresh">↻ تحديث الأرصدة</button>
             </div>
             <div class="master-balance-table-wrap"><table class="master-balance-table"><thead><tr><th>#</th><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>الإمارة</th><th>المنطقة</th><th>المبلغ المضاف</th><th>المبلغ المدفوع</th><th>الرصيد الحالي</th><th>ملاحظات</th></tr></thead><tbody id="master-balance-body"><tr><td colspan="10" class="master-balance-empty">اضغط تحديث الأرصدة لعرض البيانات</td></tr></tbody></table></div>
-          </section>
-
-          <section class="master-monthly-transfers" id="master-monthly-transfers" aria-label="التحويلات الشهرية">
-            <div class="master-monthly-head">
-              <div>
-                <h2 class="master-monthly-title">التحويلات البنكية الشهرية</h2>
-                <div style="font-size:12px;color:#64748b;line-height:1.8;margin-top:5px">التحويلات غير المستلمة تظهر أولًا، ثم جميع تحويلات الشهر مرتبة حسب الإمارة.</div>
-              </div>
-              <div class="master-monthly-controls">
-                <label for="master-transfer-month" style="font-size:12px;font-weight:800;color:#475569">الشهر</label>
-                <input id="master-transfer-month" type="month" aria-label="اختيار شهر التحويلات">
-                <button class="master-btn secondary" type="button" id="master-monthly-refresh">↻ تحديث البيانات</button>
-              </div>
-            </div>
-            <div class="master-monthly-summary">
-              <div class="master-monthly-stat"><span>عدد التحويلات</span><strong id="master-monthly-count">٠</strong></div>
-              <div class="master-monthly-stat"><span>إجمالي المبالغ</span><strong id="master-monthly-total">٠ درهم</strong></div>
-              <div class="master-monthly-stat pending"><span>غير مستلمة</span><strong id="master-monthly-pending">٠ درهم</strong></div>
-              <div class="master-monthly-stat received"><span>تم استلامها</span><strong id="master-monthly-received">٠ درهم</strong></div>
-            </div>
-            <section class="master-monthly-section">
-              <div class="master-monthly-section-head pending"><span>⚠️ التحويلات غير المستلمة</span><span id="master-monthly-pending-count">٠</span></div>
-              <div class="master-monthly-table-wrap"><table class="master-monthly-table"><thead><tr><th>الإمارة</th><th>الفاتورة</th><th>العميل</th><th>الهاتف</th><th>المنطقة</th><th>التاريخ</th><th>المبلغ</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody id="master-monthly-pending-body"><tr><td colspan="9" class="master-monthly-empty">جارٍ تحميل التحويلات…</td></tr></tbody></table></div>
-            </section>
-            <section class="master-monthly-section">
-              <div class="master-monthly-section-head"><span>جميع تحويلات الشهر — مرتبة حسب الإمارة</span><span id="master-monthly-all-count">٠</span></div>
-              <div class="master-monthly-table-wrap"><table class="master-monthly-table"><thead><tr><th>الإمارة</th><th>الفاتورة</th><th>العميل</th><th>الهاتف</th><th>المنطقة</th><th>التاريخ</th><th>المبلغ</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody id="master-monthly-all-body"><tr><td colspan="9" class="master-monthly-empty">جارٍ تحميل التحويلات…</td></tr></tbody></table></div>
-            </section>
-            <p class="master-month-note">تعتمد القائمة على فواتير التحويل البنكي المحمّلة في الماستر، وتستثني الفواتير المدفوعة مقدمًا.</p>
           </section>
 
           <section class="master-filters">
@@ -2268,8 +2235,6 @@
 
     $('master-refresh')?.addEventListener('click', loadMasterOrders);
     $('master-balance-refresh')?.addEventListener('click', loadMasterCustomerBalances);
-    $('master-monthly-refresh')?.addEventListener('click', loadMasterOrders);
-    $('master-transfer-month')?.addEventListener('change', renderMasterMonthlyTransfers);
     $('master-balance-search')?.addEventListener('input', renderMasterCustomerBalances);
     $('master-logout')?.addEventListener('click', () => masterLogout());
     document.querySelectorAll('[data-master-view-tab]').forEach((button) => {
@@ -2278,9 +2243,6 @@
     document.querySelectorAll('[data-master-go]').forEach((button) => {
       button.addEventListener('click', () => setMasterView(button.dataset.masterGo));
     });
-    const monthPicker = $('master-transfer-month');
-    if (monthPicker) monthPicker.value = masterDateInput(new Date()).slice(0, 7);
-
     $('master-modal-close')?.addEventListener('click', closeMasterModal);
 
     $('master-modal')?.addEventListener('click', (event) => {
@@ -2305,7 +2267,7 @@
   }
 
   function setMasterView(view) {
-    const allowed = new Set(['home', 'orders', 'transfers', 'monthly-transfers', 'reports', 'balances']);
+    const allowed = new Set(['home', 'orders', 'transfers', 'reports', 'balances']);
     const nextView = allowed.has(view) ? view : 'home';
     const page = $('master-page');
     if (!page) return;
@@ -2318,7 +2280,6 @@
       }
     });
     if (nextView === 'transfers') renderMasterOldPendingTransfers();
-    if (nextView === 'monthly-transfers') renderMasterMonthlyTransfers();
     if (nextView === 'reports') renderMasterStats();
     if (nextView === 'balances') loadMasterCustomerBalances();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2726,84 +2687,6 @@
     });
   }
 
-  function getMasterMonthlyBankTransfers() {
-    const month = String($('master-transfer-month')?.value || masterDateInput(new Date()).slice(0, 7));
-    const emirateCompare = new Intl.Collator('ar', { numeric: true, sensitivity: 'base' });
-    return getMasterUniqueOrders()
-      .filter((order) => {
-        if (isPaidInAdvance(order) || normalizePayment(order.payment_method) !== 'bank_transfer') return false;
-        const date = masterDateInput(order.created_at);
-        return date && date.slice(0, 7) === month;
-      })
-      .sort((a, b) => {
-        const aPending = a.bank_transfer_received !== true;
-        const bPending = b.bank_transfer_received !== true;
-        if (aPending !== bPending) return aPending ? -1 : 1;
-        const emirateOrder = emirateCompare.compare(String(a.emirate || 'غير محدد'), String(b.emirate || 'غير محدد'));
-        if (emirateOrder) return emirateOrder;
-        const areaOrder = emirateCompare.compare(String(a.area || ''), String(b.area || ''));
-        if (areaOrder) return areaOrder;
-        return masterDateInput(b.created_at).localeCompare(masterDateInput(a.created_at));
-      });
-  }
-
-  function renderMasterMonthlyTransfers() {
-    const pendingBody = $('master-monthly-pending-body');
-    const allBody = $('master-monthly-all-body');
-    if (!pendingBody || !allBody) return;
-
-    const transfers = getMasterMonthlyBankTransfers();
-    const pending = transfers.filter((order) => order.bank_transfer_received !== true);
-    const received = transfers.filter((order) => order.bank_transfer_received === true);
-    const sum = (rows) => rows.reduce((total, order) => total + masterMoney(order.total), 0);
-    const moneyText = (amount) => `${amount.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
-
-    if ($('master-monthly-count')) $('master-monthly-count').textContent = transfers.length.toLocaleString('ar-EG');
-    if ($('master-monthly-total')) $('master-monthly-total').textContent = moneyText(sum(transfers));
-    if ($('master-monthly-pending')) $('master-monthly-pending').textContent = moneyText(sum(pending));
-    if ($('master-monthly-received')) $('master-monthly-received').textContent = moneyText(sum(received));
-    if ($('master-monthly-pending-count')) $('master-monthly-pending-count').textContent = `${pending.length.toLocaleString('ar-EG')} تحويل`;
-    if ($('master-monthly-all-count')) $('master-monthly-all-count').textContent = `${transfers.length.toLocaleString('ar-EG')} تحويل`;
-
-    const rowHtml = (order, index) => {
-      const isReceived = order.bank_transfer_received === true;
-      const invoice = order.order_number ?? order.invoice_number ?? order.invoice_no ?? order.id ?? '—';
-      const status = isReceived
-        ? '<span class="master-monthly-status received">✓ تم الاستلام</span>'
-        : '<span class="master-monthly-status pending">لم يُستلم</span>';
-      const buttonLabel = isReceived ? 'إلغاء التأكيد' : 'تأكيد الاستلام';
-      const buttonClass = isReceived ? 'master-transfer-btn' : 'master-transfer-btn pending';
-      return `<tr data-month-transfer-row="${masterEscape(order.id)}">
-        <td><strong>${masterEscape(order.emirate || 'غير محدد')}</strong></td>
-        <td>${masterEscape(invoice)}</td>
-        <td>${masterEscape(order.customer_name || '—')}</td>
-        <td dir="ltr">${masterEscape(order.phone || '—')}</td>
-        <td>${masterEscape(order.area || '—')}</td>
-        <td>${masterEscape(masterDate(order.created_at))}</td>
-        <td><strong>${masterEscape(moneyText(masterMoney(order.total)))}</strong></td>
-        <td>${status}</td>
-        <td><button type="button" class="${buttonClass}" data-month-transfer-action="${masterEscape(order.id)}">${buttonLabel}</button></td>
-      </tr>`;
-    };
-
-    pendingBody.innerHTML = pending.length
-      ? pending.map(rowHtml).join('')
-      : '<tr><td colspan="9" class="master-monthly-empty">ممتاز، لا توجد تحويلات غير مستلمة في هذا الشهر.</td></tr>';
-    allBody.innerHTML = transfers.length
-      ? transfers.map(rowHtml).join('')
-      : '<tr><td colspan="9" class="master-monthly-empty">لا توجد فواتير تحويل بنكي في الشهر المحدد.</td></tr>';
-
-    [pendingBody, allBody].forEach((body) => {
-      body.querySelectorAll('[data-month-transfer-action]').forEach((button) => {
-        button.addEventListener('click', () => {
-          const id = String(button.dataset.monthTransferAction || '');
-          const order = transfers.find((item) => String(item.id) === id);
-          if (order) setMasterTransferReceived(order, order.bank_transfer_received !== true, button);
-        });
-      });
-    });
-  }
-
   function renderMasterOrders() {
     const body = $('master-orders-body');
 
@@ -2814,7 +2697,6 @@
     const orders = getMasterFilteredOrders();
 
     renderMasterOldPendingTransfers();
-    renderMasterMonthlyTransfers();
     renderMasterStats();
 
     if (!orders.length) {
@@ -3159,101 +3041,41 @@
 
       </div>
 
+      ${String(chickenWeights).trim() || String(chickenQtys).trim() ? `
       <div class="master-section">
-        <div class="master-section-title">
-          🍗 الدجاج الكامل — الأوزان
-        </div>
+        <div class="master-section-title">🍗 الدجاج الكامل</div>
+        <div class="master-section-content">${masterEscape([
+          String(chickenWeights).trim() ? `الأوزان: ${chickenWeights}` : '',
+          String(chickenQtys).trim() ? `الكميات: ${chickenQtys}` : ''
+        ].filter(Boolean).join('\n'))}</div>
+      </div>` : ''}
 
-        <div class="master-section-content">
-          ${masterEscape(
-            chickenWeights || '—'
-          )}
-        </div>
-      </div>
-
+      ${String(plateNames).trim() || String(plateQtys).trim() ? `
       <div class="master-section">
-        <div class="master-section-title">
-          📦 الدجاج الكامل — الكمية
-        </div>
+        <div class="master-section-title">🍽️ المقطعات</div>
+        <div class="master-section-content">${masterEscape([
+          String(plateNames).trim() ? `الأصناف: ${plateNames}` : '',
+          String(plateQtys).trim() ? `الكميات: ${plateQtys}` : ''
+        ].filter(Boolean).join('\n'))}</div>
+      </div>` : ''}
 
-        <div class="master-section-content">
-          ${masterEscape(
-            chickenQtys || '—'
-          )}
-        </div>
-      </div>
-
+      ${String(order.order_details || '').trim() ? `
       <div class="master-section">
-        <div class="master-section-title">
-          🍽️ المقطعات — الأصناف
-        </div>
+        <div class="master-section-title">📝 تفاصيل الطلب</div>
+        <div class="master-section-content">${masterEscape(order.order_details)}</div>
+      </div>` : ''}
 
-        <div class="master-section-content">
-          ${masterEscape(
-            plateNames || '—'
-          )}
-        </div>
-      </div>
-
+      ${String(cleanOrderNote(order.note || order.notes || '')).trim() ? `
       <div class="master-section">
-        <div class="master-section-title">
-          📦 المقطعات — الكمية
-        </div>
+        <div class="master-section-title">📌 الملاحظات</div>
+        <div class="master-section-content">${masterEscape(cleanOrderNote(order.note || order.notes || ''))}</div>
+      </div>` : ''}
 
-        <div class="master-section-content">
-          ${masterEscape(
-            plateQtys || '—'
-          )}
-        </div>
-      </div>
-
+      ${safeUrl(order.location_url) ? `
       <div class="master-section">
-        <div class="master-section-title">
-          📝 تفاصيل الطلب
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            order.order_details || '—'
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          📌 الملاحظات
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            cleanOrderNote(order.note || order.notes || '—')
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          📍 الموقع
-        </div>
-
-        <div class="master-section-content">
-          ${
-            safeUrl(order.location_url)
-              ? `
-                <a
-                  href="${masterEscape(
-                    safeUrl(order.location_url)
-                  )}"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  فتح موقع العميل
-                </a>
-              `
-              : 'لا يوجد رابط موقع'
-          }
-        </div>
-      </div>
+        <div class="master-section-title">📍 الموقع</div>
+        <div class="master-section-content"><a href="${masterEscape(safeUrl(order.location_url))}" target="_blank" rel="noopener noreferrer">فتح موقع العميل</a></div>
+      </div>` : ''}
 
       <div class="master-actions-row">
         <button
@@ -3546,6 +3368,9 @@
       'click',
       () => openMasterOrder(order)
     );
+
+    // Ensure the same modal becomes visible when editing directly from the table.
+    $('master-modal')?.classList.add('open');
   }
 
   async function saveMasterOrder(order) {
