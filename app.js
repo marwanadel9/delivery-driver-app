@@ -57,15 +57,10 @@
       .order-card{position:relative!important;overflow:hidden!important;background:#fff!important;border:1px solid #dce7f5!important;border-radius:17px!important;padding:12px!important;box-shadow:0 5px 17px rgba(18,51,86,.055)!important;gap:8px!important}
       .order-card:before{content:"";position:absolute;right:0;top:0;bottom:0;width:3px;background:#b9d5ff}
       .order-card.is-done:before{background:#22a06b}
-      /* الفواتير مختصرة افتراضياً؛ اضغط على البطاقة لعرض التفاصيل */
-      .order-card:not(.is-expanded) .products-section,
-      .order-card:not(.is-expanded) .order-details,
-      .order-card:not(.is-expanded) .payment-section,
-      .order-card:not(.is-expanded) .order-actions{display:none!important}
-      .order-card{cursor:pointer!important}
+      /* كل بيانات الفاتورة ظاهرة دائمًا؛ الضغط على البطاقة لا يفتح أو يخفي شيئًا */
+      .order-card{cursor:default!important;transition:none!important;transform:none!important}
+      .order-card:active{transform:none!important}
       .order-card button,.order-card a,.order-card input,.order-card select,.order-card textarea{cursor:pointer}
-      .order-expand-hint{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:5px;padding:7px 9px;border:1px solid #dbeafe;border-radius:10px;background:#f3f8ff;color:#175cd3;font-size:11px;font-weight:900;box-sizing:border-box}
-      .order-card.is-expanded .order-expand-hint{background:#eaf3ff}
       .order-card-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin:0 0 2px!important}
       .order-number{gap:4px!important;color:#7890aa!important;font-size:10px!important}
       .order-number strong{font-size:16px!important;font-weight:950!important;color:var(--fz-navy)!important;letter-spacing:.2px}
@@ -110,6 +105,36 @@
       .driver-heading-button span{font-size:12px!important}
       .toast{border-radius:12px!important;box-shadow:0 8px 28px rgba(8,47,85,.2)!important}
       @media(max-width:480px){.main-content{padding:10px 9px 22px!important}.welcome-section{padding:12px!important}.welcome-section h1{font-size:19px!important}.order-card{padding:10px!important;border-radius:15px!important}.customer-location-grid{gap:5px!important}.info-item{padding:7px!important}.product-value{font-size:12px!important}.note-item strong{font-size:14px!important}.order-actions{gap:6px!important}.driver-heading-button{min-height:33px!important;padding:7px 10px!important;font-size:11px!important}.stats-grid{gap:6px!important}}
+      /* Froog Alzain: green, white and lightly transparent; smaller cards with all details visible */
+      :root{--fz-navy:#14532d;--fz-navy2:#166534;--fz-blue:#16803d;--fz-blue2:#dcfce7;--fz-line:#cfe8d5;--fz-muted:#5b7662;--fz-bg:#f4faf5;--fz-ink:#173b24}
+      body{background:rgba(241,249,242,.94)!important;color:#173b24!important}
+      .app-shell{background:linear-gradient(180deg,rgba(225,244,228,.9),rgba(250,253,250,.94) 260px,rgba(242,249,243,.94))!important}
+      .topbar{background:linear-gradient(110deg,#14532d,#198044 72%,#2d9b59)!important}
+      .login-view{background:linear-gradient(145deg,#14532d 0%,#198044 48%,#e8f7eb 100%)!important}
+      .login-background{background:radial-gradient(circle at 20% 12%,rgba(134,239,172,.32),transparent 32%),linear-gradient(145deg,#14532d,#198044 60%,#e8f7eb)!important}
+      .brand-icon{background:linear-gradient(145deg,#14532d,#22a052)!important;box-shadow:0 8px 20px rgba(22,128,61,.18)!important}
+      .login-btn,.tab.active{background:linear-gradient(135deg,#22a052,#166534)!important;box-shadow:0 4px 10px rgba(22,128,61,.16)!important}
+      .orders-counter,.tab.active{border-color:#b8e3c2!important}
+      .orders-counter{background:#e8f7eb!important;color:#166534!important}
+      .tabs{background:rgba(232,247,235,.8)!important;border-color:#d1ead6!important}
+      .order-card{padding:9px!important;gap:6px!important;border-radius:13px!important;background:rgba(255,255,255,.88)!important;border:1px solid rgba(190,222,197,.95)!important;box-shadow:0 3px 10px rgba(25,90,43,.045)!important;backdrop-filter:blur(5px)!important}
+      .order-card:before{width:3px!important;background:#4caf70!important}
+      .order-card.is-done:before{background:#16803d!important}
+      .customer-row{padding-bottom:6px!important;border-bottom-color:#e5f2e7!important}
+      .customer-avatar,.call-btn,.location-btn{background:#e8f7eb!important;color:#166534!important;border-color:#c8e8cf!important}
+      .info-item{padding:6px 8px!important;background:rgba(243,250,244,.9)!important;border-color:#e2f0e5!important}
+      .info-item strong,.products-section-title strong,.product-value{color:#214c2d!important}
+      .products-section{padding:7px 8px!important;background:rgba(242,250,243,.88)!important;border-color:#dceee0!important}
+      .order-total{padding:8px 9px!important;background:rgba(232,247,235,.9)!important;border-color:#cde8d3!important;color:#426b4b!important}
+      .order-total strong{color:#16763a!important}
+      .payment-section{border-top-color:#e0eee3!important}
+      .payment-btn{min-height:34px!important;padding:6px!important;border-color:#d5e9d9!important;color:#245331!important}
+      .payment-btn.selected{background:#e4f7e8!important;border-color:#78c68c!important;color:#166534!important}
+      .btn-deliver{background:#16803d!important;border-color:#16803d!important}
+      .driver-heading-button{background:linear-gradient(135deg,#e8f7eb,#d4f0db)!important;color:#166534!important;border-color:#b8e3c2!important;box-shadow:none!important}
+      .stat-card{background:rgba(255,255,255,.86)!important;border-color:#d5e9d9!important}
+      .stat-card strong{color:#14532d!important}
+      @media(max-width:480px){.order-card{padding:8px!important;gap:5px!important}.customer-row{gap:7px!important}.customer-avatar{width:31px!important;height:31px!important;min-width:31px!important}.customer-main h2{font-size:13px!important}.info-item{padding:6px!important}.info-item strong{font-size:11px!important}.order-number strong{font-size:15px!important}.order-total strong{font-size:15px!important}}
     `;
     document.head.appendChild(style);
   }
@@ -1078,29 +1103,6 @@
       departureButton.innerHTML = '<span aria-hidden="true">🚗</span><span>متوجه للعميل</span>';
       departureBox.appendChild(departureButton);
       node.insertBefore(departureBox, node.firstChild);
-
-      const expandHint = document.createElement('button');
-      expandHint.type = 'button';
-      expandHint.className = 'order-expand-hint';
-      expandHint.setAttribute('aria-expanded', 'false');
-      expandHint.innerHTML = '<span>⌄</span><span>اضغط لعرض تفاصيل الفاتورة</span>';
-      departureBox.insertAdjacentElement('afterend', expandHint);
-
-      const toggleOrderDetails = () => {
-        const expanded = node.classList.toggle('is-expanded');
-        expandHint.setAttribute('aria-expanded', String(expanded));
-        expandHint.innerHTML = expanded
-          ? '<span>⌃</span><span>إخفاء تفاصيل الفاتورة</span>'
-          : '<span>⌄</span><span>اضغط لعرض تفاصيل الفاتورة</span>';
-      };
-      expandHint.addEventListener('click', (event) => {
-        event.stopPropagation();
-        toggleOrderDetails();
-      });
-      node.addEventListener('click', (event) => {
-        if (event.target.closest('button, a, input, select, textarea, label')) return;
-        toggleOrderDetails();
-      });
 
       const orderNumber =
         firstValue(
