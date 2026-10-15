@@ -724,6 +724,36 @@ export default {
       }
 
       if (
+        path === "/api/master/customer-balances" &&
+        request.method === "GET"
+      ) {
+        const auth = await requireMaster(request, env);
+        if (auth.error) {
+          return json({ error: auth.error }, auth.status);
+        }
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+          return json({ error: "إعداد عرض أرصدة العملاء غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
+        }
+
+        const balanceResponse = await supabaseRequest(
+          "/rest/v1/customer_balances?select=customer_code,customer_name,phone,amount_added,amount_paid,current_balance,notes,area,emirate,order_ref,updated_at&order=customer_name.asc",
+          {
+            headers: {
+              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+              Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY
+            }
+          }
+        );
+        const balanceData = await balanceResponse.json().catch(function () { return null; });
+        if (!balanceResponse.ok) {
+          return json({
+            error: (balanceData && (balanceData.message || balanceData.hint || balanceData.error)) || "تعذر تحميل أرصدة العملاء"
+          }, 502);
+        }
+        return json({ success: true, balances: Array.isArray(balanceData) ? balanceData : [] });
+      }
+
+      if (
         path === "/api/master/orders" &&
         request.method === "GET"
       ) {
