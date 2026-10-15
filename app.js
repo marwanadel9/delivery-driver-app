@@ -37,16 +37,6 @@
     return '';
   };
 
-  const isPaidInAdvance = (orderOrValue) => {
-    const value = orderOrValue && typeof orderOrValue === 'object'
-      ? orderOrValue.paid_in_advance
-      : orderOrValue;
-    return value === true ||
-      value === 1 ||
-      String(value ?? '').trim().toLowerCase() === 'true' ||
-      String(value ?? '').trim() === '1';
-  };
-
   const paymentLabel = (value) => {
     const payment = normalizePayment(value);
 
@@ -522,18 +512,6 @@
     }
   }
 
-  function deliveryFeeFromOrder(order) {
-    const explicit = Number(order?.delivery_fee ?? order?.deliveryFee ?? 0);
-    if (Number.isFinite(explicit) && explicit > 0) return explicit;
-    const note = String(order?.note ?? order?.notes ?? order?.remarks ?? '');
-    const match = note.match(/\[\[DELIVERY_FEE:(\d+(?:\.\d+)?)\]\]/i);
-    return match ? Number(match[1]) || 0 : 0;
-  }
-
-  function cleanOrderNote(value) {
-    return String(value ?? '').replace(/\s*\[\[DELIVERY_FEE:\d+(?:\.\d+)?\]\]/ig, '').trim();
-  }
-
   function escapeHtml(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -977,22 +955,6 @@
         orderNumber
       );
 
-      const prepaid = isPaidInAdvance(order);
-      const oldPaidBadge = node.querySelector('.paid-advance-badge');
-      if (oldPaidBadge) oldPaidBadge.remove();
-      if (prepaid) {
-        const badge = document.createElement('span');
-        badge.className = 'paid-advance-badge';
-        badge.textContent = 'مدفوع';
-        badge.setAttribute('aria-label', 'مدفوع مقدمًا');
-        badge.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;gap:12px!important;background:linear-gradient(135deg,#b91c1c,#ef4444)!important;color:#ffffff!important;border:3px solid #fecaca!important;border-radius:16px!important;padding:14px 24px!important;font-size:30px!important;line-height:1.2!important;font-weight:1000!important;letter-spacing:.2px!important;white-space:nowrap!important;width:fit-content!important;max-width:100%!important;box-shadow:0 5px 0 rgba(153,27,27,.22)!important;margin:4px 0 12px auto!important;position:relative!important;z-index:5!important;min-height:58px!important;';
-        const badgeMark = document.createElement('span');
-        badgeMark.textContent = '✓';
-        badgeMark.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;flex:0 0 26px;width:26px;height:26px;border-radius:50%;background:#ffffff;color:#c62828;font-size:19px;font-weight:1000;';
-        badge.prepend(badgeMark);
-        node.insertBefore(badge, node.firstChild);
-      }
-
       setText(
         node,
         'customer_name',
@@ -1199,79 +1161,62 @@
       );
 
       const legacyDetails =
-        cleanOrderNote(firstValue(
+        firstValue(
           order,
           [
             'order_details',
             'orderDetails',
             'details'
           ]
-        ));
+        );
 
       setText(
         node,
         'order_details',
-        cleanOrderNote(legacyDetails)
+        legacyDetails
       );
 
-      const coordinatorField = node.querySelector('[data-f="appointment_coordinator"]');
-      if (coordinatorField) {
-        const coordinatorRow = coordinatorField.closest('.info-item, .order-section, .detail-row, .field-row, .master-detail');
-        if (coordinatorRow) coordinatorRow.style.display = 'none';
-        else coordinatorField.style.display = 'none';
-      }
+      setText(
+        node,
+        'appointment_coordinator',
+        firstValue(
+          order,
+          [
+            'appointment_coordinator',
+            'appointmentCoordinator',
+            'coordinator'
+          ]
+        )
+      );
 
       setText(
         node,
         'note',
-        cleanOrderNote(firstValue(order, ['note', 'notes', 'remarks']))
+        firstValue(
+          order,
+          [
+            'note',
+            'notes',
+            'remarks'
+          ]
+        )
       );
-
-      const deliveryFee = deliveryFeeFromOrder(order);
-      const orderTotalRaw = Number(firstValue(order, ['total', 'grand_total', 'grandTotal', 'amount'])) || 0;
-      const productsTotal = Math.max(0, orderTotalRaw - deliveryFee);
 
       setText(
         node,
         'total',
-        formatTotal(deliveryFee > 0 ? productsTotal : orderTotalRaw)
+        formatTotal(
+          firstValue(
+            order,
+            [
+              'total',
+                            'grand_total',
+              'grandTotal',
+              'amount'
+            ]
+          )
+        )
       );
-
-      const existingFeeRow = node.querySelector('.delivery-fee-row');
-      const existingGrandRow = node.querySelector('.delivery-grand-total-row');
-      if (existingFeeRow) existingFeeRow.remove();
-      if (existingGrandRow) existingGrandRow.remove();
-      if (deliveryFee > 0) {
-        const totalElement = node.querySelector('[data-f="total"]');
-        let totalRow = totalElement?.closest('.info-item, .order-section, .detail-row, .field-row, .product-box, .total-row, .order-total, .summary-row');
-        if (!totalRow && totalElement) {
-          totalRow = totalElement.parentElement;
-        }
-
-        const labels = totalRow?.querySelectorAll('small, label, .label, [data-label]') || [];
-        labels.forEach(label => {
-          if (/الإجمالي|اجمالي/.test(label.textContent || '')) label.textContent = 'إجمالي المنتجات';
-        });
-
-        const feeRow = document.createElement('div');
-        feeRow.className = 'delivery-fee-row';
-        feeRow.style.cssText = 'display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;margin:8px 0!important;padding:10px 12px!important;border-radius:12px!important;background:#fff8d9!important;border:1px solid #facc15!important;color:#854d0e!important;font-weight:900!important;box-sizing:border-box!important;width:100%!important;';
-        feeRow.innerHTML = `<span>🚚 رسوم التوصيل</span><strong>${escapeHtml(formatTotal(deliveryFee))}</strong>`;
-
-        const grandRow = document.createElement('div');
-        grandRow.className = 'delivery-grand-total-row';
-        grandRow.style.cssText = 'display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;margin:8px 0!important;padding:10px 12px!important;border-radius:12px!important;background:#eff6ff!important;border:1px solid #bfdbfe!important;color:#1d4ed8!important;font-weight:900!important;box-sizing:border-box!important;width:100%!important;';
-        grandRow.innerHTML = `<span>الإجمالي النهائي</span><strong>${escapeHtml(formatTotal(orderTotalRaw))}</strong>`;
-
-        if (totalRow?.parentNode) {
-          totalRow.parentNode.insertBefore(feeRow, totalRow.nextSibling);
-          feeRow.parentNode.insertBefore(grandRow, feeRow.nextSibling);
-        } else {
-          const fallback = node.querySelector('.order-card-body, .card-body, .order-content, .order-info') || node;
-          fallback.appendChild(feeRow);
-          fallback.appendChild(grandRow);
-        }
-      }
 
       const status =
         node.querySelector(
@@ -1406,27 +1351,17 @@
         }
       }
 
-      const paidInAdvance =
-        isPaidInAdvance(order);
-
       const payment =
         normalizePayment(
           order.payment_method
         );
-
-      const paymentSection =
-        node.querySelector('.payment-section');
-
-      if (paymentSection && paidInAdvance) {
-        paymentSection.style.display = 'none';
-      }
 
       const paymentCurrent =
         node.querySelector(
           '.payment-current'
         );
 
-      if (paymentCurrent && !paidInAdvance) {
+      if (paymentCurrent) {
         paymentCurrent.textContent =
           payment
             ? `طريقة الدفع الحالية: ${paymentLabel(payment)}`
@@ -1451,7 +1386,7 @@
           );
 
           button.disabled =
-            delivered || paidInAdvance;
+            delivered;
 
           button.addEventListener(
             'click',
@@ -1703,7 +1638,6 @@
   const MASTER_USERNAME = 'zezo';
 
   state.masterOrders = [];
-  state.masterBalances = [];
   state.role = '';
 
   function normalizeMasterSession(value) {
@@ -1904,132 +1838,99 @@
     style.id = 'master-runtime-style';
 
     style.textContent = `
-      .master-page{min-height:100vh;background:linear-gradient(180deg,#f3f6fa 0%,#f8fafc 220px,#f5f7f8 100%);color:#172024;font-family:inherit}
-      .master-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;background:rgba(255,255,255,.96);border-bottom:1px solid #e3e9ef;box-shadow:0 4px 18px rgba(25,42,60,.04);position:sticky;top:0;z-index:10;backdrop-filter:blur(12px)}
-      .master-brand{display:flex;align-items:center;gap:12px}
-      .master-logo{width:50px;height:50px;border-radius:16px;background:linear-gradient(135deg,#172b3a,#286a58);color:#fff;display:flex;align-items:center;justify-content:center;font-size:27px;box-shadow:0 7px 16px rgba(23,43,58,.18)}
-      .master-title{font-size:20px;font-weight:900}
-      .master-sub{font-size:12px;color:#7b878c;margin-top:4px}
-      .master-actions{display:flex;gap:8px;flex-wrap:wrap}
-      .master-btn{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:800}
-      .master-btn.secondary{background:#edf1f2;color:#26343a}
-      .master-btn.danger{background:#ffe9e9;color:#b42318}
-      .master-btn.primary{background:#172024;color:#fff}
-      .master-wrap{padding:20px;max-width:1500px;margin:auto}
-      .master-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:22px}
-      .master-stat{position:relative;overflow:hidden;background:#fff;border:1px solid #e5ebf0;border-radius:18px;padding:18px 16px;min-height:94px;box-shadow:0 7px 22px rgba(30,49,67,.045);transition:transform .18s ease,box-shadow .18s ease}
-      .master-stat:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(30,49,67,.09)}
-      .master-stat:before{content:'';position:absolute;right:0;top:0;bottom:0;width:4px;background:#64748b}
-      .master-stat.cash:before{background:#16a36a}.master-stat.bank:before{background:#3974d6}.master-stat.count:before{background:#64748b}.master-stat.delivered:before{background:#8b5cf6}.master-stat.pending-bank:before{background:#dc6262}.master-stat.collected:before{background:#0f8b8d}.master-stat.prepaid:before{background:#dc2626}.master-stat.prepaid .master-stat-value{color:#dc2626}.master-stat.pending-bank .master-stat-value{color:#b42318}.master-stat.collected .master-stat-value{color:#087f80}
-      .master-stat-label{font-size:12px;color:#64748b;font-weight:800;margin-bottom:12px}
-      .master-stat-value{font-size:22px;font-weight:900;line-height:1.35;letter-spacing:-.3px;color:#182630}
-      .master-stat.cash .master-stat-value{color:#128354}.master-stat.bank .master-stat-value{color:#285fbd}
-      .master-stat-hint{font-size:11px;color:#94a3b8;margin-top:5px}
-      .master-filters{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;background:#fff;border:1px solid #e8edef;border-radius:16px;padding:14px;margin-bottom:18px}
-      .master-filter{display:flex;flex-direction:column;gap:6px}
-      .master-filter label{font-size:11px;color:#7b878c;font-weight:800}
-      .master-filter input,.master-filter select{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:9px;background:#fff}
-
-      .master-orders-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px;align-items:start;direction:rtl}
-      .master-old-transfer-panel{padding:11px;border-radius:14px}
-      .master-old-transfer-head{margin-bottom:8px}
-      .master-old-transfer-title{font-size:12px}
-      .master-old-transfer-note{font-size:10px;line-height:1.55;margin-bottom:8px}
-      .master-old-transfer-stats{gap:6px;margin-bottom:9px}
-      .master-old-transfer-stat{padding:7px;border-radius:9px}
-      .master-old-transfer-stat-label{font-size:9px;margin-bottom:3px}
-      .master-old-transfer-stat-value{font-size:14px}
-      .master-old-transfer-stat-value.money{font-size:12px}
-      .master-old-transfer-list{gap:7px}
-      .master-old-transfer-card{padding:8px;border-radius:10px}
-      .master-old-transfer-card-top{margin-bottom:5px}
-      .master-old-transfer-invoice{font-size:12px}
-      .master-old-transfer-customer{font-size:11px;margin-bottom:3px}
-      .master-old-transfer-meta{font-size:10px;line-height:1.5}
-      .master-old-transfer-amount{font-size:13px;margin:5px 0}
-      .master-old-transfer-card .master-transfer-btn{min-height:32px;padding:6px 8px;font-size:10px}
-      .master-old-transfer-panel{background:#fff;border:1px solid #f3c7c7;border-radius:16px;padding:14px;min-width:0;box-shadow:0 4px 18px rgba(160,30,30,.05)}
-      .master-old-transfer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
-      .master-old-transfer-title{font-size:14px;font-weight:900;color:#9f2020;line-height:1.5}
-      .master-old-transfer-count{background:#fff0f0;color:#9f2020;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900;white-space:nowrap}
-      .master-old-transfer-note{font-size:11px;line-height:1.7;color:#8b5c5c;margin-bottom:12px}
-      .master-old-transfer-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 13px}
-      .master-old-transfer-stat{background:#fff5f5;border:1px solid #ffe0e0;border-radius:11px;padding:10px;min-width:0}
-      .master-old-transfer-stat-label{display:block;font-size:10px;line-height:1.5;color:#8b5c5c;font-weight:800;margin-bottom:5px}
-      .master-old-transfer-stat-value{display:block;font-size:16px;line-height:1.35;font-weight:900;color:#9f2020;overflow-wrap:anywhere}
+      :root{--m-navy:#102746;--m-navy2:#183d63;--m-green:#147d5a;--m-gold:#d99a22;--m-red:#c73535;--m-ink:#172b43;--m-muted:#72839a;--m-line:#e1e9f2;--m-bg:#f3f6fb}
+      .master-page{min-height:100vh;background:radial-gradient(ellipse at 12% 0%,#e6eef9 0,transparent 35%),linear-gradient(180deg,#f6f8fc 0%,#edf2f8 100%);color:var(--m-ink);font-family:Tahoma,Arial,sans-serif;font-size:13px;direction:rtl}
+      .master-page *{box-sizing:border-box}
+      .master-top{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px clamp(14px,3vw,42px);background:rgba(255,255,255,.94);border-bottom:1px solid rgba(217,228,240,.9);box-shadow:0 7px 28px rgba(16,39,70,.07);backdrop-filter:blur(16px)}
+      .master-brand{display:flex;align-items:center;gap:14px;min-width:0}
+      .master-logo{width:54px;height:54px;flex:0 0 54px;display:grid;place-items:center;border-radius:18px;background:linear-gradient(145deg,#f5c451,#d99117);font-size:30px;box-shadow:0 8px 20px rgba(217,145,23,.25);border:1px solid rgba(255,255,255,.7)}
+      .master-title{font-size:21px;line-height:1.35;font-weight:900;letter-spacing:-.4px;color:var(--m-navy)}
+      .master-sub{font-size:11px;color:var(--m-muted);margin-top:4px}
+      .master-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+      .master-btn{border:0;border-radius:12px;padding:11px 16px;min-height:40px;cursor:pointer;font:inherit;font-weight:800;transition:transform .18s,box-shadow .18s,background .18s;box-shadow:0 3px 9px rgba(16,39,70,.06)}
+      .master-btn:hover{transform:translateY(-1px);box-shadow:0 7px 16px rgba(16,39,70,.12)}
+      .master-btn.secondary{background:#edf3fa;color:#234364;border:1px solid #dce7f4}
+      .master-btn.danger{background:#fff0f0;color:#a52b2b;border:1px solid #ffdddd}
+      .master-btn.primary{background:linear-gradient(135deg,var(--m-navy),var(--m-green));color:white}
+      .master-wrap{width:min(1800px,100%);margin:0 auto;padding:24px clamp(12px,2.3vw,34px) 36px}
+      .master-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:0 0 20px}
+      .master-stat{position:relative;isolation:isolate;overflow:hidden;min-width:0;min-height:112px;padding:18px 19px;background:linear-gradient(145deg,#fff 0%,#fbfdff 100%);border:1px solid #e0e8f2;border-radius:19px;box-shadow:0 8px 24px rgba(20,45,75,.055);transition:transform .18s,box-shadow .18s}
+      .master-stat:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(20,45,75,.10)}
+      .master-stat:before{content:'';position:absolute;inset:0 0 0 auto;width:5px;border-radius:0 19px 19px 0;background:#7890ac;z-index:-1}
+      .master-stat:after{content:'';position:absolute;left:-28px;bottom:-42px;width:100px;height:100px;border-radius:50%;background:rgba(222,233,247,.22);z-index:-1}
+      .master-stat.cash:before{background:#169568}.master-stat.bank:before{background:#3678d4}.master-stat.count:before{background:#607d9e}.master-stat.delivered:before{background:#8a5be8}.master-stat.pending-bank:before{background:#e05252}.master-stat.collected:before{background:#0e9290}
+      .master-stat-label{font-size:12px;line-height:1.5;color:#637893;font-weight:800;margin-bottom:10px}
+      .master-stat-value{font-size:25px;line-height:1.3;font-weight:900;letter-spacing:-.5px;color:var(--m-navy);overflow-wrap:anywhere}
+      .master-stat.cash .master-stat-value{color:#14865a}.master-stat.bank .master-stat-value{color:#2767c2}.master-stat.pending-bank .master-stat-value{color:#bd2929}.master-stat.collected .master-stat-value{color:#087e7e}
+      .master-stat-hint{font-size:10px;line-height:1.6;color:#8a9ab0;margin-top:6px}
+      .master-filters{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:11px;align-items:end;margin:0 0 20px;padding:16px;background:rgba(255,255,255,.92);border:1px solid #e0e8f2;border-radius:18px;box-shadow:0 7px 20px rgba(20,45,75,.045)}
+      .master-filter{display:flex;flex-direction:column;gap:7px;min-width:0}
+      .master-filter label{font-size:11px;color:#6b7f98;font-weight:800}
+      .master-filter input,.master-filter select{width:100%;min-width:0;min-height:42px;box-sizing:border-box;border:1px solid #d8e3ef;border-radius:11px;padding:9px 11px;background:#fbfdff;color:#19324d;font:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+      .master-filter input:focus,.master-filter select:focus{border-color:#6b9bd4;box-shadow:0 0 0 3px rgba(74,130,198,.12);background:#fff}
+      .master-orders-layout{display:grid;grid-template-columns:minmax(270px,310px) minmax(0,1fr);gap:18px;align-items:start;direction:rtl}
+      .master-orders-layout>.master-table-wrap{grid-column:2;grid-row:1;min-width:0}
+      .master-orders-layout>.master-old-transfer-panel{grid-column:1;grid-row:1}
+      .master-old-transfer-panel{min-width:0;padding:15px;background:linear-gradient(160deg,#fff 0%,#fffafa 100%);border:1px solid #f2d1d1;border-radius:18px;box-shadow:0 9px 26px rgba(156,35,35,.055)}
+      .master-old-transfer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+      .master-old-transfer-title{font-size:14px;font-weight:900;color:#a92b2b;line-height:1.55}
+      .master-old-transfer-count{background:#ffeded;color:#a92b2b;border:1px solid #ffd8d8;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+      .master-old-transfer-note{font-size:10px;line-height:1.7;color:#8c6565;margin:0 0 12px}
+      .master-old-transfer-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 12px}
+      .master-old-transfer-stat{min-width:0;padding:10px;background:#fff4f4;border:1px solid #ffdddd;border-radius:12px}
+      .master-old-transfer-stat-label{display:block;font-size:10px;line-height:1.5;color:#8d6060;font-weight:800;margin-bottom:5px}
+      .master-old-transfer-stat-value{display:block;font-size:16px;line-height:1.35;font-weight:900;color:#ad2525;overflow-wrap:anywhere}
       .master-old-transfer-stat-value.money{font-size:14px}
-      .master-old-transfer-list{display:flex;flex-direction:column;gap:10px}
-      .master-old-transfer-card{border:1px solid #ffdada;background:#fff8f8;border-radius:12px;padding:11px;min-width:0}
-      .master-old-transfer-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
-      .master-old-transfer-invoice{font-weight:900;color:#8f1d1d}
-      .master-old-transfer-age{font-size:10px;background:#ffe6c7;color:#854d0e;padding:4px 7px;border-radius:999px;white-space:nowrap}
-      .master-old-transfer-customer{font-size:12px;font-weight:800;color:#24323a;overflow-wrap:anywhere;margin-bottom:5px}
-      .master-old-transfer-meta{font-size:11px;line-height:1.7;color:#66747a;overflow-wrap:anywhere}
-      .master-old-transfer-amount{font-size:15px;font-weight:900;color:#b42318;margin:8px 0}
-      .master-old-transfer-card .master-transfer-btn{width:100%;min-height:38px}
-      .master-old-transfer-empty{text-align:center;color:#718087;font-size:12px;line-height:1.8;padding:20px 8px;background:#fafbfc;border-radius:12px}
-
-      .master-table-wrap{background:#fff;border:1px solid #e8edef;border-radius:16px;overflow:auto}
-      .master-table{width:100%;border-collapse:collapse;min-width:1050px}
-      .master-table th,.master-table td{padding:12px;border-bottom:1px solid #edf1f2;text-align:right;white-space:nowrap}
-      .master-table th{font-size:11px;color:#718087;background:#fafbfb}
-      .master-table td{font-size:12px}
-      .master-table tbody tr.master-transfer-pending td{background:#fff0f0!important;color:#8f1d1d;border-bottom-color:#ffd2d2}
-      .master-table tbody tr.master-transfer-received td{background:#eaf8ef!important;color:#155b32;border-bottom-color:#c8ebd2}
-      .master-table tbody tr.master-transfer-pending:hover td{background:#ffe3e3!important}
-      .master-table tbody tr.master-transfer-received:hover td{background:#d9f2e1!important}
-      .master-badge{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:750;white-space:nowrap}
-      .master-badge.paid{background:#fff0f0;color:#c62828;border:1px solid #ffc7c7;box-shadow:0 2px 7px rgba(198,40,40,.10)}
-      .paid-advance-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#fff1f1,#ffe2e2);color:#c62828;border:1px solid #ffb9b9;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;box-shadow:0 3px 10px rgba(198,40,40,.10);white-space:nowrap}
-      .paid-advance-badge:before{content:'✓';display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#d92332;color:#fff;font-size:10px}
-      .master-badge.ok{background:#e8f7ee;color:#16723b}
-      .master-badge.pending{background:#fff5dc;color:#8a5a00}
-      .master-badge.cash{background:#e9f7ed;color:#1d6e3b}
-      .master-badge.bank{background:#e9f0ff;color:#315b9a}.master-badge.advance{background:#fff0f0;color:#c62828;border:1px solid #ffc7c7;box-shadow:0 2px 7px rgba(198,40,40,.10)}
-      .master-view{border:0;background:#172024;color:#fff;border-radius:9px;padding:8px 11px;cursor:pointer;font-weight:700}
-      .master-transfer-btn{border:0;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:800;font-size:11px;white-space:nowrap;background:#e8f7ee;color:#16723b}.master-transfer-btn.pending{background:#fff2d6;color:#8a5a00}.master-transfer-btn:disabled{opacity:.6;cursor:wait}.master-transfer-state{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:800;white-space:nowrap}.master-transfer-state.received{background:#e8f7ee;color:#16723b}.master-transfer-state.waiting{background:#fff2d6;color:#8a5a00}
-      .master-empty{text-align:center;padding:50px 20px;color:#7a878c}
-      .master-modal{position:fixed;inset:0;z-index:100;background:rgba(8,18,22,.55);display:none;align-items:center;justify-content:center;padding:18px}
-      .master-modal.open{display:flex}
-      .master-modal-card{background:#fff;width:min(850px,100%);max-height:90vh;overflow:auto;border-radius:20px;box-shadow:0 25px 80px rgba(0,0,0,.25)}
-      .master-modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #e8edef;position:sticky;top:0;background:#fff;z-index:2}
-      .master-modal-close{border:0;background:#f0f3f4;border-radius:10px;width:38px;height:38px;cursor:pointer;font-size:18px}
-      .master-modal-body{padding:20px}
-      .master-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-      .master-detail{background:#f7f9fa;border-radius:12px;padding:12px}
-      .master-detail small{display:block;color:#77848a;font-size:11px;margin-bottom:5px}
-      .master-detail strong{display:block;white-space:pre-wrap;word-break:break-word}
-      .master-section{margin-top:14px;border:1px solid #e8edef;border-radius:13px;padding:13px}
-      .master-section-title{font-weight:800;margin-bottom:8px}
-      .master-section-content{white-space:pre-wrap;line-height:1.7;color:#39484e}
-      .master-actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-      .master-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-      .master-edit-form label{display:flex;flex-direction:column;gap:6px;font-weight:800;font-size:12px;color:#39484e}
-      .master-edit-form input,.master-edit-form textarea,.master-edit-form select{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:10px;font:inherit;background:#fff;color:#172024}
-      .master-edit-form textarea{min-height:82px;resize:vertical}
-      .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
-      .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
-      .customer-balances-panel{background:#fff;border:1px solid #dce8e3;border-radius:18px;padding:16px;margin:0 0 20px;box-shadow:0 7px 22px rgba(30,49,67,.045)}
-      .customer-balances-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-      .customer-balances-title{font-size:17px;font-weight:900;color:#174b39}
-      .customer-balances-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
-      .customer-balances-stat{border:1px solid #e0eee7;background:#f6fbf8;border-radius:12px;padding:12px;min-width:0}
-      .customer-balances-stat span{display:block;font-size:11px;color:#61766b;font-weight:800;margin-bottom:6px}
-      .customer-balances-stat strong{display:block;font-size:18px;font-weight:900;color:#145c40;overflow-wrap:anywhere}
-      .customer-balances-stat.balance strong{color:#b42318}
-      .customer-balances-search{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:11px 12px;font:inherit;margin-bottom:10px}
-      .customer-balances-table-wrap{overflow:auto;border:1px solid #e8edef;border-radius:12px}
-      .customer-balances-table{width:100%;border-collapse:collapse;min-width:850px}
-      .customer-balances-table th,.customer-balances-table td{padding:10px;text-align:right;border-bottom:1px solid #edf1f2;font-size:12px;white-space:nowrap}
-      .customer-balances-table th{background:#f7faf8;color:#60736a;font-size:11px}
-      .customer-balances-table tr:last-child td{border-bottom:0}
-      .customer-balances-amount{font-weight:900;color:#145c40}
-      .customer-balances-amount.negative{color:#b42318}
-      .customer-balances-note{font-size:11px;color:#75827c;margin-top:9px;line-height:1.7}
-      @media(max-width:650px){.customer-balances-panel{padding:11px;border-radius:13px}.customer-balances-title{font-size:14px}.customer-balances-summary{grid-template-columns:1fr;gap:7px}.customer-balances-stat{padding:9px}.customer-balances-stat strong{font-size:16px}.customer-balances-table{min-width:800px}}
-      @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:270px minmax(0,1fr)}}
-      @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr);gap:10px}.master-old-transfer-panel{order:0;padding:10px}.master-table-wrap{order:1}}
-      @media(max-width:650px){.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
+      .master-old-transfer-list{display:flex;flex-direction:column;gap:9px;max-height:660px;overflow:auto;padding:1px 2px 1px 0}
+      .master-old-transfer-card{min-width:0;padding:12px;background:#fff;border:1px solid #f3dada;border-radius:13px;box-shadow:0 3px 10px rgba(130,35,35,.035)}
+      .master-old-transfer-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+      .master-old-transfer-invoice{font-size:13px;font-weight:900;color:#8f2020}
+      .master-old-transfer-age{font-size:10px;background:#fff0d6;color:#89520b;border-radius:999px;padding:4px 7px;white-space:nowrap}
+      .master-old-transfer-customer{font-size:12px;font-weight:900;color:#20364e;overflow-wrap:anywhere;margin-bottom:5px}
+      .master-old-transfer-meta{font-size:10px;line-height:1.75;color:#718198;overflow-wrap:anywhere}
+      .master-old-transfer-amount{font-size:15px;font-weight:900;color:#bd2929;margin:8px 0}
+      .master-old-transfer-card .master-transfer-btn{width:100%;min-height:38px;border-radius:10px}
+      .master-old-transfer-empty{text-align:center;color:#7b8ca1;font-size:12px;line-height:1.8;padding:20px 8px;background:#f7f9fc;border-radius:12px}
+      .master-table-wrap{min-width:0;background:#fff;border:1px solid #dfe8f2;border-radius:18px;overflow:auto;box-shadow:0 8px 24px rgba(20,45,75,.05)}
+      .master-table{width:100%;border-collapse:separate;border-spacing:0;min-width:1050px}
+      .master-table th,.master-table td{padding:13px 12px;border-bottom:1px solid #edf1f6;text-align:right;white-space:nowrap}
+      .master-table th{position:sticky;top:0;z-index:2;font-size:11px;letter-spacing:.1px;color:#60758f;background:#f5f8fc;font-weight:900}
+      .master-table td{font-size:12px;color:#213951;background:#fff}
+      .master-table tbody tr:last-child td{border-bottom:0}
+      .master-table tbody tr:hover td{background:#f7faff}
+      .master-table tbody tr.master-transfer-pending td{background:#fff1f1!important;color:#922727;border-bottom-color:#ffdada}
+      .master-table tbody tr.master-transfer-received td{background:#eefaf3!important;color:#155b32;border-bottom-color:#d1efdc}
+      .master-table tbody tr.master-transfer-pending:hover td{background:#ffe7e7!important}
+      .master-table tbody tr.master-transfer-received:hover td{background:#e1f6e9!important}
+      .master-badge{display:inline-flex;align-items:center;border-radius:999px;padding:6px 9px;font-size:10px;font-weight:900;white-space:nowrap}
+      .master-badge.ok{background:#e6f7ed;color:#16723b}.master-badge.pending{background:#fff3d8;color:#8a5a00}.master-badge.cash{background:#e6f7ed;color:#1d6e3b}.master-badge.bank{background:#e8f0ff;color:#315b9a}
+      .master-view{border:0;background:linear-gradient(135deg,#102746,#1d456e);color:#fff;border-radius:10px;padding:9px 12px;cursor:pointer;font:inherit;font-weight:800;box-shadow:0 3px 8px rgba(16,39,70,.12)}
+      .master-transfer-btn{border:0;border-radius:10px;padding:9px 11px;cursor:pointer;font:inherit;font-size:11px;font-weight:900;white-space:nowrap;background:#e6f7ed;color:#16723b}.master-transfer-btn.pending{background:#fff0ce;color:#80520a}.master-transfer-btn:disabled{opacity:.6;cursor:wait}.master-transfer-state{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:10px;font-weight:900;white-space:nowrap}.master-transfer-state.received{background:#e6f7ed;color:#16723b}.master-transfer-state.waiting{background:#fff0ce;color:#80520a}
+      .master-empty{text-align:center;padding:48px 20px;color:#8190a3}
+      .master-modal{position:fixed;inset:0;z-index:100;background:rgba(9,24,43,.58);display:none;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(5px)}.master-modal.open{display:flex}.master-modal-card{background:#fff;width:min(850px,100%);max-height:90vh;overflow:auto;border:1px solid #e1e9f2;border-radius:22px;box-shadow:0 25px 80px rgba(0,0,0,.25)}.master-modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #e8eef5;position:sticky;top:0;background:#fff;z-index:2}.master-modal-close{border:0;background:#edf3fa;color:#24405f;border-radius:11px;width:40px;height:40px;cursor:pointer;font-size:18px}.master-modal-body{padding:20px}.master-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.master-detail{background:#f5f8fc;border:1px solid #e4ebf4;border-radius:13px;padding:13px}.master-detail small{display:block;color:#71839a;font-size:11px;margin-bottom:5px}.master-detail strong{display:block;white-space:pre-wrap;word-break:break-word}.master-section{margin-top:14px;border:1px solid #e2eaf3;border-radius:14px;padding:14px}.master-section-title{font-weight:900;margin-bottom:8px;color:#183653}.master-section-content{white-space:pre-wrap;line-height:1.8;color:#394e65}.master-actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.master-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.master-edit-form label{display:flex;flex-direction:column;gap:6px;font-weight:800;font-size:12px;color:#394e65}.master-edit-form input,.master-edit-form textarea,.master-edit-form select{width:100%;box-sizing:border-box;border:1px solid #d8e3ef;border-radius:11px;padding:11px;font:inherit;background:#fff;color:#172b43}.master-edit-form textarea{min-height:82px;resize:vertical}.master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}.master-month-note{font-size:11px;color:#7b8da4;margin-top:8px}
+      .master-nav{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;width:min(1800px,100%);margin:0 auto;padding:12px clamp(12px,2.3vw,34px) 0}
+      .master-nav-btn{display:flex;align-items:center;justify-content:center;gap:9px;min-height:48px;padding:10px 12px;border:1px solid #dce6f2;border-radius:13px;background:#fff;color:#304761;font:inherit;font-weight:900;cursor:pointer;box-shadow:0 4px 12px rgba(20,45,75,.05);transition:transform .16s,box-shadow .16s,filter .16s}
+      .master-nav-btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(20,45,75,.1)}
+      .master-nav-btn .nav-icon{font-size:19px;line-height:1}
+      .master-nav-btn[data-master-target="home"]{background:linear-gradient(135deg,#42a5f5,#1976d2);color:#fff;border-color:#2687e2}
+      .master-nav-btn[data-master-target="orders"]{background:linear-gradient(135deg,#eef6ff,#fff);color:#1765c0;border-color:#91c2ff}
+      .master-nav-btn[data-master-target="balances"]{background:linear-gradient(135deg,#21a765,#087c48);color:#fff;border-color:#0c9856}
+      .master-nav-btn[data-master-target="drivers"]{background:linear-gradient(135deg,#a78bfa,#7048d9);color:#fff;border-color:#8560e9}
+      .master-nav-btn[data-master-target="reports"]{background:linear-gradient(135deg,#ffad45,#f47712);color:#fff;border-color:#f38a27}
+      .master-nav-btn[data-master-target="customers"]{background:linear-gradient(135deg,#25b6b7,#07898d);color:#fff;border-color:#0e9fa1}
+      .master-nav-btn[data-master-target="settings"]{background:linear-gradient(135deg,#7c8998,#4b5867);color:#fff;border-color:#687788}
+      .master-nav-btn.active{outline:3px solid rgba(31,103,184,.15);filter:saturate(1.08);box-shadow:0 7px 16px rgba(20,45,75,.13)}
+      .master-page-view[hidden]{display:none!important}
+      .master-placeholder{padding:22px;background:#fff;border:1px solid #dce7f2;border-radius:18px;box-shadow:0 8px 24px rgba(20,45,75,.045)}
+      .master-placeholder h2{margin:0 0 8px;color:#173654;font-size:19px}.master-placeholder p{color:#6f829a;line-height:1.8;margin:0 0 14px}
+      .master-placeholder-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:15px}.master-placeholder-card{border:1px solid #e1eaf3;background:#f8fbff;border-radius:13px;padding:15px;min-width:0}.master-placeholder-card small{display:block;color:#71849a;font-weight:800;margin-bottom:8px}.master-placeholder-card strong{font-size:20px;color:#163958;overflow-wrap:anywhere}.master-placeholder-card.due strong{color:#c52c37}
+      .customer-balances-panel{margin:0 0 18px;background:#fff;border:1px solid #dce7f2;border-radius:18px;padding:16px;box-shadow:0 8px 24px rgba(20,45,75,.045)}.customer-balances-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}.customer-balances-title{font-size:16px;font-weight:900;color:#183653}.customer-balances-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}.customer-balance-stat{border:1px solid #e0e9f3;border-radius:12px;padding:12px;background:#f8fbff}.customer-balance-stat small{display:block;color:#6f829a;font-size:11px;font-weight:800;margin-bottom:5px}.customer-balance-stat strong{font-size:19px;color:#183653}.customer-balance-stat.due strong{color:#c92d36}.customer-balances-tools{display:flex;gap:8px;margin-bottom:10px}.customer-balances-tools input{flex:1;min-width:0;border:1px solid #d8e3ef;border-radius:10px;padding:10px;font:inherit}.customer-balances-table-wrap{overflow:auto;border:1px solid #e2eaf3;border-radius:12px}.customer-balances-table{width:100%;border-collapse:collapse;min-width:850px}.customer-balances-table th,.customer-balances-table td{padding:10px;text-align:right;border-bottom:1px solid #e8eef5;font-size:12px;white-space:nowrap}.customer-balances-table th{background:#f3f7fc;color:#536a84;font-weight:900}.customer-balances-table tr:last-child td{border-bottom:0}.customer-balance-amount{font-weight:900;color:#b92732}.customer-balances-empty{text-align:center;color:#7b8da4;padding:18px!important}
+      @media(min-width:1500px){.master-orders-layout{grid-template-columns:330px minmax(0,1fr)}.master-stat{min-height:118px;padding:20px 22px}.master-stat-value{font-size:27px}}
+      @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:285px minmax(0,1fr)}.master-table th,.master-table td{padding:11px 9px}}
+      @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr);gap:13px}.master-orders-layout>.master-old-transfer-panel{grid-column:1;grid-row:1}.master-orders-layout>.master-table-wrap{grid-column:1;grid-row:2}.master-old-transfer-panel{padding:13px}.master-old-transfer-list{max-height:420px}.master-top{padding:13px 16px}}
+      @media(max-width:900px){.master-nav{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.master-nav-btn{min-height:45px;padding:9px 7px;font-size:11px;gap:5px}.master-nav-btn .nav-icon{font-size:17px}}
+      @media(max-width:650px){.master-nav{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px 10px 0}.master-nav-btn{justify-content:flex-start;min-height:48px;padding:10px 12px;font-size:12px;border-radius:12px}.master-placeholder{padding:14px}.master-placeholder-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-placeholder-card{padding:11px}.master-placeholder-card strong{font-size:17px}.master-page{font-size:12px}.master-top{position:relative;align-items:flex-start;flex-wrap:wrap;padding:12px;gap:11px}.master-brand{gap:10px;flex:1 1 100%}.master-logo{width:43px;height:43px;flex-basis:43px;border-radius:14px;font-size:24px}.master-title{font-size:16px}.master-sub{font-size:10px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}.master-btn{min-height:42px;padding:10px;font-size:12px}.master-wrap{padding:12px 10px 24px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}.master-stat{min-height:86px;padding:12px 11px;border-radius:14px}.master-stat:before{width:4px}.master-stat-label{font-size:10px;margin-bottom:7px}.master-stat-value{font-size:17px;letter-spacing:0}.master-stat-hint{font-size:9px;line-height:1.45;margin-top:4px}.master-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;border-radius:14px;margin-bottom:12px}.master-filter{gap:5px}.master-filter label{font-size:10px}.master-filter input,.master-filter select{min-height:42px;padding:9px;font-size:14px;border-radius:10px}.master-orders-layout{gap:11px}.master-old-transfer-panel{padding:10px;border-radius:15px}.master-old-transfer-head{margin-bottom:7px}.master-old-transfer-title{font-size:12px}.master-old-transfer-count{font-size:10px;padding:4px 7px}.master-old-transfer-note{font-size:9px;line-height:1.6;margin-bottom:8px}.master-old-transfer-stats{gap:6px;margin-bottom:9px}.master-old-transfer-stat{padding:8px;border-radius:10px}.master-old-transfer-stat-label{font-size:9px;margin-bottom:3px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-stat-value.money{font-size:12px}.master-old-transfer-list{gap:7px;max-height:360px}.master-old-transfer-card{padding:9px;border-radius:11px}.master-old-transfer-card-top{margin-bottom:5px}.master-old-transfer-invoice{font-size:12px}.master-old-transfer-age{font-size:9px;padding:3px 6px}.master-old-transfer-customer{font-size:11px;margin-bottom:3px}.master-old-transfer-meta{font-size:9px;line-height:1.6}.master-old-transfer-amount{font-size:13px;margin:6px 0}.master-old-transfer-card .master-transfer-btn{min-height:38px;font-size:11px}.master-table-wrap{border-radius:13px}.master-table{min-width:1050px}.master-table th,.master-table td{padding:10px 9px;font-size:11px}.master-detail-grid,.master-edit-grid{grid-template-columns:1fr}.master-modal{padding:7px}.master-modal-card{max-height:95vh;border-radius:16px}.master-modal-head{padding:13px}.master-modal-body{padding:12px}.master-detail{padding:10px}.master-section{padding:11px}}
+      @media(prefers-reduced-motion:reduce){.master-page *{transition:none!important;scroll-behavior:auto!important}}
     `;
 
     document.head.appendChild(style);
@@ -2069,9 +1970,19 @@
           </div>
         </header>
 
+        <nav class="master-nav" aria-label="أقسام الإدارة الرئيسية">
+          <button type="button" class="master-nav-btn active" data-master-target="home"><span class="nav-icon">⌂</span><span>الرئيسية</span></button>
+          <button type="button" class="master-nav-btn" data-master-target="orders"><span class="nav-icon">▤</span><span>الطلبات</span></button>
+          <button type="button" class="master-nav-btn" data-master-target="balances"><span class="nav-icon">＄</span><span>أرصدة العملاء</span></button>
+          <button type="button" class="master-nav-btn" data-master-target="drivers"><span class="nav-icon">🚚</span><span>المندوبون</span></button>
+          <button type="button" class="master-nav-btn" data-master-target="reports"><span class="nav-icon">▥</span><span>التقارير</span></button>
+          <button type="button" class="master-nav-btn" data-master-target="customers"><span class="nav-icon">♟</span><span>العملاء</span></button>
+          <button type="button" class="master-nav-btn" data-master-target="settings"><span class="nav-icon">⚙</span><span>الإعدادات</span></button>
+        </nav>
+
         <main class="master-wrap">
+          <section class="master-page-view" data-master-view="home">
           <section class="master-stats">
-            <div class="master-stat prepaid"><div class="master-stat-label">مدفوع مقدم</div><div class="master-stat-value" id="master-total-prepaid">0 درهم</div><div class="master-stat-hint" id="master-prepaid-hint">عدد الفواتير: ٠</div></div>
             <div class="master-stat count"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">عدد الفواتير بدون تكرار</div></div>
             <div class="master-stat cash"><div class="master-stat-label">فواتير الكاش</div><div class="master-stat-value" id="master-cash-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
             <div class="master-stat cash"><div class="master-stat-label">إجمالي الكاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div><div class="master-stat-hint">إجمالي الفواتير المسجلة كاش</div></div>
@@ -2082,27 +1993,25 @@
             <div class="master-stat collected"><div class="master-stat-label">إجمالي المبالغ المسجلة/المستلمة</div><div class="master-stat-value" id="master-total-received">0 درهم</div><div class="master-stat-hint">الكاش المسجل + التحويلات المؤكدة</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
           </section>
+          </section>
 
-          <section class="customer-balances-panel" aria-label="أرصدة العملاء">
+          <section class="master-page-view" data-master-view="balances" hidden>
+          <section class="customer-balances-panel" id="customer-balances-panel">
             <div class="customer-balances-head">
               <div class="customer-balances-title">💳 أرصدة العملاء</div>
               <button class="master-btn secondary" id="customer-balances-refresh" type="button">↻ تحديث الأرصدة</button>
             </div>
-            <div class="customer-balances-summary">
-              <div class="customer-balances-stat"><span>عدد العملاء</span><strong id="customer-balances-count">—</strong></div>
-              <div class="customer-balances-stat"><span>إجمالي المبالغ المضافة</span><strong id="customer-balances-added">—</strong></div>
-              <div class="customer-balances-stat balance"><span>إجمالي الرصيد المتبقي</span><strong id="customer-balances-total">—</strong></div>
+            <div class="customer-balances-stats">
+              <div class="customer-balance-stat"><small>عدد العملاء</small><strong id="customer-balances-count">—</strong></div>
+              <div class="customer-balance-stat"><small>إجمالي المبالغ المضافة</small><strong id="customer-balances-added">—</strong></div>
+              <div class="customer-balance-stat due"><small>إجمالي الرصيد المتبقي</small><strong id="customer-balances-due">—</strong></div>
             </div>
-            <input class="customer-balances-search" id="customer-balances-search" type="search" placeholder="ابحث باسم العميل أو الكود أو رقم الهاتف" aria-label="بحث أرصدة العملاء">
-            <div class="customer-balances-table-wrap">
-              <table class="customer-balances-table">
-                <thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>الإمارة</th><th>المنطقة</th><th>المبلغ المضاف</th><th>المبلغ المدفوع</th><th>الرصيد المتبقي</th><th>ملاحظات</th><th>مرجع الطلب</th></tr></thead>
-                <tbody id="customer-balances-body"><tr><td colspan="10">جارٍ تحميل أرصدة العملاء…</td></tr></tbody>
-              </table>
-            </div>
-            <div class="customer-balances-note">الأرصدة تُقرأ من جدول customer_balances في Supabase، وتُحدّث من ملف Excel عند تشغيل مزامنة أرصدة العملاء.</div>
+            <div class="customer-balances-tools"><input id="customer-balances-search" type="search" placeholder="ابحث باسم العميل أو الكود أو الهاتف"></div>
+            <div class="customer-balances-table-wrap"><table class="customer-balances-table"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>الإمارة</th><th>المنطقة</th><th>المضاف</th><th>المدفوع</th><th>الرصيد المتبقي</th><th>ملاحظات</th></tr></thead><tbody id="customer-balances-body"><tr><td colspan="9" class="customer-balances-empty">جارٍ تحميل أرصدة العملاء…</td></tr></tbody></table></div>
+          </section>
           </section>
 
+          <section class="master-page-view" data-master-view="orders" hidden>
           <section class="master-filters">
             <div class="master-filter">
               <label>رقم الفاتورة</label>
@@ -2181,6 +2090,58 @@
             </table>
             </section>
           </div>
+          </section>
+
+          <section class="master-page-view" data-master-view="drivers" hidden>
+            <div class="master-placeholder">
+              <h2>🚚 إدارة المندوبين</h2>
+              <p>ملخص الطلبات المسجلة لكل مندوب. لم يتم تغيير طريقة عمل المندوبين أو صلاحياتهم.</p>
+              <div class="master-placeholder-grid" id="master-driver-summary">
+                <div class="master-placeholder-card"><small>مندوب 1</small><strong>جارٍ حساب الطلبات…</strong></div>
+                <div class="master-placeholder-card"><small>مندوب 2</small><strong>جارٍ حساب الطلبات…</strong></div>
+                <div class="master-placeholder-card"><small>إجمالي الطلبات</small><strong id="master-driver-total">—</strong></div>
+              </div>
+              <p style="margin-top:14px">للتفاصيل أو التصفية حسب المندوب، افتح قسم الطلبات.</p>
+              <button class="master-btn primary" type="button" data-master-jump="orders">فتح الطلبات</button>
+            </div>
+          </section>
+
+          <section class="master-page-view" data-master-view="reports" hidden>
+            <div class="master-placeholder">
+              <h2>📊 التقارير والإجماليات</h2>
+              <p>ملخص مبني على بيانات الفواتير الحالية في لوحة الماستر.</p>
+              <div class="master-placeholder-grid">
+                <div class="master-placeholder-card"><small>عدد الفواتير</small><strong id="master-report-count">—</strong></div>
+                <div class="master-placeholder-card"><small>إجمالي الكاش</small><strong id="master-report-cash">—</strong></div>
+                <div class="master-placeholder-card"><small>التحويلات المستلمة</small><strong id="master-report-bank">—</strong></div>
+                <div class="master-placeholder-card due"><small>التحويلات غير المستلمة</small><strong id="master-report-pending">—</strong></div>
+                <div class="master-placeholder-card"><small>إجمالي المبالغ المضافة للعملاء</small><strong id="master-report-added">—</strong></div>
+                <div class="master-placeholder-card due"><small>إجمالي أرصدة العملاء المتبقية</small><strong id="master-report-due">—</strong></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="master-page-view" data-master-view="customers" hidden>
+            <div class="master-placeholder">
+              <h2>👥 العملاء</h2>
+              <p>قائمة العملاء المرتبطة بشيت أرصدة العملاء. استخدم البحث لعرض العميل أو كوده أو هاتفه.</p>
+              <div class="customer-balances-tools"><input id="master-customers-search" type="search" placeholder="ابحث باسم العميل أو الكود أو الهاتف"></div>
+              <div class="customer-balances-table-wrap"><table class="customer-balances-table"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>الإمارة</th><th>المنطقة</th><th>الرصيد الحالي</th></tr></thead><tbody id="master-customers-body"><tr><td colspan="6" class="customer-balances-empty">جارٍ تحميل العملاء…</td></tr></tbody></table></div>
+            </div>
+          </section>
+
+          <section class="master-page-view" data-master-view="settings" hidden>
+            <div class="master-placeholder">
+              <h2>⚙️ الإعدادات</h2>
+              <p>هذا القسم مخصص لإعدادات الإدارة. لم أضف أزرار تغيّر بيانات الحساب أو مفاتيح الاتصال حتى لا يتغير أي إعداد حساس دون طلب صريح.</p>
+              <div class="master-placeholder-grid">
+                <div class="master-placeholder-card"><small>حالة جلسة الماستر</small><strong>متصل</strong></div>
+                <div class="master-placeholder-card"><small>تحديث البيانات</small><strong>يدوي</strong></div>
+                <div class="master-placeholder-card"><small>حماية البيانات</small><strong>تسجيل دخول الماستر</strong></div>
+              </div>
+              <button class="master-btn secondary" type="button" data-master-jump="home" style="margin-top:14px">العودة للرئيسية</button>
+            </div>
+          </section>
         </main>
 
         <div class="master-modal" id="master-modal">
@@ -2195,6 +2156,26 @@
       </div>
     `;
 
+    const activateMasterPage = (page) => {
+      document.querySelectorAll('[data-master-view]').forEach((view) => {
+        view.hidden = view.getAttribute('data-master-view') !== page;
+      });
+      document.querySelectorAll('[data-master-target]').forEach((button) => {
+        const active = button.getAttribute('data-master-target') === page;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-current', active ? 'page' : 'false');
+      });
+      if (page === 'reports') updateMasterReports();
+      if (page === 'customers') renderMasterCustomers();
+      if (page === 'drivers') updateMasterDriverSummary();
+    };
+    document.querySelectorAll('[data-master-target]').forEach((button) => {
+      button.addEventListener('click', () => activateMasterPage(button.getAttribute('data-master-target')));
+    });
+    document.querySelectorAll('[data-master-jump]').forEach((button) => {
+      button.addEventListener('click', () => activateMasterPage(button.getAttribute('data-master-jump')));
+    });
+    $('master-customers-search')?.addEventListener('input', renderMasterCustomers);
     $('master-refresh')?.addEventListener('click', () => { loadMasterOrders(); loadCustomerBalances(); });
     $('customer-balances-refresh')?.addEventListener('click', loadCustomerBalances);
     $('customer-balances-search')?.addEventListener('input', renderCustomerBalances);
@@ -2223,64 +2204,6 @@
     loadCustomerBalances();
   }
 
-  function formatCustomerBalanceMoney(value) {
-    const number = Number(value ?? 0);
-    return `${(Number.isFinite(number) ? number : 0).toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
-  }
-
-  async function loadCustomerBalances() {
-    const body = $('customer-balances-body');
-    const button = $('customer-balances-refresh');
-    if (body) body.innerHTML = '<tr><td colspan="10">جارٍ تحميل أرصدة العملاء…</td></tr>';
-    if (button) { button.disabled = true; button.textContent = 'جارٍ التحديث…'; }
-    try {
-      const data = await masterFetch('/api/master/customer-balances');
-      state.masterBalances = Array.isArray(data) ? data : (Array.isArray(data?.balances) ? data.balances : []);
-      renderCustomerBalances();
-    } catch (error) {
-      if (body && error.message !== 'expired') body.innerHTML = `<tr><td colspan="10">${masterEscape(error.message || 'تعذر تحميل أرصدة العملاء')}</td></tr>`;
-    } finally {
-      if (button) { button.disabled = false; button.textContent = '↻ تحديث الأرصدة'; }
-    }
-  }
-
-  function renderCustomerBalances() {
-    const rows = Array.isArray(state.masterBalances) ? state.masterBalances : [];
-    const totalAdded = rows.reduce((sum, row) => sum + (Number(row.amount_added) || 0), 0);
-    const totalBalance = rows.reduce((sum, row) => sum + (Number(row.current_balance) || 0), 0);
-    const count = $('customer-balances-count');
-    const added = $('customer-balances-added');
-    const total = $('customer-balances-total');
-    if (count) count.textContent = rows.length.toLocaleString('ar-EG');
-    if (added) added.textContent = formatCustomerBalanceMoney(totalAdded);
-    if (total) total.textContent = formatCustomerBalanceMoney(totalBalance);
-
-    const query = String($('customer-balances-search')?.value || '').trim().toLowerCase();
-    const filtered = rows.filter((row) => [row.customer_code, row.customer_name, row.phone, row.emirate, row.area, row.order_ref, row.notes]
-      .some((value) => String(value ?? '').toLowerCase().includes(query)));
-    const body = $('customer-balances-body');
-    if (!body) return;
-    if (!filtered.length) {
-      body.innerHTML = `<tr><td colspan="10">${rows.length ? 'لا توجد نتائج مطابقة للبحث' : 'لا توجد أرصدة عملاء مسجلة بعد'}</td></tr>`;
-      return;
-    }
-    body.innerHTML = filtered.map((row) => {
-      const balance = Number(row.current_balance) || 0;
-      return `<tr>
-        <td>${masterEscape(row.customer_code || '—')}</td>
-        <td>${masterEscape(row.customer_name || '—')}</td>
-        <td>${masterEscape(row.phone || '—')}</td>
-        <td>${masterEscape(row.emirate || '—')}</td>
-        <td>${masterEscape(row.area || '—')}</td>
-        <td class="customer-balances-amount">${masterEscape(formatCustomerBalanceMoney(row.amount_added))}</td>
-        <td>${masterEscape(formatCustomerBalanceMoney(row.amount_paid))}</td>
-        <td class="customer-balances-amount${balance < 0 ? ' negative' : ''}">${masterEscape(formatCustomerBalanceMoney(balance))}</td>
-        <td>${masterEscape(row.notes || '—')}</td>
-        <td>${masterEscape(row.order_ref || '—')}</td>
-      </tr>`;
-    }).join('');
-  }
-
   async function loadMasterOrders() {
     const body = $('master-orders-body');
 
@@ -2298,11 +2221,91 @@
           : [];
 
       renderMasterOrders();
+      updateMasterDriverSummary();
+      updateMasterReports();
     } catch (error) {
       if (error.message !== 'expired' && body) {
         body.innerHTML = `<tr><td colspan="11" class="master-empty">${masterEscape(error.message)}</td></tr>`;
       }
     }
+  }
+
+  let masterCustomerBalances = [];
+
+  function customerBalanceMoney(value) {
+    const n = Number(value || 0);
+    return (Number.isFinite(n) ? n : 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 2}) + ' درهم';
+  }
+
+  async function loadCustomerBalances() {
+    const body = $('customer-balances-body');
+    if (body) body.innerHTML = '<tr><td colspan="9" class="customer-balances-empty">جارٍ تحميل أرصدة العملاء…</td></tr>';
+    try {
+      const data = await masterFetch('/api/master/customer-balances');
+      masterCustomerBalances = Array.isArray(data?.balances) ? data.balances : (Array.isArray(data) ? data : []);
+      const count = $('customer-balances-count');
+      const added = $('customer-balances-added');
+      const due = $('customer-balances-due');
+      if (count) count.textContent = masterCustomerBalances.length.toLocaleString('ar-EG');
+      if (added) added.textContent = customerBalanceMoney(masterCustomerBalances.reduce((sum, r) => sum + Number(r.amount_added || 0), 0));
+      if (due) due.textContent = customerBalanceMoney(masterCustomerBalances.reduce((sum, r) => sum + Number(r.current_balance || 0), 0));
+      renderCustomerBalances();
+      renderMasterCustomers();
+      updateMasterReports();
+    } catch (error) {
+      if (body && error.message !== 'expired') body.innerHTML = `<tr><td colspan="9" class="customer-balances-empty">تعذر تحميل الأرصدة: ${masterEscape(error.message)}</td></tr>`;
+    }
+  }
+
+  function renderCustomerBalances() {
+    const body = $('customer-balances-body');
+    if (!body) return;
+    const query = String($('customer-balances-search')?.value || '').trim().toLowerCase();
+    const rows = masterCustomerBalances.filter(r => [r.customer_code, r.customer_name, r.phone, r.emirate, r.area, r.notes].some(v => String(v || '').toLowerCase().includes(query)));
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="9" class="customer-balances-empty">لا توجد أرصدة مطابقة للبحث</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(r => `<tr><td>${masterEscape(r.customer_code || '—')}</td><td>${masterEscape(r.customer_name || '—')}</td><td>${masterEscape(r.phone || '—')}</td><td>${masterEscape(r.emirate || '—')}</td><td>${masterEscape(r.area || '—')}</td><td>${masterEscape(customerBalanceMoney(r.amount_added))}</td><td>${masterEscape(customerBalanceMoney(r.amount_paid))}</td><td class="customer-balance-amount">${masterEscape(customerBalanceMoney(r.current_balance))}</td><td>${masterEscape(r.notes || '—')}</td></tr>`).join('');
+  }
+
+  function renderMasterCustomers() {
+    const body = $('master-customers-body');
+    if (!body) return;
+    const query = String($('master-customers-search')?.value || '').trim().toLowerCase();
+    const rows = masterCustomerBalances.filter(r => [r.customer_code, r.customer_name, r.phone, r.emirate, r.area].some(v => String(v || '').toLowerCase().includes(query)));
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="6" class="customer-balances-empty">لا توجد بيانات مطابقة</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(r => `<tr><td>${masterEscape(r.customer_code || '—')}</td><td>${masterEscape(r.customer_name || '—')}</td><td>${masterEscape(r.phone || '—')}</td><td>${masterEscape(r.emirate || '—')}</td><td>${masterEscape(r.area || '—')}</td><td class="customer-balance-amount">${masterEscape(customerBalanceMoney(r.current_balance))}</td></tr>`).join('');
+  }
+
+  function updateMasterDriverSummary() {
+    const total = $('master-driver-total');
+    if (total) total.textContent = state.masterOrders.length.toLocaleString('ar-EG');
+    const summary = $('master-driver-summary');
+    if (!summary) return;
+    const rows = state.masterOrders;
+    const driverValue = (order) => String(order.sheet_name || order.driver_sheet || order.mandoub_name || order.driver_name || order.driver || '').toLowerCase();
+    const one = rows.filter(order => /mandoub2|مندوب ?2|zain2/.test(driverValue(order)) ? false : /mandoub|مندوب ?1|zain/.test(driverValue(order))).length;
+    const two = rows.filter(order => /mandoub2|مندوب ?2|zain2/.test(driverValue(order))).length;
+    const cards = summary.querySelectorAll('.master-placeholder-card');
+    if (cards[0]) cards[0].innerHTML = `<small>مندوب 1</small><strong>${one.toLocaleString('ar-EG')} فاتورة</strong>`;
+    if (cards[1]) cards[1].innerHTML = `<small>مندوب 2</small><strong>${two.toLocaleString('ar-EG')} فاتورة</strong>`;
+  }
+
+  function updateMasterReports() {
+    const set = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+    set('master-report-count', state.masterOrders.length.toLocaleString('ar-EG'));
+    const cash = masterMoney(state.masterOrders.filter(o => normalizePayment(o.payment_method) === 'cash').reduce((s,o) => s + masterMoney(o.total), 0));
+    const bank = masterMoney(state.masterOrders.filter(o => normalizePayment(o.payment_method) === 'bank_transfer' && (o.transfer_received === true || o.bank_transfer_received === true || o.transfer_status === 'received')).reduce((s,o) => s + masterMoney(o.total), 0));
+    const pending = masterMoney(state.masterOrders.filter(o => normalizePayment(o.payment_method) === 'bank_transfer' && !(o.transfer_received === true || o.bank_transfer_received === true || o.transfer_status === 'received')).reduce((s,o) => s + masterMoney(o.total), 0));
+    set('master-report-cash', customerBalanceMoney(cash));
+    set('master-report-bank', customerBalanceMoney(bank));
+    set('master-report-pending', customerBalanceMoney(pending));
+    set('master-report-added', customerBalanceMoney(masterCustomerBalances.reduce((s,r) => s + Number(r.amount_added || 0), 0)));
+    set('master-report-due', customerBalanceMoney(masterCustomerBalances.reduce((s,r) => s + Number(r.current_balance || 0), 0)));
   }
 
   function masterNormalizeDuplicateValue(value) {
@@ -2381,11 +2384,6 @@
         preferred.bank_transfer_received = true;
       }
 
-      // احتفظ بعلامة الدفع المقدم إذا كانت موجودة في أي نسخة مكررة للفاتورة.
-      if (isPaidInAdvance(secondary)) {
-        preferred.paid_in_advance = true;
-      }
-
       if (!normalizePayment(preferred.payment_method) && normalizePayment(secondary.payment_method)) {
         preferred.payment_method = secondary.payment_method;
       }
@@ -2420,7 +2418,6 @@
         const orderDate = masterDateInput(order.created_at);
         const delivered = isDelivered(order.delivery_status);
         const transferPending =
-          !isPaidInAdvance(order) &&
           normalizePayment(order.payment_method) === 'bank_transfer' &&
           order.bank_transfer_received !== true;
 
@@ -2477,12 +2474,9 @@
     // والبحث بالتاريخ يعرض فواتير التاريخ المختار فقط.
     const orders = getMasterFilteredOrders();
 
-    const prepaidOrders = orders.filter((order) => isPaidInAdvance(order));
-    const cashOrders = orders.filter((order) => !isPaidInAdvance(order) && normalizePayment(order.payment_method) === 'cash');
-    const bankOrders = orders.filter((order) => !isPaidInAdvance(order) && normalizePayment(order.payment_method) === 'bank_transfer');
+    const cashOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'cash');
+    const bankOrders = orders.filter((order) => normalizePayment(order.payment_method) === 'bank_transfer');
 
-    // المدفوع مقدمًا فئة مستقلة، وتُضاف قيمتها إلى الإجمالي العام دون احتسابها كاش أو تحويل بنكي.
-    const totalPrepaid = prepaidOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
     // الكاش هنا هو إجمالي الفواتير المسجلة بطريقة دفع كاش.
     // لا يوجد في البيانات الحالية حقل مستقل يؤكد تحصيل كل فاتورة كاش.
     const totalCash = cashOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
@@ -2490,7 +2484,7 @@
     const receivedBankOrders = bankOrders.filter((order) => order.bank_transfer_received === true);
     const totalBankReceived = receivedBankOrders.reduce((sum, order) => sum + masterMoney(order.total), 0);
     const totalBankPending = Math.max(0, totalBankAll - totalBankReceived);
-    const totalReceived = totalCash + totalBankReceived + totalPrepaid;
+    const totalReceived = totalCash + totalBankReceived;
 
     const delivered = orders.filter(
       (order) => isDelivered(order.delivery_status)
@@ -2498,14 +2492,6 @@
 
     const moneyText = (value) =>
       `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
-
-    if ($('master-total-prepaid')) {
-      $('master-total-prepaid').textContent = moneyText(totalPrepaid);
-    }
-
-    if ($('master-prepaid-hint')) {
-      $('master-prepaid-hint').textContent = `عدد الفواتير: ${prepaidOrders.length.toLocaleString('ar-EG')}`;
-    }
 
     if ($('master-total-count')) {
       $('master-total-count').textContent = orders.length.toLocaleString('ar-EG');
@@ -2548,7 +2534,6 @@
     const today = masterDateInput(new Date());
     return getMasterUniqueOrders()
       .filter((order) =>
-        !isPaidInAdvance(order) &&
         normalizePayment(order.payment_method) === 'bank_transfer' &&
         order.bank_transfer_received !== true &&
         masterDateInput(order.created_at) !== '' &&
@@ -2560,12 +2545,6 @@
         return da.localeCompare(db) || String(a.order_number || a.id || '').localeCompare(String(b.order_number || b.id || ''));
       });
   }
-
-  // تحويلات تاريخية مضافة للعرض في صفحة الماستر فقط؛ لا تنشئ فواتير ولا تعدّل قاعدة البيانات.
-  const MASTER_HISTORICAL_TRANSFERS = [
-    { id: 'historical-amna-20260810', customer_name: 'أمنه', total: 378, transfer_date: '10/08/2026', received: false },
-    { id: 'historical-khaled-20260927', customer_name: 'خالد الفلاسي', total: 160, transfer_date: '27/09/2026', received: false }
-  ];
 
   function renderMasterOldPendingTransfers() {
     const list = $('master-old-transfer-list');
@@ -2579,24 +2558,22 @@
     const yesterday = masterDateInput(yesterdayDate);
     const yesterdayOrders = orders.filter((order) => masterDateInput(order.created_at) === yesterday);
     const olderOrders = orders.filter((order) => masterDateInput(order.created_at) < yesterday);
-    const pendingHistoricalTransfers = MASTER_HISTORICAL_TRANSFERS.filter((transfer) => !transfer.received);
-    const totalPendingAmount = orders.reduce((sum, order) => sum + masterMoney(order.total), 0) + pendingHistoricalTransfers.reduce((sum, transfer) => sum + masterMoney(transfer.total), 0);
-    const totalPendingCount = orders.length + pendingHistoricalTransfers.length;
-    const historicalOlderCount = pendingHistoricalTransfers.length;
+    const totalPendingAmount = orders.reduce((sum, order) => sum + masterMoney(order.total), 0);
     const moneyText = (value) => `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
 
-    if (count) count.textContent = totalPendingCount.toLocaleString('ar-EG');
-    if ($('master-old-transfer-stat-count')) $('master-old-transfer-stat-count').textContent = totalPendingCount.toLocaleString('ar-EG');
+    if (count) count.textContent = orders.length.toLocaleString('ar-EG');
+    if ($('master-old-transfer-stat-count')) $('master-old-transfer-stat-count').textContent = orders.length.toLocaleString('ar-EG');
     if ($('master-old-transfer-stat-total')) $('master-old-transfer-stat-total').textContent = moneyText(totalPendingAmount);
     if ($('master-old-transfer-stat-yesterday')) $('master-old-transfer-stat-yesterday').textContent = yesterdayOrders.length.toLocaleString('ar-EG');
-    if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = (olderOrders.length + historicalOlderCount).toLocaleString('ar-EG');
-
-    list.innerHTML = '';
+    if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = olderOrders.length.toLocaleString('ar-EG');
 
     if (!orders.length) {
       list.innerHTML = '<div class="master-old-transfer-empty">لا توجد تحويلات قديمة معلّقة حاليًا.</div>';
-    } else {
-      orders.forEach((order) => {
+      return;
+    }
+
+    list.innerHTML = '';
+    orders.forEach((order) => {
       const card = document.createElement('article');
       card.className = 'master-old-transfer-card';
       const ageDays = Math.max(1, Math.floor((new Date(`${masterDateInput(new Date())}T12:00:00`).getTime() - new Date(`${masterDateInput(order.created_at)}T12:00:00`).getTime()) / 86400000));
@@ -2615,39 +2592,6 @@
       `;
       const button = card.querySelector('[data-old-transfer]');
       if (button) button.addEventListener('click', () => setMasterTransferReceived(order, true, button));
-      list.appendChild(card);
-      });
-    }
-
-    const historicalTitle = document.createElement('div');
-    historicalTitle.className = 'master-old-transfer-title';
-    historicalTitle.style.cssText = 'margin-top:14px;padding-top:12px;border-top:1px solid #e8edef;font-weight:900;color:#24343a';
-    historicalTitle.textContent = 'تحويلات تاريخية مضافة';
-    list.appendChild(historicalTitle);
-
-    MASTER_HISTORICAL_TRANSFERS.forEach((transfer) => {
-      const card = document.createElement('article');
-      card.className = 'master-old-transfer-card';
-      card.style.cssText = 'border-color:#c8ebd2;background:#f1fbf4';
-      card.innerHTML = `
-        <div class="master-old-transfer-card-top">
-          <span class="master-old-transfer-customer">${masterEscape(transfer.customer_name)}</span>
-          <span class="master-transfer-state ${transfer.received ? 'received' : 'waiting'}">${transfer.received ? '✓ تم الاستلام' : 'تحويل غير مؤكد'}</span>
-        </div>
-        <div class="master-old-transfer-meta">تاريخ التحويل: ${masterEscape(transfer.transfer_date)}</div>
-        <div class="master-old-transfer-amount">${masterEscape(formatTotal(transfer.total))}</div>
-        ${transfer.received ? '<span class="master-transfer-state received">تم تأكيد الاستلام</span>' : `<button class="master-transfer-btn pending" data-historical-transfer="${masterEscape(transfer.id)}">تأكيد استلام التحويل</button>`}
-      `;
-      const historicalButton = card.querySelector('[data-historical-transfer]');
-      if (historicalButton) {
-        historicalButton.addEventListener('click', () => {
-          const confirmed = window.confirm(`تأكيد استلام تحويل ${transfer.customer_name} بقيمة ${transfer.total} درهم بتاريخ ${transfer.transfer_date}؟`);
-          if (!confirmed) return;
-          transfer.received = true;
-          renderMasterOrders();
-          toast('تم تحديث حالة التحويل في العرض الحالي. يلزم ربطه بقاعدة البيانات لحفظه نهائيًا.');
-        });
-      }
       list.appendChild(card);
     });
   }
@@ -2676,7 +2620,6 @@
     orders.forEach((order) => {
       const payment =
         normalizePayment(order.payment_method);
-      const paidInAdvance = isPaidInAdvance(order);
 
       const delivered =
         isDelivered(order.delivery_status);
@@ -2684,7 +2627,7 @@
       const tr =
         document.createElement('tr');
 
-      if (!paidInAdvance && payment === 'bank_transfer') {
+      if (payment === 'bank_transfer') {
         tr.classList.add(order.bank_transfer_received === true
           ? 'master-transfer-received'
           : 'master-transfer-pending');
@@ -2728,29 +2671,29 @@
         </td>
 
         <td>
-          ${deliveryFeeFromOrder(order) > 0 ? `<div style="font-size:11px;color:#64748b">إجمالي المنتجات: ${masterEscape(formatTotal((Number(order.total)||0)-deliveryFeeFromOrder(order)))}</div><div style="margin-top:5px;color:#a16207;font-size:11px;font-weight:900;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:5px 7px">🚚 رسوم التوصيل: ${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</div><strong style="display:block;margin-top:5px;color:#1d4ed8">الإجمالي النهائي: ${masterEscape(formatTotal(order.total))}</strong>` : `<strong>${formatTotal(order.total)}</strong>`}
+          <strong>
+            ${formatTotal(order.total)}
+          </strong>
         </td>
 
         <td>
           <span class="master-badge ${
-            paidInAdvance
-              ? 'advance'
-              : payment === 'cash'
-                ? 'cash'
-                : payment === 'bank_transfer'
-                  ? 'bank'
-                  : ''
+            payment === 'cash'
+              ? 'cash'
+              : payment === 'bank_transfer'
+                ? 'bank'
+                : ''
           }">
             ${masterEscape(
-              paidInAdvance
-                ? 'مدفوع'
-                : masterPaymentText(order.payment_method)
+              masterPaymentText(
+                order.payment_method
+              )
             )}
           </span>
         </td>
 
         <td>
-          ${!paidInAdvance && payment === 'bank_transfer'
+          ${payment === 'bank_transfer'
             ? (order.bank_transfer_received === true
               ? '<span class="master-transfer-state received">✓ تم الاستلام</span>'
               : `<button class="master-transfer-btn pending" data-master-transfer="${masterEscape(order.id)}">تأكيد الاستلام</button>`)
@@ -2810,7 +2753,7 @@
   }
 
   async function setMasterTransferReceived(order, received, button) {
-    if (isPaidInAdvance(order) || normalizePayment(order.payment_method) !== 'bank_transfer') {
+    if (normalizePayment(order.payment_method) !== 'bank_transfer') {
       toast('تأكيد الاستلام متاح لفواتير التحويل البنكي فقط', true);
       return;
     }
@@ -2837,7 +2780,6 @@
     const fingerprint = masterInvoiceFingerprint(order);
     const matchingOrders = state.masterOrders.filter((item) =>
       masterInvoiceFingerprint(item) === fingerprint &&
-      !isPaidInAdvance(item) &&
       normalizePayment(item.payment_method) === 'bank_transfer'
     );
     const targets = matchingOrders.length ? matchingOrders : [order];
@@ -2959,35 +2901,22 @@
         </div>
 
         <div class="master-detail">
-          <small>${deliveryFeeFromOrder(order) > 0 ? 'إجمالي المنتجات' : 'الإجمالي'}</small>
+          <small>الإجمالي</small>
           <strong>
-            ${masterEscape(formatTotal((Number(order.total)||0)-deliveryFeeFromOrder(order)))}
+            ${masterEscape(
+              formatTotal(order.total)
+            )}
           </strong>
         </div>
 
-        ${deliveryFeeFromOrder(order) > 0 ? `
-        <div class="master-detail" style="border:1px solid #facc15;background:#fef9c3">
-          <small style="color:#854d0e">🚚 رسوم التوصيل</small>
-          <strong style="color:#a16207">${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</strong>
-        </div>
-        <div class="master-detail" style="border:1px solid #bfdbfe;background:#eff6ff">
-          <small style="color:#1d4ed8">الإجمالي النهائي</small>
-          <strong style="color:#1d4ed8">${masterEscape(formatTotal(order.total))}</strong>
-        </div>` : ''}
-
-        ${isPaidInAdvance(order) ? '' : `
         <div class="master-detail">
           <small>طريقة الدفع</small>
           <strong>
-            ${masterEscape(masterPaymentText(order.payment_method))}
-          </strong>
-        </div>
-        `}
-
-        <div class="master-detail">
-          <small>حالة الدفع</small>
-          <strong>
-            ${masterEscape((isPaidInAdvance(order)) ? 'مدفوع' : '—')}
+            ${masterEscape(
+              masterPaymentText(
+                order.payment_method
+              )
+            )}
           </strong>
         </div>
 
@@ -2998,6 +2927,15 @@
               masterStatusText(
                 order.delivery_status
               )
+            )}
+          </strong>
+        </div>
+
+        <div class="master-detail">
+          <small>منسق الموعد</small>
+          <strong>
+            ${masterEscape(
+              order.appointment_coordinator || '—'
             )}
           </strong>
         </div>
@@ -3071,7 +3009,7 @@
 
         <div class="master-section-content">
           ${masterEscape(
-            cleanOrderNote(order.note || order.notes || '—')
+            order.note || '—'
           )}
         </div>
       </div>
@@ -3255,6 +3193,17 @@
           </label>
 
           <label>
+            منسق الموعد
+            <input
+              id="master-edit-coordinator"
+              type="text"
+              value="${masterEscape(
+                order.appointment_coordinator || ''
+              )}"
+            >
+          </label>
+
+          <label>
             طريقة الدفع
             <select id="master-edit-payment">
               <option
@@ -3430,6 +3379,9 @@
 
       total:
         $('master-edit-total')?.value || '',
+
+      appointment_coordinator:
+        $('master-edit-coordinator')?.value || '',
 
       location_url:
         $('master-edit-location')?.value || '',
