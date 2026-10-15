@@ -2028,6 +2028,16 @@
       .master-page[data-view="reports"] .master-home-intro,.master-page[data-view="reports"] .master-filters,.master-page[data-view="reports"] .master-orders-layout{display:none}
       .master-page[data-view="reports"] .master-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
       .master-page[data-view="reports"] .master-stats .master-stat{display:block}
+      .master-page[data-view="balances"] .master-home-intro,.master-page[data-view="balances"] .master-stats,.master-page[data-view="balances"] .master-filters,.master-page[data-view="balances"] .master-orders-layout{display:none}
+      .master-page[data-view="balances"] #master-customer-balances{display:block}
+      .master-customer-balances{display:none;background:#fff;border:1px solid #dce8f1;border-radius:16px;padding:16px;box-shadow:0 6px 20px rgba(30,49,67,.05)}
+      .master-balance-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+      .master-balance-stat{border:1px solid #e2eaf2;border-radius:13px;padding:14px;background:linear-gradient(135deg,#fff,#f7fafc)}
+      .master-balance-label{font-size:12px;color:#64748b;font-weight:800;margin-bottom:7px}.master-balance-value{font-size:23px;font-weight:900;color:#102744;overflow-wrap:anywhere}.master-balance-value.red{color:#c62828}.master-balance-value.green{color:#168052}
+      .master-balance-toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:12px 0}
+      .master-balance-search{flex:1;min-width:220px;border:1px solid #dbe5ef;border-radius:10px;padding:11px 12px;font:inherit}
+      .master-balance-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.master-balance-table{width:100%;min-width:850px;border-collapse:collapse}.master-balance-table th{background:#102744;color:#fff;padding:12px 10px;text-align:right;font-size:12px;white-space:nowrap}.master-balance-table td{padding:11px 10px;border-bottom:1px solid #e8eef4;font-size:12px}.master-balance-table tr:nth-child(even){background:#f8fafc}.master-balance-empty{text-align:center;padding:24px;color:#64748b}
+      @media(max-width:650px){.master-balance-stats{grid-template-columns:1fr 1fr;gap:8px}.master-balance-stat{padding:11px}.master-balance-value{font-size:17px}.master-customer-balances{padding:10px}.master-balance-toolbar{align-items:stretch}.master-balance-search{min-width:100%}}
       .master-page[data-view="reports"] .master-page-title{display:block}
       .master-edit-row{display:flex;gap:6px;align-items:center}
       .master-edit-btn{border:0;background:#e8f2ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:900;white-space:nowrap}
@@ -2080,6 +2090,7 @@
           <button class="master-nav-btn" type="button" data-master-view-tab="home" aria-current="page">🏠 الرئيسية</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="orders">🧾 الطلبات والفواتير</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="transfers">🏦 تحويلات سابقة</button>
+          <button class="master-nav-btn" type="button" data-master-view-tab="balances">💰 أرصدة العملاء</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="reports">📊 التقارير والإحصائيات</button>
         </nav>
 
@@ -2100,6 +2111,21 @@
             <div class="master-stat pending-bank"><div class="master-stat-label">المتبقي من التحويلات</div><div class="master-stat-value" id="master-bank-pending">0 درهم</div><div class="master-stat-hint">تحويلات لم يتم تأكيد استلامها</div></div>
             <div class="master-stat collected"><div class="master-stat-label">إجمالي المبالغ المسجلة/المستلمة</div><div class="master-stat-value" id="master-total-received">0 درهم</div><div class="master-stat-hint">الكاش المسجل + التحويلات المؤكدة</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
+          </section>
+
+          <section class="master-customer-balances" id="master-customer-balances">
+            <h2 style="margin:0;color:#102744;font-size:19px">أرصدة العملاء</h2>
+            <p style="margin:6px 0 14px;color:#64748b;font-size:12px;line-height:1.8">الأرصدة المسجلة من Excel. الرصيد الحالي = المبالغ المضافة − المبالغ المدفوعة.</p>
+            <div class="master-balance-stats">
+              <div class="master-balance-stat"><div class="master-balance-label">عدد العملاء</div><div class="master-balance-value" id="master-balance-count">—</div></div>
+              <div class="master-balance-stat"><div class="master-balance-label">إجمالي المبالغ المضافة</div><div class="master-balance-value green" id="master-balance-added">—</div></div>
+              <div class="master-balance-stat"><div class="master-balance-label">إجمالي الرصيد المتبقي</div><div class="master-balance-value red" id="master-balance-current">—</div></div>
+            </div>
+            <div class="master-balance-toolbar">
+              <input id="master-balance-search" class="master-balance-search" type="search" placeholder="ابحث بكود العميل أو الاسم أو الهاتف…" aria-label="بحث أرصدة العملاء">
+              <button class="master-btn secondary" type="button" id="master-balance-refresh">↻ تحديث الأرصدة</button>
+            </div>
+            <div class="master-balance-table-wrap"><table class="master-balance-table"><thead><tr><th>#</th><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>الإمارة</th><th>المنطقة</th><th>المبلغ المضاف</th><th>المبلغ المدفوع</th><th>الرصيد الحالي</th><th>ملاحظات</th></tr></thead><tbody id="master-balance-body"><tr><td colspan="10" class="master-balance-empty">اضغط تحديث الأرصدة لعرض البيانات</td></tr></tbody></table></div>
           </section>
 
           <section class="master-filters">
@@ -2195,6 +2221,8 @@
     `;
 
     $('master-refresh')?.addEventListener('click', loadMasterOrders);
+    $('master-balance-refresh')?.addEventListener('click', loadMasterCustomerBalances);
+    $('master-balance-search')?.addEventListener('input', renderMasterCustomerBalances);
     $('master-logout')?.addEventListener('click', () => masterLogout());
     document.querySelectorAll('[data-master-view-tab]').forEach((button) => {
       button.addEventListener('click', () => setMasterView(button.dataset.masterViewTab));
@@ -2226,7 +2254,7 @@
   }
 
   function setMasterView(view) {
-    const allowed = new Set(['home', 'orders', 'transfers', 'reports']);
+    const allowed = new Set(['home', 'orders', 'transfers', 'reports', 'balances']);
     const nextView = allowed.has(view) ? view : 'home';
     const page = $('master-page');
     if (!page) return;
@@ -2240,7 +2268,39 @@
     });
     if (nextView === 'transfers') renderMasterOldPendingTransfers();
     if (nextView === 'reports') renderMasterStats();
+    if (nextView === 'balances') loadMasterCustomerBalances();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  let masterCustomerBalances = [];
+
+  async function loadMasterCustomerBalances() {
+    const body = $('master-balance-body');
+    if (body) body.innerHTML = '<tr><td colspan="10" class="master-balance-empty">جارٍ تحميل أرصدة العملاء…</td></tr>';
+    try {
+      const data = await masterFetch('/api/master/customer-balances');
+      masterCustomerBalances = Array.isArray(data) ? data : (Array.isArray(data?.balances) ? data.balances : []);
+      const totalAdded = masterCustomerBalances.reduce((sum, row) => sum + (Number(row.amount_added) || 0), 0);
+      const totalCurrent = masterCustomerBalances.reduce((sum, row) => sum + (Number(row.current_balance) || 0), 0);
+      if ($('master-balance-count')) $('master-balance-count').textContent = masterCustomerBalances.length.toLocaleString('ar-EG');
+      if ($('master-balance-added')) $('master-balance-added').textContent = masterMoney(totalAdded) + ' درهم';
+      if ($('master-balance-current')) $('master-balance-current').textContent = masterMoney(totalCurrent) + ' درهم';
+      renderMasterCustomerBalances();
+    } catch (error) {
+      if (body && error.message !== 'expired') body.innerHTML = `<tr><td colspan="10" class="master-balance-empty">${masterEscape(error.message || 'تعذر تحميل أرصدة العملاء')}</td></tr>`;
+    }
+  }
+
+  function renderMasterCustomerBalances() {
+    const body = $('master-balance-body');
+    if (!body) return;
+    const query = String($('master-balance-search')?.value || '').trim().toLowerCase();
+    const rows = masterCustomerBalances.filter(row => [row.customer_code, row.customer_name, row.phone, row.emirate, row.area, row.notes, row.order_ref].some(value => String(value ?? '').toLowerCase().includes(query)));
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="10" class="master-balance-empty">${masterCustomerBalances.length ? 'لا توجد نتائج مطابقة للبحث.' : 'لا توجد أرصدة مسجلة حتى الآن. تأكد من مزامنة شيت CustomerBalances من Excel.'}</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map((row, index) => `<tr><td>${(index + 1).toLocaleString('ar-EG')}</td><td><strong>${masterEscape(row.customer_code || '—')}</strong></td><td>${masterEscape(row.customer_name || '—')}</td><td dir="ltr">${masterEscape(row.phone || '—')}</td><td>${masterEscape(row.emirate || '—')}</td><td>${masterEscape(row.area || '—')}</td><td>${masterMoney(row.amount_added || 0)} درهم</td><td>${masterMoney(row.amount_paid || 0)} درهم</td><td style="font-weight:900;color:${Number(row.current_balance) > 0 ? '#c62828' : '#168052'}">${masterMoney(row.current_balance || 0)} درهم</td><td>${masterEscape(row.notes || '—')}</td></tr>`).join('');
   }
 
   async function loadMasterOrders() {
