@@ -32,25 +32,6 @@ function checkSecrets(env) {
   return null;
 }
 
-function serviceRoleKeyProblem(env) {
-  const key = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-  if (!key) return "متغير SUPABASE_SERVICE_ROLE_KEY غير موجود في Cloudflare Worker";
-  // Supabase supports newer server-side secret keys that are not JWTs.
-  if (key.startsWith("sb_secret_")) return null;
-  try {
-    const parts = key.split(".");
-    if (parts.length < 2) return "قيمة SUPABASE_SERVICE_ROLE_KEY ليست مفتاح JWT صالحًا";
-    const payloadText = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
-    const payload = JSON.parse(payloadText);
-    if (payload.role !== "service_role") {
-      return "مفتاح SUPABASE_SERVICE_ROLE_KEY غير صحيح: القيمة الحالية ليست مفتاح service_role. استخدم مفتاح service_role من Supabase، وليس SUPABASE_ANON_KEY أو publishable key.";
-    }
-    return null;
-  } catch (_) {
-    return "تعذر التحقق من SUPABASE_SERVICE_ROLE_KEY. انسخ مفتاح service_role الصحيح من Supabase إلى Cloudflare.";
-  }
-}
-
 function getBearerToken(request) {
   const header = request.headers.get("Authorization") || "";
 
@@ -825,8 +806,9 @@ export default {
       ) {
         const auth = await requireMaster(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
-        const serviceRoleProblem = serviceRoleKeyProblem(env);
-        if (serviceRoleProblem) return json({ error: serviceRoleProblem }, 500);
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+          return json({ error: "إعداد عرض أرصدة العملاء غير مكتمل" }, 500);
+        }
         const response = await supabaseRequest(
           "/rest/v1/customer_balances?select=customer_code,customer_name,phone,amount_added,amount_paid,current_balance,notes,area,emirate,order_ref,updated_at&order=customer_code.asc",
           {
@@ -846,14 +828,13 @@ export default {
       if (path === "/api/driver/heading-to-customer" && request.method === "POST") {
         const auth = await requireDriver(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
-        const serviceRoleProblem = serviceRoleKeyProblem(env);
-        if (serviceRoleProblem) return json({ error: serviceRoleProblem }, 500);
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "إعداد إشعارات التحرك غير مكتمل: أضف SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
         const body = await request.json().catch(function () { return {}; });
         const orderId = Number(body.orderId);
         if (!Number.isInteger(orderId) || orderId <= 0) return json({ error: "رقم الطلب غير صحيح" }, 400);
 
         const orderResponse = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) + "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) + "&select=id,order_number,invoice_number,customer_name,phone,emirate,area,total,sheet_name&limit=1",
+          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) + "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) + "&select=id,order_number,customer_name,phone,emirate,area,total,sheet_name&limit=1",
           { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
         );
         const orderRows = await orderResponse.json().catch(function () { return null; });
@@ -873,7 +854,7 @@ export default {
         const insertResponse = await supabaseRequest("/rest/v1/driver_departures", {
           method: "POST",
           headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY, "Content-Type": "application/json", Prefer: "return=representation" },
-          body: JSON.stringify({ order_id: order.id, invoice_number: String(order.order_number || order.invoice_number || order.id), customer_name: String(order.customer_name || ""), phone: String(order.phone || ""), emirate: String(order.emirate || ""), area: String(order.area || ""), total: Number(order.total) || 0, sheet_name: String(auth.driver.sheet_name || ""), driver_name: String(auth.driver.mandoub_name || ""), driver_user_id: auth.user.id, departed_at: departedAt })
+          body: JSON.stringify({ order_id: order.id, invoice_number: String(order.order_number || order.id), customer_name: String(order.customer_name || ""), phone: String(order.phone || ""), emirate: String(order.emirate || ""), area: String(order.area || ""), total: Number(order.total) || 0, sheet_name: String(auth.driver.sheet_name || ""), driver_name: String(auth.driver.mandoub_name || ""), driver_user_id: auth.user.id, departed_at: departedAt })
         });
         const insertData = await insertResponse.json().catch(function () { return null; });
         if (!insertResponse.ok) {
@@ -890,8 +871,7 @@ export default {
       if (path === "/api/master/driver-departures" && request.method === "GET") {
         const auth = await requireMaster(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
-        const serviceRoleProblem = serviceRoleKeyProblem(env);
-        if (serviceRoleProblem) return json({ error: serviceRoleProblem }, 500);
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "إعداد إشعارات التحرك غير مكتمل" }, 500);
         const response = await supabaseRequest("/rest/v1/driver_departures?select=*&order=departed_at.desc&limit=100", {
           headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY }
         });
