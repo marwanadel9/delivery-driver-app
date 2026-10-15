@@ -2039,12 +2039,43 @@
       .master-balance-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.master-balance-table{width:100%;min-width:850px;border-collapse:collapse}.master-balance-table th{background:#102744;color:#fff;padding:12px 10px;text-align:right;font-size:12px;white-space:nowrap}.master-balance-table td{padding:11px 10px;border-bottom:1px solid #e8eef4;font-size:12px}.master-balance-table tr:nth-child(even){background:#f8fafc}.master-balance-empty{text-align:center;padding:24px;color:#64748b}
       @media(max-width:650px){.master-balance-stats{grid-template-columns:1fr 1fr;gap:8px}.master-balance-stat{padding:11px}.master-balance-value{font-size:17px}.master-customer-balances{padding:10px}.master-balance-toolbar{align-items:stretch}.master-balance-search{min-width:100%}}
       .master-page[data-view="reports"] .master-page-title{display:block}
+      .master-invoice-compact{display:flex;flex-direction:column;gap:12px;color:#172b3a}
+      .master-invoice-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px;border:1px solid #dbe7ef;border-radius:16px;background:linear-gradient(135deg,#f7fbff,#fff);box-shadow:0 4px 16px rgba(23,43,58,.05)}
+      .master-invoice-summary>div:first-child{display:flex;flex-direction:column;gap:5px;min-width:0}
+      .master-invoice-eyebrow{font-size:11px;color:#64748b;font-weight:800}
+      .master-invoice-number{font-size:21px;font-weight:1000;color:#15354a}
+      .master-invoice-customer{font-size:14px;font-weight:900;color:#263d4a;overflow-wrap:anywhere}
+      .master-invoice-summary-side{display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex-shrink:0}
+      .master-invoice-total{font-size:22px;font-weight:1000;color:#087f5b;white-space:nowrap}
+      .master-invoice-paid{background:#fff0f0;border:1px solid #ffcaca;color:#c62828;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:900}
+      .master-invoice-status{border-radius:999px;padding:5px 9px;font-size:11px;font-weight:900}
+      .master-invoice-status.done{background:#e8f7ee;color:#16723b}.master-invoice-status.pending{background:#fff5dc;color:#8a5a00}
+      .master-invoice-info-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+      .master-invoice-info{display:flex;flex-direction:column;gap:5px;min-width:0;padding:10px 12px;background:#f8fafc;border:1px solid #e7edf2;border-radius:12px}
+      .master-invoice-info span{font-size:10px;font-weight:800;color:#718096}
+      .master-invoice-info strong{font-size:12px;line-height:1.5;color:#1f2937;overflow-wrap:anywhere}
+      .master-invoice-info.delivery{background:#fffbeb;border-color:#facc15}.master-invoice-info.delivery strong{color:#a16207}
+      .master-invoice-info.grand-total{background:#eff6ff;border-color:#bfdbfe}.master-invoice-info.grand-total strong{color:#1d4ed8}
+      .master-invoice-section-head{font-size:13px;font-weight:1000;color:#263d4a;margin:3px 0 -4px}
+      .master-invoice-products{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+      .master-invoice-product{border:1px solid #e0e8ef;border-radius:12px;padding:11px 12px;min-width:0;background:#fff}
+      .master-invoice-product-title{display:flex;align-items:center;gap:7px;font-size:12px;color:#263d4a;margin-bottom:7px}
+      .master-invoice-product-value{font-size:12px;line-height:1.65;color:#334155;white-space:pre-line;overflow-wrap:anywhere}
+      .master-invoice-extra{padding:11px 12px;border:1px solid #e0e8ef;border-radius:12px;background:#fff;font-size:12px}
+      .master-invoice-extra strong{display:block;margin-bottom:6px;color:#263d4a}
+      .master-invoice-extra div{white-space:pre-line;line-height:1.7;color:#475569;overflow-wrap:anywhere}
+      .master-invoice-extra.note{background:#fffbeb;border-color:#fde68a}
+      .master-invoice-location{display:block;text-align:center;padding:10px 12px;border-radius:11px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;text-decoration:none;font-size:12px;font-weight:900}
+      .master-invoice-actions{display:flex;gap:9px;justify-content:flex-start;padding-top:4px}
+      .master-invoice-actions button{min-height:42px}
+      .master-modal-card{width:min(760px,100%);max-height:90vh}
+      .master-modal-body{padding:14px}
       .master-edit-row{display:flex;gap:6px;align-items:center}
       .master-edit-btn{border:0;background:#e8f2ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:900;white-space:nowrap}
       .master-edit-btn:hover{background:#dbeafe}
       @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:270px minmax(0,1fr)}}
       @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr);gap:10px}.master-old-transfer-panel{order:0;padding:10px}.master-table-wrap{order:1}}
-      @media(max-width:650px){.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
+      @media(max-width:650px){.master-invoice-summary{align-items:flex-start;padding:12px;gap:8px}.master-invoice-number{font-size:18px}.master-invoice-customer{font-size:12px}.master-invoice-total{font-size:17px}.master-invoice-info-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.master-invoice-products{grid-template-columns:1fr}.master-invoice-info{padding:9px}.master-invoice-actions{flex-direction:column}.master-invoice-actions button{width:100%}.master-modal-card{width:100%;max-height:94vh}.master-modal-body{padding:10px}.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
       @media(max-width:900px){.master-nav{grid-template-columns:repeat(2,minmax(0,1fr));top:78px;padding:10px;gap:7px}.master-nav-btn{min-height:44px;font-size:12px}.master-page[data-view="home"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-page[data-view="reports"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media(max-width:650px){.master-nav{position:sticky;top:0;z-index:20;grid-template-columns:repeat(2,minmax(0,1fr));padding:8px}.master-nav-btn{font-size:11px;padding:9px 5px;min-height:42px}.master-home-intro{padding:14px}.master-page[data-view="home"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-page[data-view="home"] .master-stats .master-stat{display:block}.master-page[data-view="home"] .master-stats .master-stat:nth-child(1),.master-page[data-view="home"] .master-stats .master-stat:nth-child(3),.master-page[data-view="home"] .master-stats .master-stat:nth-child(5),.master-page[data-view="home"] .master-stats .master-stat:nth-child(6),.master-page[data-view="home"] .master-stats .master-stat:nth-child(9){display:none}.master-page[data-view="reports"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-row{align-items:stretch;flex-direction:column}.master-edit-row button{width:100%}}
     `;
@@ -2891,265 +2922,101 @@
   }
 
   function openMasterOrder(order) {
-    const modal =
-      $('master-modal');
+    const modal = $('master-modal');
+    const body = $('master-modal-body');
+    const title = $('master-modal-title');
 
-    const body =
-      $('master-modal-body');
+    if (!modal || !body) return;
 
-    const title =
-      $('master-modal-title');
+    const invoiceNumber = order.order_number ?? order.invoice_number ?? order.id ?? '';
+    const deliveryFee = deliveryFeeFromOrder(order);
+    const total = Number(order.total) || 0;
+    const productsTotal = Math.max(0, total - deliveryFee);
+    const chickenWeights = String(order.chicken_weights || '').trim();
+    const chickenQtys = String(order.chicken_qtys || '').trim();
+    const plateNames = String(order.plate_names || '').trim();
+    const plateQtys = String(order.plate_qtys || '').trim();
+    const details = String(order.order_details || '').trim();
+    const note = cleanOrderNote(order.note || order.notes || '').trim();
+    const locationUrl = safeUrl(order.location_url || order.locationUrl || '');
+    const prepaid = isPaidInAdvance(order);
 
-    if (!modal || !body) {
-      return;
-    }
+    if (title) title.textContent = `الفاتورة #${invoiceNumber}`;
 
-    const chickenWeights =
-      order.chicken_weights || '';
+    const detailCard = (label, value, extraClass = '') => `
+      <div class="master-invoice-info ${extraClass}">
+        <span>${label}</span>
+        <strong>${masterEscape(value || '—')}</strong>
+      </div>`;
 
-    const chickenQtys =
-      order.chicken_qtys || '';
-
-    const plateNames =
-      order.plate_names || '';
-
-    const plateQtys =
-      order.plate_qtys || '';
-
-    if (title) {
-      title.textContent =
-        `الفاتورة #${
-          order.order_number ??
-          order.id ??
-          ''
-        }`;
-    }
+    const productCard = (label, value, icon) => {
+      if (!String(value || '').trim()) return '';
+      return `
+        <section class="master-invoice-product">
+          <div class="master-invoice-product-title"><span>${icon}</span><strong>${label}</strong></div>
+          <div class="master-invoice-product-value">${masterEscape(value)}</div>
+        </section>`;
+    };
 
     body.innerHTML = `
-      <div class="master-detail-grid">
-
-        <div class="master-detail">
-          <small>العميل</small>
-          <strong>
-            ${masterEscape(
-              order.customer_name || '—'
-            )}
-          </strong>
+      <div class="master-invoice-compact" dir="rtl">
+        <div class="master-invoice-summary">
+          <div>
+            <span class="master-invoice-eyebrow">فاتورة فروج الزين</span>
+            <strong class="master-invoice-number">#${masterEscape(invoiceNumber)}</strong>
+            <span class="master-invoice-customer">${masterEscape(order.customer_name || 'عميل غير محدد')}</span>
+          </div>
+          <div class="master-invoice-summary-side">
+            ${prepaid ? '<span class="master-invoice-paid">✓ مدفوع مقدمًا</span>' : ''}
+            <strong class="master-invoice-total">${masterEscape(formatTotal(total))}</strong>
+            <span class="master-invoice-status ${isDelivered(order.delivery_status) ? 'done' : 'pending'}">${masterEscape(masterStatusText(order.delivery_status))}</span>
+          </div>
         </div>
 
-        <div class="master-detail">
-          <small>الهاتف</small>
-          <strong>
-            ${masterEscape(
-              order.phone || '—'
-            )}
-          </strong>
+        <div class="master-invoice-info-grid">
+          ${detailCard('📞 الهاتف', order.phone)}
+          ${detailCard('📍 الإمارة والمنطقة', [order.emirate, order.area].filter(Boolean).join(' — '))}
+          ${detailCard('🚚 المندوب', masterDriver(order))}
+          ${detailCard('📅 التاريخ', masterDate(order.created_at))}
+          ${!prepaid ? detailCard('💳 طريقة الدفع', masterPaymentText(order.payment_method)) : ''}
+          ${detailCard('💰 إجمالي المنتجات', formatTotal(productsTotal))}
+          ${deliveryFee > 0 ? detailCard('🚗 رسوم التوصيل', formatTotal(deliveryFee), 'delivery') : ''}
+          ${deliveryFee > 0 ? detailCard('الإجمالي النهائي', formatTotal(total), 'grand-total') : ''}
         </div>
 
-        <div class="master-detail">
-          <small>الإمارة</small>
-          <strong>
-            ${masterEscape(
-              order.emirate || '—'
-            )}
-          </strong>
+        ${(chickenWeights || chickenQtys || plateNames || plateQtys) ? `
+          <div class="master-invoice-section-head">🧾 تفاصيل الأصناف والكميات</div>
+          <div class="master-invoice-products">
+            ${productCard('الدجاج الكامل — الأوزان', chickenWeights, '🍗')}
+            ${productCard('الدجاج الكامل — الكمية', chickenQtys, '📦')}
+            ${productCard('المقطعات — الأصناف', plateNames, '🍽️')}
+            ${productCard('المقطعات — الكمية', plateQtys, '📦')}
+          </div>` : ''}
+
+        ${details ? `
+          <section class="master-invoice-extra">
+            <strong>📝 تفاصيل الطلب</strong>
+            <div>${masterEscape(details)}</div>
+          </section>` : ''}
+
+        ${note ? `
+          <section class="master-invoice-extra note">
+            <strong>📌 ملاحظات</strong>
+            <div>${masterEscape(note)}</div>
+          </section>` : ''}
+
+        ${locationUrl ? `
+          <a class="master-invoice-location" href="${masterEscape(locationUrl)}" target="_blank" rel="noopener noreferrer">📍 فتح موقع العميل</a>` : ''}
+
+        <div class="master-invoice-actions">
+          <button class="master-btn primary" id="master-edit-order-btn" type="button">✏️ تعديل الفاتورة</button>
+          <button class="master-btn danger" id="master-delete-order-btn" type="button">🗑️ حذف الفاتورة</button>
         </div>
-
-        <div class="master-detail">
-          <small>المنطقة</small>
-          <strong>
-            ${masterEscape(
-              order.area || '—'
-            )}
-          </strong>
-        </div>
-
-        <div class="master-detail">
-          <small>المندوب</small>
-          <strong>
-            ${masterEscape(
-              masterDriver(order)
-            )}
-          </strong>
-        </div>
-
-        <div class="master-detail">
-          <small>التاريخ</small>
-          <strong>
-            ${masterEscape(
-              masterDate(order.created_at)
-            )}
-          </strong>
-        </div>
-
-        <div class="master-detail">
-          <small>${deliveryFeeFromOrder(order) > 0 ? 'إجمالي المنتجات' : 'الإجمالي'}</small>
-          <strong>
-            ${masterEscape(formatTotal((Number(order.total)||0)-deliveryFeeFromOrder(order)))}
-          </strong>
-        </div>
-
-        ${deliveryFeeFromOrder(order) > 0 ? `
-        <div class="master-detail" style="border:1px solid #facc15;background:#fef9c3">
-          <small style="color:#854d0e">🚚 رسوم التوصيل</small>
-          <strong style="color:#a16207">${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</strong>
-        </div>
-        <div class="master-detail" style="border:1px solid #bfdbfe;background:#eff6ff">
-          <small style="color:#1d4ed8">الإجمالي النهائي</small>
-          <strong style="color:#1d4ed8">${masterEscape(formatTotal(order.total))}</strong>
-        </div>` : ''}
-
-        ${isPaidInAdvance(order) ? '' : `
-        <div class="master-detail">
-          <small>طريقة الدفع</small>
-          <strong>
-            ${masterEscape(masterPaymentText(order.payment_method))}
-          </strong>
-        </div>
-        `}
-
-        <div class="master-detail">
-          <small>حالة الدفع</small>
-          <strong>
-            ${masterEscape((isPaidInAdvance(order)) ? 'مدفوع' : '—')}
-          </strong>
-        </div>
-
-        <div class="master-detail">
-          <small>حالة التوصيل</small>
-          <strong>
-            ${masterEscape(
-              masterStatusText(
-                order.delivery_status
-              )
-            )}
-          </strong>
-        </div>
-
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          🍗 الدجاج الكامل — الأوزان
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            chickenWeights || '—'
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          📦 الدجاج الكامل — الكمية
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            chickenQtys || '—'
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          🍽️ المقطعات — الأصناف
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            plateNames || '—'
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          📦 المقطعات — الكمية
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            plateQtys || '—'
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          📝 تفاصيل الطلب
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            order.order_details || '—'
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          📌 الملاحظات
-        </div>
-
-        <div class="master-section-content">
-          ${masterEscape(
-            cleanOrderNote(order.note || order.notes || '—')
-          )}
-        </div>
-      </div>
-
-      <div class="master-section">
-        <div class="master-section-title">
-          📍 الموقع
-        </div>
-
-        <div class="master-section-content">
-          ${
-            safeUrl(order.location_url)
-              ? `
-                <a
-                  href="${masterEscape(
-                    safeUrl(order.location_url)
-                  )}"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  فتح موقع العميل
-                </a>
-              `
-              : 'لا يوجد رابط موقع'
-          }
-        </div>
-      </div>
-
-      <div class="master-actions-row">
-        <button
-          class="master-btn primary"
-          id="master-edit-order-btn"
-        >
-          ✏️ تعديل الفاتورة
-        </button>
-
-        <button
-          class="master-btn danger"
-          id="master-delete-order-btn"
-        >
-          🗑️ حذف الفاتورة
-        </button>
       </div>
     `;
 
-    $('master-edit-order-btn')?.addEventListener(
-      'click',
-      () => openMasterEdit(order)
-    );
-
-    $('master-delete-order-btn')?.addEventListener(
-      'click',
-      () => deleteMasterOrder(order)
-    );
+    $('master-edit-order-btn')?.addEventListener('click', () => openMasterEdit(order));
+    $('master-delete-order-btn')?.addEventListener('click', () => deleteMasterOrder(order));
 
     modal.classList.add('open');
   }
@@ -3415,6 +3282,11 @@
       'click',
       () => openMasterOrder(order)
     );
+
+    // Direct edit from the invoice table must open the modal too.
+    const modal = $('master-modal');
+    if (modal) modal.classList.add('open');
+    if (body) body.scrollTop = 0;
   }
 
   async function saveMasterOrder(order) {
