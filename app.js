@@ -57,6 +57,15 @@
       .order-card{position:relative!important;overflow:hidden!important;background:#fff!important;border:1px solid #dce7f5!important;border-radius:17px!important;padding:12px!important;box-shadow:0 5px 17px rgba(18,51,86,.055)!important;gap:8px!important}
       .order-card:before{content:"";position:absolute;right:0;top:0;bottom:0;width:3px;background:#b9d5ff}
       .order-card.is-done:before{background:#22a06b}
+      /* الفواتير مختصرة افتراضياً؛ اضغط على البطاقة لعرض التفاصيل */
+      .order-card:not(.is-expanded) .products-section,
+      .order-card:not(.is-expanded) .order-details,
+      .order-card:not(.is-expanded) .payment-section,
+      .order-card:not(.is-expanded) .order-actions{display:none!important}
+      .order-card{cursor:pointer!important}
+      .order-card button,.order-card a,.order-card input,.order-card select,.order-card textarea{cursor:pointer}
+      .order-expand-hint{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:5px;padding:7px 9px;border:1px solid #dbeafe;border-radius:10px;background:#f3f8ff;color:#175cd3;font-size:11px;font-weight:900;box-sizing:border-box}
+      .order-card.is-expanded .order-expand-hint{background:#eaf3ff}
       .order-card-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin:0 0 2px!important}
       .order-number{gap:4px!important;color:#7890aa!important;font-size:10px!important}
       .order-number strong{font-size:16px!important;font-weight:950!important;color:var(--fz-navy)!important;letter-spacing:.2px}
@@ -1069,6 +1078,29 @@
       departureButton.innerHTML = '<span aria-hidden="true">🚗</span><span>متوجه للعميل</span>';
       departureBox.appendChild(departureButton);
       node.insertBefore(departureBox, node.firstChild);
+
+      const expandHint = document.createElement('button');
+      expandHint.type = 'button';
+      expandHint.className = 'order-expand-hint';
+      expandHint.setAttribute('aria-expanded', 'false');
+      expandHint.innerHTML = '<span>⌄</span><span>اضغط لعرض تفاصيل الفاتورة</span>';
+      departureBox.insertAdjacentElement('afterend', expandHint);
+
+      const toggleOrderDetails = () => {
+        const expanded = node.classList.toggle('is-expanded');
+        expandHint.setAttribute('aria-expanded', String(expanded));
+        expandHint.innerHTML = expanded
+          ? '<span>⌃</span><span>إخفاء تفاصيل الفاتورة</span>'
+          : '<span>⌄</span><span>اضغط لعرض تفاصيل الفاتورة</span>';
+      };
+      expandHint.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleOrderDetails();
+      });
+      node.addEventListener('click', (event) => {
+        if (event.target.closest('button, a, input, select, textarea, label')) return;
+        toggleOrderDetails();
+      });
 
       const orderNumber =
         firstValue(
