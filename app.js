@@ -12,6 +12,100 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // Navy/blue compact driver UI theme. Presentation only; order and API logic remain unchanged.
+  function installFroogNavyDriverTheme() {
+    if (document.getElementById('froog-navy-driver-theme')) return;
+    const style = document.createElement('style');
+    style.id = 'froog-navy-driver-theme';
+    style.textContent = `
+      :root{--fz-navy:#082f55;--fz-navy2:#0b3a66;--fz-blue:#1264e8;--fz-blue2:#dbeafe;--fz-line:#d9e6f5;--fz-muted:#647b98;--fz-bg:#f3f7fc;--fz-ink:#102a49}
+      body{background:var(--fz-bg);color:var(--fz-ink)}
+      .app-shell{min-height:100vh;background:linear-gradient(180deg,#edf4fc 0,#f7faff 260px,#f3f7fc 100%)}
+      .login-view{background:linear-gradient(145deg,#062747 0%,#0c4d87 48%,#eaf3ff 100%);padding:18px!important;align-items:center!important;justify-content:center!important}
+      .login-background{background:radial-gradient(circle at 20% 12%,rgba(96,165,250,.35),transparent 32%),linear-gradient(145deg,#082f55,#0b4b83 60%,#dcecff)!important;opacity:1!important}
+      .login-card{width:min(100%,430px)!important;max-width:430px!important;border:1px solid rgba(255,255,255,.72)!important;border-radius:26px!important;padding:25px!important;background:rgba(255,255,255,.97)!important;box-shadow:0 24px 65px rgba(3,25,49,.24)!important}
+      .brand-mark{gap:12px!important;margin-bottom:24px!important}
+      .brand-icon{background:linear-gradient(145deg,#0b3761,#1264e8)!important;color:#fff!important;border-radius:17px!important;box-shadow:0 8px 20px rgba(18,100,232,.2)!important}
+      .brand-name{color:var(--fz-navy)!important;font-weight:950!important}
+      .brand-subtitle{color:#52749c!important}
+      .login-heading h1{color:var(--fz-navy)!important;font-weight:950!important}
+      .login-heading p,.login-footer{color:var(--fz-muted)!important}
+      .field label{color:#355575!important;font-weight:800!important}
+      .input-wrap{border:1px solid #d5e3f3!important;border-radius:14px!important;background:#f7faff!important;box-shadow:inset 0 1px 2px rgba(15,45,80,.03)!important}
+      .input-wrap:focus-within{border-color:#6aa5ff!important;box-shadow:0 0 0 3px rgba(18,100,232,.12)!important}
+      .input-wrap input{color:var(--fz-ink)!important}
+      .login-btn{background:linear-gradient(135deg,#1674f5,#064fc4)!important;border-radius:14px!important;box-shadow:0 9px 20px rgba(18,100,232,.22)!important;font-weight:900!important}
+      .topbar{background:linear-gradient(110deg,#062747,#0a3d6b 72%,#0e5592)!important;color:#fff!important;box-shadow:0 5px 22px rgba(8,47,85,.16)!important;border-bottom:0!important}
+      .topbar .brand-text strong,.topbar .brand-text span,.topbar .driver-info strong,.topbar .driver-info span{color:#fff!important}
+      .mini-logo,.driver-avatar{background:rgba(255,255,255,.14)!important;color:#fff!important;border:1px solid rgba(255,255,255,.18)!important}
+      .icon-btn{background:rgba(255,255,255,.13)!important;color:#fff!important;border:1px solid rgba(255,255,255,.2)!important;border-radius:12px!important}
+      .main-content{max-width:760px!important;padding:14px 12px 28px!important;margin:0 auto!important}
+      .welcome-section{padding:15px!important;margin-bottom:12px!important;border:1px solid var(--fz-line)!important;border-radius:18px!important;background:#fff!important;box-shadow:0 5px 18px rgba(21,60,100,.045)!important}
+      .welcome-section h1{font-size:21px!important;color:var(--fz-navy)!important;margin:3px 0 4px!important}
+      .welcome-section p{font-size:12px!important;color:var(--fz-muted)!important;margin:0!important}
+      .eyebrow{color:var(--fz-blue)!important;font-weight:900!important}
+      .orders-counter{background:#edf5ff!important;border:1px solid #d3e5ff!important;color:var(--fz-blue)!important;border-radius:15px!important}
+      .stats-grid{gap:8px!important;margin:10px 0!important}
+      .stat-card{border:1px solid var(--fz-line)!important;border-radius:15px!important;padding:10px 12px!important;background:#fff!important;box-shadow:0 3px 12px rgba(15,50,85,.035)!important}
+      .stat-card span{color:var(--fz-muted)!important;font-size:11px!important}
+      .stat-card strong{color:var(--fz-navy)!important;font-size:20px!important}
+      .pending-icon{background:#fff3db!important;color:#b76a00!important}.done-icon{background:#dcfce7!important;color:#168044!important}
+      .tabs{display:flex!important;gap:7px!important;padding:5px!important;margin:10px 0 12px!important;background:#e7eff9!important;border:1px solid #d8e5f5!important;border-radius:14px!important}
+      .tab{flex:1!important;min-width:0!important;padding:10px 7px!important;border-radius:10px!important;background:transparent!important;color:#456482!important;border:0!important;font-size:12px!important;font-weight:850!important}
+      .tab.active{background:linear-gradient(135deg,#1674f5,#0755ce)!important;color:#fff!important;box-shadow:0 4px 10px rgba(18,100,232,.2)!important}
+      .orders-list{display:grid!important;gap:10px!important}
+      .order-card{position:relative!important;overflow:hidden!important;background:#fff!important;border:1px solid #dce7f5!important;border-radius:17px!important;padding:12px!important;box-shadow:0 5px 17px rgba(18,51,86,.055)!important;gap:8px!important}
+      .order-card:before{content:"";position:absolute;right:0;top:0;bottom:0;width:3px;background:#b9d5ff}
+      .order-card.is-done:before{background:#22a06b}
+      .order-card-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin:0 0 2px!important}
+      .order-number{gap:4px!important;color:#7890aa!important;font-size:10px!important}
+      .order-number strong{font-size:16px!important;font-weight:950!important;color:var(--fz-navy)!important;letter-spacing:.2px}
+      .delivery-status{font-size:10px!important;font-weight:900!important;padding:5px 8px!important;border-radius:999px!important;background:#fff2d6!important;color:#9b5a00!important;border:1px solid #ffe3a0!important}
+      .delivery-status.ok{background:#dcfce7!important;color:#187647!important;border-color:#b7efcb!important}
+      .customer-row{display:flex!important;align-items:center!important;gap:9px!important;margin:0!important;padding:0 0 8px!important;border-bottom:1px solid #edf2f8!important}
+      .customer-avatar{width:35px!important;height:35px!important;min-width:35px!important;display:grid!important;place-items:center!important;background:#edf5ff!important;border-radius:12px!important;color:var(--fz-blue)!important}
+      .customer-main{min-width:0!important;flex:1!important;gap:2px!important}
+      .customer-main h2{font-size:14px!important;line-height:1.45!important;margin:0!important;font-weight:900!important;color:var(--fz-navy)!important}
+      .phone-link{font-size:11px!important;color:#55779f!important;text-decoration:none!important;direction:ltr!important;text-align:right!important}
+      .call-btn{width:34px!important;height:34px!important;min-width:34px!important;border-radius:11px!important;background:#eaf3ff!important;color:var(--fz-blue)!important;border:1px solid #cfe2ff!important}
+      .customer-location-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;margin:0!important}
+      .info-item{min-width:0!important;padding:8px 9px!important;border-radius:11px!important;background:#f5f8fc!important;border:1px solid #edf2f8!important;gap:3px!important}
+      .info-label{font-size:9px!important;color:#6b829d!important;font-weight:800!important}
+      .info-item strong{font-size:12px!important;line-height:1.5!important;color:#153657!important;overflow-wrap:anywhere!important}
+      .products-section{margin:0!important;padding:8px 9px!important;border-radius:12px!important;background:#f8fbff!important;border:1px solid #e8f0fa!important}
+      .products-section-head{margin:0 0 4px!important;padding:0!important}
+      .products-section-title strong{font-size:12px!important;color:#254b72!important;font-weight:950!important}
+      .products-grid{display:block!important;margin:0!important}
+      .product-box{padding:0!important;margin:0!important;background:transparent!important;border:0!important;min-height:0!important}
+      .product-value{font-size:13px!important;font-weight:850!important;line-height:1.65!important;color:#163c64!important;white-space:pre-line!important}
+      .order-details{display:grid!important;gap:6px!important;margin:0!important}
+      .order-details .info-item{padding:7px 9px!important}
+      .note-item{background:#f3f7ff!important;border-color:#dce8fa!important}
+      .note-item strong{font-size:14px!important;line-height:1.7!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important}
+      .order-total{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;padding:10px 11px!important;margin:0!important;border-radius:12px!important;background:#edf5ff!important;border:1px solid #d7e7ff!important;color:#43658a!important;font-size:11px!important}
+      .order-total strong{font-size:16px!important;font-weight:950!important;color:#075bd6!important}
+      .delivery-fee-row,.delivery-grand-total-row{padding:8px 10px!important;margin:5px 0!important;border-radius:11px!important;font-size:12px!important}
+      .payment-section{padding:8px 0 0!important;margin:0!important;border-top:1px solid #edf2f8!important}
+      .payment-title{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin-bottom:6px!important;font-size:11px!important;color:#37597c!important;font-weight:900!important}
+      .payment-current{font-size:9px!important;color:#7890aa!important}
+      .payment-buttons{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+      .payment-btn{min-height:37px!important;padding:7px 8px!important;border-radius:10px!important;border:1px solid #d9e6f5!important;background:#fff!important;color:#244b72!important;font-size:11px!important}
+      .payment-btn.selected{background:#eaf3ff!important;border-color:#8bbaff!important;color:#075bd6!important}
+      .order-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;margin:0!important}
+      .location-btn,.btn-deliver{min-height:39px!important;padding:9px 8px!important;border-radius:11px!important;font-size:12px!important;font-weight:900!important;box-shadow:none!important}
+      .location-btn{background:#edf5ff!important;color:#075bd6!important;border:1px solid #b9d6ff!important}
+      .btn-deliver{background:#159653!important;color:#fff!important;border:1px solid #159653!important}
+      .order-card.is-done .btn-deliver,.btn-deliver:disabled{background:#dc2626!important;border-color:#dc2626!important;color:#fff!important;opacity:1!important}
+      .driver-departure-box{display:flex!important;justify-content:flex-start!important;width:100%!important;margin:0 0 7px!important}
+      .driver-heading-button{width:max-content!important;max-width:100%!important;min-width:0!important;min-height:34px!important;padding:7px 12px!important;margin-right:auto!important;margin-left:0!important;gap:7px!important;border-radius:10px!important;font-size:12px!important;line-height:1.2!important;box-shadow:0 2px 0 rgba(37,99,235,.08)!important}
+      .driver-heading-button span{font-size:12px!important}
+      .toast{border-radius:12px!important;box-shadow:0 8px 28px rgba(8,47,85,.2)!important}
+      @media(max-width:480px){.main-content{padding:10px 9px 22px!important}.welcome-section{padding:12px!important}.welcome-section h1{font-size:19px!important}.order-card{padding:10px!important;border-radius:15px!important}.customer-location-grid{gap:5px!important}.info-item{padding:7px!important}.product-value{font-size:12px!important}.note-item strong{font-size:14px!important}.order-actions{gap:6px!important}.driver-heading-button{min-height:33px!important;padding:7px 10px!important;font-size:11px!important}.stats-grid{gap:6px!important}}
+    `;
+    document.head.appendChild(style);
+  }
+  installFroogNavyDriverTheme();
+
   const normalizePayment = (value) => {
     const v = String(value ?? '').trim().toLowerCase();
 
