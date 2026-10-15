@@ -311,13 +311,23 @@
       ...(options.headers || {})
     };
 
-    const response = await fetch(
-      path,
-      {
+    const requestController = new AbortController();
+    const requestTimeout = setTimeout(() => requestController.abort(), 30000);
+    let response;
+    try {
+      response = await fetch(path, {
         ...options,
-        headers
+        headers,
+        signal: requestController.signal
+      });
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        throw new Error('الاتصال تأخر أكثر من اللازم. لم يتم تغيير بيانات الطلب؛ تحقق من الإنترنت ثم أعد المحاولة.');
       }
-    );
+      throw error;
+    } finally {
+      clearTimeout(requestTimeout);
+    }
 
     if (
       response.status === 401 &&
@@ -1227,6 +1237,21 @@
         cleanOrderNote(firstValue(order, ['note', 'notes', 'remarks']))
       );
 
+      // Make the driver's note easy to read on a phone.
+      const driverNoteElement = node.querySelector('[data-f="note"]');
+      if (driverNoteElement) {
+        driverNoteElement.style.setProperty('font-size', '19px', 'important');
+        driverNoteElement.style.setProperty('font-weight', '800', 'important');
+        driverNoteElement.style.setProperty('line-height', '1.8', 'important');
+        driverNoteElement.style.setProperty('white-space', 'pre-wrap', 'important');
+        driverNoteElement.style.setProperty('overflow-wrap', 'anywhere', 'important');
+        const driverNoteRow = driverNoteElement.closest('.info-item, .order-section, .detail-row, .field-row, .product-box, .note-box');
+        if (driverNoteRow) {
+          driverNoteRow.style.setProperty('min-height', '58px', 'important');
+          driverNoteRow.style.setProperty('padding', '10px 12px', 'important');
+        }
+      }
+
       const deliveryFee = deliveryFeeFromOrder(order);
       const orderTotalRaw = Number(firstValue(order, ['total', 'grand_total', 'grandTotal', 'amount'])) || 0;
       const productsTotal = Math.max(0, orderTotalRaw - deliveryFee);
@@ -1782,10 +1807,23 @@
       ...(options.headers || {})
     };
 
-    const response = await fetch(path, {
-      ...options,
-      headers
-    });
+    const requestController = new AbortController();
+    const requestTimeout = setTimeout(() => requestController.abort(), 30000);
+    let response;
+    try {
+      response = await fetch(path, {
+        ...options,
+        headers,
+        signal: requestController.signal
+      });
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        throw new Error('استغرق الاتصال أكثر من 30 ثانية. لم يتم تحديث الفاتورة محليًا؛ أعد المحاولة بعد التأكد من الاتصال.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(requestTimeout);
+    }
 
     const data = await response.json().catch(() => ({}));
 
@@ -3383,48 +3421,52 @@
         'جارٍ الحفظ…';
     }
 
+    // Keep the complete original record so fields not shown in the edit form
+    // (delivery fee, gate photo, prepaid flag, transfer state, coordinator,
+    // driver notes and other metadata) are not cleared by a partial edit.
     const updatedOrder = {
+      ...order,
       customer_name:
-        $('master-edit-customer')?.value || '',
+        $('master-edit-customer')?.value ?? order.customer_name ?? '',
 
       phone:
-        $('master-edit-phone')?.value || '',
+        $('master-edit-phone')?.value ?? order.phone ?? '',
 
       emirate:
-        $('master-edit-emirate')?.value || '',
+        $('master-edit-emirate')?.value ?? order.emirate ?? '',
 
       area:
-        $('master-edit-area')?.value || '',
+        $('master-edit-area')?.value ?? order.area ?? '',
 
       chicken_weights:
-        $('master-edit-chicken-weights')?.value || '',
+        $('master-edit-chicken-weights')?.value ?? order.chicken_weights ?? '',
 
       chicken_qtys:
-        $('master-edit-chicken-qtys')?.value || '',
+        $('master-edit-chicken-qtys')?.value ?? order.chicken_qtys ?? '',
 
       plate_names:
-        $('master-edit-plate-names')?.value || '',
+        $('master-edit-plate-names')?.value ?? order.plate_names ?? '',
 
       plate_qtys:
-        $('master-edit-plate-qtys')?.value || '',
+        $('master-edit-plate-qtys')?.value ?? order.plate_qtys ?? '',
 
       total:
-        $('master-edit-total')?.value || '',
+        $('master-edit-total')?.value ?? order.total ?? '',
 
       location_url:
-        $('master-edit-location')?.value || '',
+        $('master-edit-location')?.value ?? order.location_url ?? '',
 
       order_details:
-        $('master-edit-details')?.value || '',
+        $('master-edit-details')?.value ?? order.order_details ?? '',
 
       note:
-        $('master-edit-note')?.value || '',
+        $('master-edit-note')?.value ?? order.note ?? order.notes ?? '',
 
       payment_method:
-        $('master-edit-payment')?.value || '',
+        $('master-edit-payment')?.value ?? order.payment_method ?? '',
 
       delivery_status:
-        $('master-edit-status')?.value || 'pending'
+        $('master-edit-status')?.value ?? order.delivery_status ?? 'pending'
     };
 
     try {
