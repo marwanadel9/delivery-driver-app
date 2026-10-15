@@ -964,6 +964,18 @@
           .firstElementChild
           .cloneNode(true);
 
+      // Button is injected into the existing card, so no HTML template change is required.
+      const departureBox = document.createElement('div');
+      departureBox.className = 'driver-departure-box';
+      departureBox.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin:0 0 12px;padding:0;';
+      const departureButton = document.createElement('button');
+      departureButton.type = 'button';
+      departureButton.className = 'driver-heading-button';
+      departureButton.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:54px;padding:12px 16px;border:1px solid #bfdbfe;border-radius:13px;background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#175cd3;font-size:17px;font-weight:900;box-shadow:0 3px 0 rgba(37,99,235,.10);cursor:pointer;';
+      departureButton.innerHTML = '<span aria-hidden="true">🚗</span><span>متوجه للعميل</span>';
+      departureBox.appendChild(departureButton);
+      node.insertBefore(departureBox, node.firstChild);
+
       const orderNumber =
         firstValue(
           order,
@@ -980,6 +992,25 @@
         isDelivered(
           order.delivery_status
         );
+
+      if (departureButton) {
+        const departureAt = order.driver_departure_at || order.departed_at || '';
+        if (departureAt) {
+          departureButton.disabled = true;
+          departureButton.style.cssText += 'background:#ecfdf3;color:#067647;border-color:#abefc6;box-shadow:none;cursor:default;';
+          departureButton.innerHTML = '<span aria-hidden="true">✓</span><span>تم الإبلاغ — متوجه للعميل</span>';
+          const time = document.createElement('small');
+          time.textContent = new Date(departureAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+          time.style.cssText = 'font-size:12px;font-weight:800;margin-right:4px;';
+          departureButton.appendChild(time);
+        } else if (!delivered) {
+          departureButton.addEventListener('click', () => markHeadingToCustomer(order, departureButton));
+        } else {
+          departureButton.disabled = true;
+          departureButton.style.opacity = '.55';
+          departureButton.title = 'تم تسليم هذا الطلب';
+        }
+      }
 
       setText(
         node,
@@ -1524,6 +1555,36 @@
     }
 
     updateStats();
+  }
+
+  async function markHeadingToCustomer(order, button) {
+    if (!order || !order.id || button.disabled) return;
+    const invoice = firstValue(order, ['order_number', 'orderNumber', 'invoice_no', 'invoice_number', 'id']) || order.id;
+    const confirmed = window.confirm(`تأكيد التحرك لتسليم الفاتورة ${invoice}؟\nسيظهر إشعار في الماستر باسم المندوب ووقت التحرك.`);
+    if (!confirmed) return;
+
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.textContent = 'جارٍ إرسال الإشعار…';
+    try {
+      const result = await apiFetch('/api/driver/heading-to-customer', {
+        method: 'POST',
+        body: JSON.stringify({ orderId: order.id })
+      });
+      const departedAt = result.departed_at || result.departure?.departed_at || new Date().toISOString();
+      order.driver_departure_at = departedAt;
+      button.style.cssText += 'background:#ecfdf3;color:#067647;border-color:#abefc6;box-shadow:none;cursor:default;';
+      button.innerHTML = '<span aria-hidden="true">✓</span><span>تم الإبلاغ — متوجه للعميل</span>';
+      const time = document.createElement('small');
+      time.textContent = new Date(departedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      time.style.cssText = 'font-size:12px;font-weight:800;margin-right:4px;';
+      button.appendChild(time);
+      toast(result.already_marked ? 'تم تسجيل التحرك سابقًا لهذه الفاتورة' : 'تم إرسال إشعار التحرك للماستر بنجاح ✅');
+    } catch (error) {
+      button.disabled = false;
+      button.innerHTML = originalText;
+      if (error.message !== 'expired') toast(error.message || 'تعذر إرسال إشعار التحرك', true);
+    }
   }
 
   async function setPayment(
@@ -2081,6 +2142,18 @@
       .master-page[data-view="reports"] .master-stats .master-stat{display:block}
       .master-page[data-view="balances"] .master-home-intro,.master-page[data-view="balances"] .master-stats,.master-page[data-view="balances"] .master-filters,.master-page[data-view="balances"] .master-orders-layout{display:none}
       .master-page[data-view="balances"] #master-customer-balances{display:block}
+      .master-page[data-view="departures"] .master-home-intro,.master-page[data-view="departures"] .master-stats,.master-page[data-view="departures"] .master-filters,.master-page[data-view="departures"] .master-orders-layout,.master-page[data-view="departures"] #master-customer-balances{display:none}
+      .master-page[data-view="departures"] #master-driver-departures{display:block}
+      .master-driver-departures{display:none;background:#fff;border:1px solid #dce8f1;border-radius:16px;padding:16px;box-shadow:0 6px 20px rgba(30,49,67,.05)}
+      .master-departure-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+      .master-departure-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+      .master-departure-stat{border:1px solid #dbeafe;background:#eff6ff;border-radius:12px;padding:12px}
+      .master-departure-stat strong{display:block;font-size:22px;color:#175cd3;margin-top:5px}
+      .master-departure-list{display:grid;gap:10px}
+      .master-departure-card{border:1px solid #dbe5ef;border-right:4px solid #2563eb;border-radius:12px;padding:13px;background:#fff;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+      .master-departure-card small{display:block;color:#64748b;font-size:11px;margin-bottom:4px}.master-departure-card strong{font-size:13px;overflow-wrap:anywhere}
+      .master-departure-empty{padding:24px;text-align:center;color:#64748b;background:#f8fafc;border-radius:12px}
+      @media(max-width:650px){.master-departure-stats{grid-template-columns:1fr 1fr}.master-departure-card{grid-template-columns:1fr 1fr;padding:10px}.master-driver-departures{padding:10px}}
       .master-customer-balances{display:none;background:#fff;border:1px solid #dce8f1;border-radius:16px;padding:16px;box-shadow:0 6px 20px rgba(30,49,67,.05)}
       .master-balance-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
       .master-balance-stat{border:1px solid #e2eaf2;border-radius:13px;padding:14px;background:linear-gradient(135deg,#fff,#f7fafc)}
@@ -2142,6 +2215,7 @@
           <button class="master-nav-btn" type="button" data-master-view-tab="orders">🧾 الطلبات والفواتير</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="transfers">🏦 تحويلات سابقة</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="balances">💰 أرصدة العملاء</button>
+          <button class="master-nav-btn" type="button" data-master-view-tab="departures">🚗 تحرك المندوبين</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="reports">📊 التقارير والإحصائيات</button>
         </nav>
 
@@ -2177,6 +2251,19 @@
               <button class="master-btn secondary" type="button" id="master-balance-refresh">↻ تحديث الأرصدة</button>
             </div>
             <div class="master-balance-table-wrap"><table class="master-balance-table"><thead><tr><th>#</th><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>الإمارة</th><th>المنطقة</th><th>المبلغ المضاف</th><th>المبلغ المدفوع</th><th>الرصيد الحالي</th><th>ملاحظات</th></tr></thead><tbody id="master-balance-body"><tr><td colspan="10" class="master-balance-empty">اضغط تحديث الأرصدة لعرض البيانات</td></tr></tbody></table></div>
+          </section>
+
+          <section class="master-driver-departures" id="master-driver-departures">
+            <div class="master-departure-toolbar">
+              <div><h2 style="margin:0 0 4px;font-size:18px">🚗 تحرك المندوبين لتسليم الطلبات</h2><div style="color:#64748b;font-size:12px">تظهر هنا الفواتير التي أبلغ المندوب عن تحركه لتسليمها.</div></div>
+              <button class="master-btn secondary" id="master-departures-refresh" type="button">↻ تحديث التحركات</button>
+            </div>
+            <div class="master-departure-stats">
+              <div class="master-departure-stat"><span>إجمالي التحركات</span><strong id="master-departure-count">٠</strong></div>
+              <div class="master-departure-stat"><span>تحركات اليوم</span><strong id="master-departure-today">٠</strong></div>
+              <div class="master-departure-stat"><span>آخر تحرك</span><strong id="master-departure-last">—</strong></div>
+            </div>
+            <div class="master-departure-list" id="master-departure-list"><div class="master-departure-empty">جارٍ تحميل التحركات…</div></div>
           </section>
 
           <section class="master-filters">
@@ -2272,6 +2359,7 @@
     `;
 
     $('master-refresh')?.addEventListener('click', loadMasterOrders);
+    $('master-departures-refresh')?.addEventListener('click', loadMasterDepartures);
     $('master-balance-refresh')?.addEventListener('click', loadMasterCustomerBalances);
     $('master-balance-search')?.addEventListener('input', renderMasterCustomerBalances);
     $('master-logout')?.addEventListener('click', () => masterLogout());
@@ -2302,10 +2390,15 @@
     });
 
     loadMasterOrders();
+    loadMasterDepartures();
+    if (state.masterDeparturePoll) clearInterval(state.masterDeparturePoll);
+    state.masterDeparturePoll = setInterval(() => {
+      if (state.masterSession?.access_token) loadMasterDepartures({ quiet: true });
+    }, 30000);
   }
 
   function setMasterView(view) {
-    const allowed = new Set(['home', 'orders', 'transfers', 'reports', 'balances']);
+    const allowed = new Set(['home', 'orders', 'transfers', 'reports', 'balances', 'departures']);
     const nextView = allowed.has(view) ? view : 'home';
     const page = $('master-page');
     if (!page) return;
@@ -2320,7 +2413,46 @@
     if (nextView === 'transfers') renderMasterOldPendingTransfers();
     if (nextView === 'reports') renderMasterStats();
     if (nextView === 'balances') loadMasterCustomerBalances();
+    if (nextView === 'departures') loadMasterDepartures();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  let masterDriverDepartures = [];
+  let masterDepartureInitialLoadDone = false;
+  const masterDepartureSeenIds = new Set();
+
+  async function loadMasterDepartures(options = {}) {
+    const list = $('master-departure-list');
+    if (!list) return;
+    if (!options.quiet) list.innerHTML = '<div class="master-departure-empty">جارٍ تحميل التحركات…</div>';
+    try {
+      const data = await masterFetch('/api/master/driver-departures');
+      masterDriverDepartures = Array.isArray(data) ? data : (Array.isArray(data?.departures) ? data.departures : []);
+      const newest = masterDriverDepartures.filter(row => row && row.id != null && !masterDepartureSeenIds.has(String(row.id)));
+      const newDepartureCount = masterDepartureInitialLoadDone ? newest.length : 0;
+      masterDriverDepartures.forEach(row => { if (row && row.id != null) masterDepartureSeenIds.add(String(row.id)); });
+      masterDepartureInitialLoadDone = true;
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      const todayCount = masterDriverDepartures.filter(row => String(row.departed_at || '').slice(0,10) === todayKey).length;
+      if ($('master-departure-count')) $('master-departure-count').textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
+      if ($('master-departure-today')) $('master-departure-today').textContent = todayCount.toLocaleString('ar-EG');
+      if ($('master-departure-last')) $('master-departure-last').textContent = masterDriverDepartures[0]?.departed_at ? new Date(masterDriverDepartures[0].departed_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) : '—';
+      if (!masterDriverDepartures.length) {
+        list.innerHTML = '<div class="master-departure-empty">لا توجد تحركات مسجلة حتى الآن.</div>';
+        return;
+      }
+      list.innerHTML = masterDriverDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
+      if (newDepartureCount > 0) {
+        const notice = document.createElement('div');
+        notice.className = 'master-departure-empty';
+        notice.style.cssText = 'background:#ecfdf3;border:1px solid #abefc6;color:#067647;font-weight:900;text-align:right;margin-bottom:10px;';
+        notice.textContent = `🔔 تحرك جديد للمندوب: ${newDepartureCount.toLocaleString('ar-EG')} فاتورة. راجع التفاصيل بالأسفل.`;
+        list.prepend(notice);
+      }
+    } catch (error) {
+      if (!options.quiet && error.message !== 'expired') list.innerHTML = `<div class="master-departure-empty">${masterEscape(error.message || 'تعذر تحميل التحركات')}</div>`;
+    }
   }
 
   let masterCustomerBalances = [];
