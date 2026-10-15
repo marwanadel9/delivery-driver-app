@@ -2463,8 +2463,8 @@
 
   // تحويلات تاريخية مضافة للعرض في صفحة الماستر فقط؛ لا تنشئ فواتير ولا تعدّل قاعدة البيانات.
   const MASTER_HISTORICAL_TRANSFERS = [
-    { customer_name: 'أمنه', total: 378, transfer_date: '10/08/2026' },
-    { customer_name: 'خالد الفلاسي', total: 160, transfer_date: '27/09/2026' }
+    { id: 'historical-amna-20260810', customer_name: 'أمنه', total: 378, transfer_date: '10/08/2026', received: false },
+    { id: 'historical-khaled-20260927', customer_name: 'خالد الفلاسي', total: 160, transfer_date: '27/09/2026', received: false }
   ];
 
   function renderMasterOldPendingTransfers() {
@@ -2479,14 +2479,17 @@
     const yesterday = masterDateInput(yesterdayDate);
     const yesterdayOrders = orders.filter((order) => masterDateInput(order.created_at) === yesterday);
     const olderOrders = orders.filter((order) => masterDateInput(order.created_at) < yesterday);
-    const totalPendingAmount = orders.reduce((sum, order) => sum + masterMoney(order.total), 0);
+    const pendingHistoricalTransfers = MASTER_HISTORICAL_TRANSFERS.filter((transfer) => !transfer.received);
+    const totalPendingAmount = orders.reduce((sum, order) => sum + masterMoney(order.total), 0) + pendingHistoricalTransfers.reduce((sum, transfer) => sum + masterMoney(transfer.total), 0);
+    const totalPendingCount = orders.length + pendingHistoricalTransfers.length;
+    const historicalOlderCount = pendingHistoricalTransfers.length;
     const moneyText = (value) => `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
 
-    if (count) count.textContent = orders.length.toLocaleString('ar-EG');
-    if ($('master-old-transfer-stat-count')) $('master-old-transfer-stat-count').textContent = orders.length.toLocaleString('ar-EG');
+    if (count) count.textContent = totalPendingCount.toLocaleString('ar-EG');
+    if ($('master-old-transfer-stat-count')) $('master-old-transfer-stat-count').textContent = totalPendingCount.toLocaleString('ar-EG');
     if ($('master-old-transfer-stat-total')) $('master-old-transfer-stat-total').textContent = moneyText(totalPendingAmount);
     if ($('master-old-transfer-stat-yesterday')) $('master-old-transfer-stat-yesterday').textContent = yesterdayOrders.length.toLocaleString('ar-EG');
-    if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = olderOrders.length.toLocaleString('ar-EG');
+    if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = (olderOrders.length + historicalOlderCount).toLocaleString('ar-EG');
 
     list.innerHTML = '';
 
@@ -2529,11 +2532,22 @@
       card.innerHTML = `
         <div class="master-old-transfer-card-top">
           <span class="master-old-transfer-customer">${masterEscape(transfer.customer_name)}</span>
-          <span class="master-transfer-state received">✓ تحويل تاريخي</span>
+          <span class="master-transfer-state ${transfer.received ? 'received' : 'waiting'}">${transfer.received ? '✓ تم الاستلام' : 'تحويل غير مؤكد'}</span>
         </div>
         <div class="master-old-transfer-meta">تاريخ التحويل: ${masterEscape(transfer.transfer_date)}</div>
         <div class="master-old-transfer-amount">${masterEscape(formatTotal(transfer.total))}</div>
+        ${transfer.received ? '<span class="master-transfer-state received">تم تأكيد الاستلام</span>' : `<button class="master-transfer-btn pending" data-historical-transfer="${masterEscape(transfer.id)}">تأكيد استلام التحويل</button>`}
       `;
+      const historicalButton = card.querySelector('[data-historical-transfer]');
+      if (historicalButton) {
+        historicalButton.addEventListener('click', () => {
+          const confirmed = window.confirm(`تأكيد استلام تحويل ${transfer.customer_name} بقيمة ${transfer.total} درهم بتاريخ ${transfer.transfer_date}؟`);
+          if (!confirmed) return;
+          transfer.received = true;
+          renderMasterOrders();
+          toast('تم تحديث حالة التحويل في العرض الحالي. يلزم ربطه بقاعدة البيانات لحفظه نهائيًا.');
+        });
+      }
       list.appendChild(card);
     });
   }
