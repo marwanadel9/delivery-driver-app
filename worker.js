@@ -708,11 +708,25 @@ export default {
           );
         }
 
+        const safeOrders = Array.isArray(orders) ? orders : [];
+        if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
+          const ids = safeOrders.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
+          if (ids.length) {
+            const departureResponse = await supabaseRequest(
+              "/rest/v1/driver_departures?order_id=in.(" + ids.join(",") + ")&select=order_id,departed_at",
+              { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
+            );
+            const departureRows = await departureResponse.json().catch(function () { return []; });
+            if (departureResponse.ok && Array.isArray(departureRows)) {
+              const departureMap = new Map(departureRows.map(function (row) { return [Number(row.order_id), row.departed_at]; }));
+              safeOrders.forEach(function (row) { row.driver_departure_at = departureMap.get(Number(row.id)) || null; });
+            }
+          }
+        }
+
         return json({
           orders:
-            Array.isArray(orders)
-              ? orders
-              : [],
+            safeOrders,
           sheet:
             sheet,
           mandoub_name:
@@ -809,6 +823,61 @@ export default {
           return json({ error: (balances && (balances.message || balances.hint || balances.error)) || "تعذر تحميل أرصدة العملاء" }, 502);
         }
         return json({ balances: Array.isArray(balances) ? balances : [] });
+      }
+
+      if (path === "/api/driver/heading-to-customer" && request.method === "POST") {
+        const auth = await requireDriver(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "إعداد إشعارات التحرك غير مكتمل: أضف SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
+        const body = await request.json().catch(function () { return {}; });
+        const orderId = Number(body.orderId);
+        if (!Number.isInteger(orderId) || orderId <= 0) return json({ error: "رقم الطلب غير صحيح" }, 400);
+
+        const orderResponse = await supabaseRequest(
+          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) + "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) + "&select=id,order_number,invoice_number,customer_name,phone,emirate,area,total,sheet_name&limit=1",
+          { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
+        );
+        const orderRows = await orderResponse.json().catch(function () { return null; });
+        if (!orderResponse.ok) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة" }, 502);
+        if (!Array.isArray(orderRows) || !orderRows.length) return json({ error: "الفاتورة غير موجودة ضمن طلبات حسابك" }, 404);
+        const order = orderRows[0];
+
+        const existingResponse = await supabaseRequest(
+          "/rest/v1/driver_departures?order_id=eq." + encodeURIComponent(orderId) + "&select=order_id,departed_at&limit=1",
+          { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
+        );
+        const existingRows = await existingResponse.json().catch(function () { return null; });
+        if (!existingResponse.ok) return json({ error: "تعذر قراءة سجل التحرك. تأكد من إنشاء جدول driver_departures من SQL المرفق." }, 502);
+        if (Array.isArray(existingRows) && existingRows.length) return json({ success: true, already_marked: true, departed_at: existingRows[0].departed_at });
+
+        const departedAt = new Date().toISOString();
+        const insertResponse = await supabaseRequest("/rest/v1/driver_departures", {
+          method: "POST",
+          headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY, "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify({ order_id: order.id, invoice_number: String(order.order_number || order.invoice_number || order.id), customer_name: String(order.customer_name || ""), phone: String(order.phone || ""), emirate: String(order.emirate || ""), area: String(order.area || ""), total: Number(order.total) || 0, sheet_name: String(auth.driver.sheet_name || ""), driver_name: String(auth.driver.mandoub_name || ""), driver_user_id: auth.user.id, departed_at: departedAt })
+        });
+        const insertData = await insertResponse.json().catch(function () { return null; });
+        if (!insertResponse.ok) {
+          if (insertResponse.status === 409) {
+            const retryResponse = await supabaseRequest("/rest/v1/driver_departures?order_id=eq." + encodeURIComponent(orderId) + "&select=departed_at&limit=1", { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } });
+            const retryRows = await retryResponse.json().catch(function () { return []; });
+            if (Array.isArray(retryRows) && retryRows.length) return json({ success: true, already_marked: true, departed_at: retryRows[0].departed_at });
+          }
+          return json({ error: (insertData && (insertData.message || insertData.hint || insertData.error)) || "تعذر تسجيل التحرك" }, 502);
+        }
+        return json({ success: true, already_marked: false, departed_at: Array.isArray(insertData) && insertData[0] ? insertData[0].departed_at : departedAt });
+      }
+
+      if (path === "/api/master/driver-departures" && request.method === "GET") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "إعداد إشعارات التحرك غير مكتمل" }, 500);
+        const response = await supabaseRequest("/rest/v1/driver_departures?select=*&order=departed_at.desc&limit=100", {
+          headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY }
+        });
+        const rows = await response.json().catch(function () { return null; });
+        if (!response.ok) return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر تحميل إشعارات التحرك" }, 502);
+        return json({ departures: Array.isArray(rows) ? rows : [] });
       }
 
       if (
