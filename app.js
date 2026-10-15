@@ -1703,6 +1703,7 @@
   const MASTER_USERNAME = 'zezo';
 
   state.masterOrders = [];
+  state.masterBalances = [];
   state.role = '';
 
   function normalizeMasterSession(value) {
@@ -2008,6 +2009,24 @@
       .master-edit-form textarea{min-height:82px;resize:vertical}
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
+      .customer-balances-panel{background:#fff;border:1px solid #dce8e3;border-radius:18px;padding:16px;margin:0 0 20px;box-shadow:0 7px 22px rgba(30,49,67,.045)}
+      .customer-balances-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+      .customer-balances-title{font-size:17px;font-weight:900;color:#174b39}
+      .customer-balances-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+      .customer-balances-stat{border:1px solid #e0eee7;background:#f6fbf8;border-radius:12px;padding:12px;min-width:0}
+      .customer-balances-stat span{display:block;font-size:11px;color:#61766b;font-weight:800;margin-bottom:6px}
+      .customer-balances-stat strong{display:block;font-size:18px;font-weight:900;color:#145c40;overflow-wrap:anywhere}
+      .customer-balances-stat.balance strong{color:#b42318}
+      .customer-balances-search{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:11px 12px;font:inherit;margin-bottom:10px}
+      .customer-balances-table-wrap{overflow:auto;border:1px solid #e8edef;border-radius:12px}
+      .customer-balances-table{width:100%;border-collapse:collapse;min-width:850px}
+      .customer-balances-table th,.customer-balances-table td{padding:10px;text-align:right;border-bottom:1px solid #edf1f2;font-size:12px;white-space:nowrap}
+      .customer-balances-table th{background:#f7faf8;color:#60736a;font-size:11px}
+      .customer-balances-table tr:last-child td{border-bottom:0}
+      .customer-balances-amount{font-weight:900;color:#145c40}
+      .customer-balances-amount.negative{color:#b42318}
+      .customer-balances-note{font-size:11px;color:#75827c;margin-top:9px;line-height:1.7}
+      @media(max-width:650px){.customer-balances-panel{padding:11px;border-radius:13px}.customer-balances-title{font-size:14px}.customer-balances-summary{grid-template-columns:1fr;gap:7px}.customer-balances-stat{padding:9px}.customer-balances-stat strong{font-size:16px}.customer-balances-table{min-width:800px}}
       @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:270px minmax(0,1fr)}}
       @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr);gap:10px}.master-old-transfer-panel{order:0;padding:10px}.master-table-wrap{order:1}}
       @media(max-width:650px){.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
@@ -2062,6 +2081,26 @@
             <div class="master-stat pending-bank"><div class="master-stat-label">المتبقي من التحويلات</div><div class="master-stat-value" id="master-bank-pending">0 درهم</div><div class="master-stat-hint">تحويلات لم يتم تأكيد استلامها</div></div>
             <div class="master-stat collected"><div class="master-stat-label">إجمالي المبالغ المسجلة/المستلمة</div><div class="master-stat-value" id="master-total-received">0 درهم</div><div class="master-stat-hint">الكاش المسجل + التحويلات المؤكدة</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
+          </section>
+
+          <section class="customer-balances-panel" aria-label="أرصدة العملاء">
+            <div class="customer-balances-head">
+              <div class="customer-balances-title">💳 أرصدة العملاء</div>
+              <button class="master-btn secondary" id="customer-balances-refresh" type="button">↻ تحديث الأرصدة</button>
+            </div>
+            <div class="customer-balances-summary">
+              <div class="customer-balances-stat"><span>عدد العملاء</span><strong id="customer-balances-count">—</strong></div>
+              <div class="customer-balances-stat"><span>إجمالي المبالغ المضافة</span><strong id="customer-balances-added">—</strong></div>
+              <div class="customer-balances-stat balance"><span>إجمالي الرصيد المتبقي</span><strong id="customer-balances-total">—</strong></div>
+            </div>
+            <input class="customer-balances-search" id="customer-balances-search" type="search" placeholder="ابحث باسم العميل أو الكود أو رقم الهاتف" aria-label="بحث أرصدة العملاء">
+            <div class="customer-balances-table-wrap">
+              <table class="customer-balances-table">
+                <thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الهاتف</th><th>الإمارة</th><th>المنطقة</th><th>المبلغ المضاف</th><th>المبلغ المدفوع</th><th>الرصيد المتبقي</th><th>ملاحظات</th><th>مرجع الطلب</th></tr></thead>
+                <tbody id="customer-balances-body"><tr><td colspan="10">جارٍ تحميل أرصدة العملاء…</td></tr></tbody>
+              </table>
+            </div>
+            <div class="customer-balances-note">الأرصدة تُقرأ من جدول customer_balances في Supabase، وتُحدّث من ملف Excel عند تشغيل مزامنة أرصدة العملاء.</div>
           </section>
 
           <section class="master-filters">
@@ -2156,7 +2195,9 @@
       </div>
     `;
 
-    $('master-refresh')?.addEventListener('click', loadMasterOrders);
+    $('master-refresh')?.addEventListener('click', () => { loadMasterOrders(); loadCustomerBalances(); });
+    $('customer-balances-refresh')?.addEventListener('click', loadCustomerBalances);
+    $('customer-balances-search')?.addEventListener('input', renderCustomerBalances);
     $('master-logout')?.addEventListener('click', () => masterLogout());
     $('master-modal-close')?.addEventListener('click', closeMasterModal);
 
@@ -2179,6 +2220,65 @@
     });
 
     loadMasterOrders();
+    loadCustomerBalances();
+  }
+
+  function formatCustomerBalanceMoney(value) {
+    const number = Number(value ?? 0);
+    return `${(Number.isFinite(number) ? number : 0).toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+  }
+
+  async function loadCustomerBalances() {
+    const body = $('customer-balances-body');
+    const button = $('customer-balances-refresh');
+    if (body) body.innerHTML = '<tr><td colspan="10">جارٍ تحميل أرصدة العملاء…</td></tr>';
+    if (button) { button.disabled = true; button.textContent = 'جارٍ التحديث…'; }
+    try {
+      const data = await masterFetch('/api/master/customer-balances');
+      state.masterBalances = Array.isArray(data) ? data : (Array.isArray(data?.balances) ? data.balances : []);
+      renderCustomerBalances();
+    } catch (error) {
+      if (body && error.message !== 'expired') body.innerHTML = `<tr><td colspan="10">${masterEscape(error.message || 'تعذر تحميل أرصدة العملاء')}</td></tr>`;
+    } finally {
+      if (button) { button.disabled = false; button.textContent = '↻ تحديث الأرصدة'; }
+    }
+  }
+
+  function renderCustomerBalances() {
+    const rows = Array.isArray(state.masterBalances) ? state.masterBalances : [];
+    const totalAdded = rows.reduce((sum, row) => sum + (Number(row.amount_added) || 0), 0);
+    const totalBalance = rows.reduce((sum, row) => sum + (Number(row.current_balance) || 0), 0);
+    const count = $('customer-balances-count');
+    const added = $('customer-balances-added');
+    const total = $('customer-balances-total');
+    if (count) count.textContent = rows.length.toLocaleString('ar-EG');
+    if (added) added.textContent = formatCustomerBalanceMoney(totalAdded);
+    if (total) total.textContent = formatCustomerBalanceMoney(totalBalance);
+
+    const query = String($('customer-balances-search')?.value || '').trim().toLowerCase();
+    const filtered = rows.filter((row) => [row.customer_code, row.customer_name, row.phone, row.emirate, row.area, row.order_ref, row.notes]
+      .some((value) => String(value ?? '').toLowerCase().includes(query)));
+    const body = $('customer-balances-body');
+    if (!body) return;
+    if (!filtered.length) {
+      body.innerHTML = `<tr><td colspan="10">${rows.length ? 'لا توجد نتائج مطابقة للبحث' : 'لا توجد أرصدة عملاء مسجلة بعد'}</td></tr>`;
+      return;
+    }
+    body.innerHTML = filtered.map((row) => {
+      const balance = Number(row.current_balance) || 0;
+      return `<tr>
+        <td>${masterEscape(row.customer_code || '—')}</td>
+        <td>${masterEscape(row.customer_name || '—')}</td>
+        <td>${masterEscape(row.phone || '—')}</td>
+        <td>${masterEscape(row.emirate || '—')}</td>
+        <td>${masterEscape(row.area || '—')}</td>
+        <td class="customer-balances-amount">${masterEscape(formatCustomerBalanceMoney(row.amount_added))}</td>
+        <td>${masterEscape(formatCustomerBalanceMoney(row.amount_paid))}</td>
+        <td class="customer-balances-amount${balance < 0 ? ' negative' : ''}">${masterEscape(formatCustomerBalanceMoney(balance))}</td>
+        <td>${masterEscape(row.notes || '—')}</td>
+        <td>${masterEscape(row.order_ref || '—')}</td>
+      </tr>`;
+    }).join('');
   }
 
   async function loadMasterOrders() {
