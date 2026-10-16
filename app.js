@@ -1634,27 +1634,53 @@
         }
       }
 
-      // Optional villa gate photo: show only when the API returns a valid URL.
-      const gatePhotoUrl = safeUrl(
-        firstValue(order, ['gate_photo_url', 'gatePhotoUrl'])
-      );
-      const oldGatePhotoButton = node.querySelector('.gate-photo-btn');
-      if (oldGatePhotoButton) oldGatePhotoButton.remove();
+      // Villa gate photos: support multiple URLs while keeping compatibility with the old single URL.
+      const rawGatePhotos = firstValue(order, [
+        'gate_photo_urls', 'gatePhotoUrls', 'gate_photos', 'gatePhotos',
+        'gate_photo_url', 'gatePhotoUrl'
+      ]);
+      let gatePhotoValues = [];
+      if (Array.isArray(rawGatePhotos)) {
+        gatePhotoValues = rawGatePhotos;
+      } else if (typeof rawGatePhotos === 'string' && rawGatePhotos.trim()) {
+        const rawText = rawGatePhotos.trim();
+        try {
+          const parsedPhotos = JSON.parse(rawText);
+          gatePhotoValues = Array.isArray(parsedPhotos) ? parsedPhotos : [rawText];
+        } catch {
+          gatePhotoValues = rawText.split(/[\n,;]+/).map((value) => value.trim()).filter(Boolean);
+        }
+      }
+      const gatePhotoUrls = [...new Set(gatePhotoValues.map((item) => {
+        if (item && typeof item === 'object') {
+          return safeUrl(item.url || item.publicUrl || item.gate_photo_url || item.gatePhotoUrl || '');
+        }
+        return safeUrl(item);
+      }).filter(Boolean))];
+      node.querySelectorAll('.gate-photo-btn').forEach((button) => button.remove());
 
-      if (gatePhotoUrl) {
-        const gatePhotoButton = document.createElement('a');
-        gatePhotoButton.className = 'gate-photo-btn';
-        gatePhotoButton.href = gatePhotoUrl;
-        gatePhotoButton.target = '_blank';
-        gatePhotoButton.rel = 'noopener noreferrer';
-        gatePhotoButton.textContent = '📷 عرض صورة بوابة الفيلا';
-        gatePhotoButton.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin:10px 0;padding:11px 14px;border-radius:10px;background:#e8f2ff;color:#1455b8;border:1px solid #b9d4ff;text-align:center;font-weight:800;text-decoration:none;';
+      if (gatePhotoUrls.length) {
+        const gatePhotoBox = document.createElement('div');
+        gatePhotoBox.className = 'gate-photo-box';
+        gatePhotoBox.style.cssText = 'display:flex;flex-direction:column;gap:7px;width:100%;box-sizing:border-box;margin:10px 0;';
+        gatePhotoUrls.forEach((gatePhotoUrl, index) => {
+          const gatePhotoButton = document.createElement('a');
+          gatePhotoButton.className = 'gate-photo-btn';
+          gatePhotoButton.href = gatePhotoUrl;
+          gatePhotoButton.target = '_blank';
+          gatePhotoButton.rel = 'noopener noreferrer';
+          gatePhotoButton.textContent = gatePhotoUrls.length > 1
+            ? `📷 عرض صورة بوابة الفيلا (${index + 1} من ${gatePhotoUrls.length})`
+            : '📷 عرض صورة بوابة الفيلا';
+          gatePhotoButton.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin:0;padding:11px 14px;border-radius:10px;background:#e8f2ff;color:#1455b8;border:1px solid #b9d4ff;text-align:center;font-weight:800;text-decoration:none;';
+          gatePhotoBox.appendChild(gatePhotoButton);
+        });
 
         const insertBefore = node.querySelector('.payment-current, .payment-buttons, .payment-options, .btn-deliver');
         if (insertBefore && insertBefore.parentNode) {
-          insertBefore.parentNode.insertBefore(gatePhotoButton, insertBefore);
+          insertBefore.parentNode.insertBefore(gatePhotoBox, insertBefore);
         } else {
-          node.appendChild(gatePhotoButton);
+          node.appendChild(gatePhotoBox);
         }
       }
 
