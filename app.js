@@ -669,15 +669,15 @@
 
       if (weight && qty) {
         result.push(
-          `⚖️ ${weight} جرام — 📦 ${qty}`
+          `🐔 ${weight} جرام — ${qty}`
         );
       } else if (weight) {
         result.push(
-          `⚖️ ${weight} جرام`
+          `🐔 ${weight} جرام`
         );
       } else {
         result.push(
-          `📦 ${qty}`
+          `${qty}`
         );
       }
     }
@@ -790,7 +790,7 @@
 
       if (name && qty) {
         result.push(
-          `🍗 ${name} — 📦 ${qty}`
+          `${plateIcon(name)} ${name} — ${qty}`
         );
       } else {
         result.push(
@@ -802,6 +802,56 @@
     return result.length
       ? result.join('\n')
       : '—';
+  }
+
+  function plateIcon(name) {
+    const value = String(name || '');
+    if (/صدر|صدور/.test(value)) return '🍗';
+    if (/دبوس|أرجل|ارجل|أفخاذ|افخاذ/.test(value)) return '🍗';
+    return '🍗';
+  }
+
+  function splitDisplayValues(value) {
+    return String(value ?? '')
+      .split(/[\n\r,،;؛]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function invoiceTable(title, icon, names, weights, quantities, isChicken) {
+    const nameList = isChicken ? extractNumbers(weights) : extractPlateNames(names);
+    const qtyList = isChicken ? extractNumbers(quantities) : extractPlateQuantities(quantities);
+    const count = Math.max(nameList.length, qtyList.length);
+    if (!count) return '';
+    const rows = [];
+    for (let i = 0; i < count; i += 1) {
+      const name = nameList[i] || '';
+      const qty = qtyList[i] || '';
+      if (!name && !qty) continue;
+      rows.push(`<tr><td>${icon} ${isChicken ? 'الدجاج الكامل' : masterEscape(name)}</td><td>${isChicken && name ? `${masterEscape(name)} جرام` : '—'}</td><td>${masterEscape(qty || '—')}</td></tr>`);
+    }
+    if (!rows.length) return '';
+    return `<section class="invoice-items-panel ${isChicken ? 'whole-chicken-panel' : 'cut-pieces-panel'}"><h4>${icon} ${title}</h4><table class="invoice-items-table"><thead><tr><th>الصنف</th><th>الوزن</th><th>الكمية</th></tr></thead><tbody>${rows.join('')}</tbody></table></section>`;
+  }
+
+  function renderInvoiceItems(node, chickenWeights, chickenQtys, plateNames, plateQtys) {
+    const oldFields = ['chicken_weights', 'chicken_qtys', 'plate_names', 'plate_qtys'];
+    oldFields.forEach((field) => hideFieldRow(node, field, false));
+    const chickenHas = hasActualData(chickenWeights) || hasActualData(chickenQtys);
+    const platesHas = hasActualData(plateNames) || hasActualData(plateQtys);
+    const chickenHtml = chickenHas ? invoiceTable('الكراتين — الدجاج الكامل', '🐔', '', chickenWeights, chickenQtys, true) : '';
+    const platesHtml = platesHas ? invoiceTable('المقطعات', '🍗', plateNames, '', plateQtys, false) : '';
+    if (!chickenHtml && !platesHtml) return;
+    let holder = node.querySelector('.invoice-items-layout');
+    if (!holder) {
+      holder = document.createElement('div');
+      holder.className = 'invoice-items-layout';
+      const details = node.querySelector('[data-f="order_details"]');
+      const anchor = details?.closest('.info-item, .order-section, .detail-row, .field-row, .master-section, .invoice-section') || details;
+      if (anchor?.parentNode) anchor.parentNode.insertBefore(holder, anchor);
+      else node.appendChild(holder);
+    }
+    holder.innerHTML = `${platesHtml}${chickenHtml}`;
   }
 
   function render() {
@@ -1006,6 +1056,8 @@
         'plate_qtys',
         ''
       );
+
+      renderInvoiceItems(node, chickenWeights, chickenQtys, plateNames, plateQtys);
 
       [
         'chicken_weights',
@@ -1725,6 +1777,19 @@
       .master-section{margin-top:14px;border:1px solid #e8edef;border-radius:13px;padding:13px}
       .master-section-title{font-weight:800;margin-bottom:8px}
       .master-section-content{white-space:pre-wrap;line-height:1.7;color:#39484e}
+      .invoice-items-layout{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;direction:rtl;margin:10px 0;width:100%;box-sizing:border-box}
+      .invoice-items-panel{min-width:0;border:1px solid #dce7df;border-radius:12px;overflow:hidden;background:#fff}
+      .invoice-items-panel h4{margin:0;padding:9px 10px;background:#edf7ef;color:#174c2c;font-size:13px;font-weight:800}
+      .invoice-items-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}
+      .invoice-items-table th{background:#f6f8f6;color:#4b5b50;padding:7px 4px;border-bottom:1px solid #dce7df;text-align:center}
+      .invoice-items-table td{padding:8px 4px;border-bottom:1px solid #edf1ed;text-align:center;overflow-wrap:anywhere}
+      .invoice-items-table tbody tr:last-child td{border-bottom:0}
+      .invoice-items-table .items-icon{width:28px;font-size:18px}
+      .invoice-items-table th:first-child{width:40%}
+      .master-invoice-items{margin-top:14px}
+      .master-invoice-items .invoice-items-panel{border-color:#dce7df}
+      .master-invoice-items .invoice-items-table{font-size:13px}
+      @media(max-width:480px){.invoice-items-layout{gap:6px}.invoice-items-panel h4{font-size:11px;padding:8px 5px}.invoice-items-table{font-size:10px}.invoice-items-table th,.invoice-items-table td{padding:6px 2px}.invoice-items-table .items-icon{font-size:15px;width:22px}}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
       @media(max-width:1050px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
       @media(max-width:650px){.master-top{align-items:flex-start}.master-wrap{padding:12px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-filters{grid-template-columns:1fr 1fr}.master-detail-grid{grid-template-columns:1fr}.master-title{font-size:17px}.master-btn{padding:9px 11px}}
@@ -2055,16 +2120,10 @@
         <div class="master-detail"><small>منسق الموعد</small><strong>${masterEscape(order.appointment_coordinator || '—')}</strong></div>
       </div>
 
-      ${hasActualData(chickenWeights) || hasActualData(chickenQtys) ? `
-      <div class="master-section">
-        <div class="master-section-title">🍗 جدول الكراتين — الدجاج الكامل</div>
-        <div class="master-section-content">${masterEscape([hasActualData(chickenWeights) ? `الأوزان: ${chickenWeights}` : '', hasActualData(chickenQtys) ? `الكميات: ${chickenQtys}` : ''].filter(Boolean).join('\n'))}</div>
-      </div>` : ''}
-
-      ${hasActualData(plateNames) || hasActualData(plateQtys) ? `
-      <div class="master-section">
-        <div class="master-section-title">🍽️ جدول المقطعات</div>
-        <div class="master-section-content">${masterEscape([hasActualData(plateNames) ? `الأصناف: ${plateNames}` : '', hasActualData(plateQtys) ? `الكميات: ${plateQtys}` : ''].filter(Boolean).join('\n'))}</div>
+      ${(hasActualData(chickenWeights) || hasActualData(chickenQtys) || hasActualData(plateNames) || hasActualData(plateQtys)) ? `
+      <div class="invoice-items-layout master-invoice-items">
+        ${hasActualData(plateNames) || hasActualData(plateQtys) ? invoiceTable('المقطعات', '🍗', plateNames, '', plateQtys, false) : ''}
+        ${hasActualData(chickenWeights) || hasActualData(chickenQtys) ? invoiceTable('الكراتين — الدجاج الكامل', '🐔', '', chickenWeights, chickenQtys, true) : ''}
       </div>` : ''}
 
       <div class="master-section">
