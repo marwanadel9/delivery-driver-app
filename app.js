@@ -1292,11 +1292,21 @@
       };
       const driverProductPhotoFor = (productName, isWholeChicken) => {
         if (isWholeChicken) return driverProductPhotoData.whole;
-        const name = String(productName || '').replace(/[\sـ_-]/g, '').toLowerCase();
+
+        // Normalize Arabic spelling so the correct product photo appears even
+        // when the invoice uses أ/إ/آ, hamza variants, or spaces in the name.
+        const name = String(productName || '')
+          .toLowerCase()
+          .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+          .replace(/[أإآٱ]/g, 'ا')
+          .replace(/ؤ/g, 'و')
+          .replace(/ئ/g, 'ي')
+          .replace(/[\sـ_-]/g, '');
+
         if (/صدر|صدور|فيليه|فيلية/.test(name)) return driverProductPhotoData.breast;
         if (/دبوس|دبابيس|ساق|سيقان/.test(name)) return driverProductPhotoData.drumsticks;
-        if (/ورك|وراك|فخذ|أفخاذ|افخاذ/.test(name)) return driverProductPhotoData.thighs;
-        if (/جناح|أجنحة|اجنحة|اجنحه/.test(name)) return driverProductPhotoData.wings;
+        if (/افخاذ|فخذ|فخاد|ورك|وراك/.test(name)) return driverProductPhotoData.thighs;
+        if (/جناح|اجنحة|اجنحه/.test(name)) return driverProductPhotoData.wings;
         if (/كبد|كبدة|كبدات/.test(name)) return driverProductPhotoData.liver;
         if (/قوانص|قانصة|قانصه/.test(name)) return driverProductPhotoData.gizzards;
         if (/قلب|قلوب/.test(name)) return driverProductPhotoData.hearts;
@@ -1343,7 +1353,7 @@
             photo.src = photoUrl;
             photo.alt = firstIsWeight ? 'الدجاج الكامل' : productName;
             photo.loading = 'lazy';
-            photo.style.cssText = 'width:34px;height:34px;max-width:34px;object-fit:cover;border-radius:7px;border:1px solid #dbe4ee;background:#fff;flex:0 0 34px;';
+            photo.style.cssText = 'display:block!important;visibility:visible!important;opacity:1!important;width:38px!important;height:38px!important;min-width:38px!important;max-width:38px!important;object-fit:contain!important;border-radius:7px;border:1px solid #dbe4ee;background:#fff;flex:0 0 38px;';
             const label = document.createElement('span');
             label.textContent = productName;
             label.style.cssText = 'min-width:0;overflow-wrap:anywhere;';
