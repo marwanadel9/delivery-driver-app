@@ -933,11 +933,27 @@
       .order-card .invoice-expand-toggle { display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;margin:8px 0;padding:8px 10px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer; }
       .order-card.is-compact .invoice-expand-toggle { margin:6px 0 0; }
       .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
+      html.driver-invoice-open, body.driver-invoice-open { overflow:hidden!important; overscroll-behavior:none!important; }
+      .order-card.is-fullscreen-invoice { position:fixed!important; inset:0!important; z-index:2147483000!important; width:100vw!important; max-width:none!important; height:100vh!important; height:100dvh!important; max-height:none!important; margin:0!important; padding:14px 12px calc(18px + env(safe-area-inset-bottom))!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:0!important; border-radius:0!important; background:#fff!important; box-shadow:none!important; display:flex!important; flex-direction:column!important; gap:10px!important; cursor:default!important; }
+      .order-card.is-fullscreen-invoice .invoice-expand-toggle { flex:0 0 auto; }
+      .invoice-fullscreen-head { position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;box-sizing:border-box;padding:8px 0 10px;background:#fff;border-bottom:1px solid #dcfce7; }
+      .invoice-fullscreen-title { color:#166534;font-size:15px;font-weight:900; }
+      .invoice-fullscreen-close { border:0;border-radius:10px;background:#dcfce7;color:#166534;min-width:42px;min-height:40px;padding:8px 12px;font:inherit;font-size:14px;font-weight:900;cursor:pointer; }
+      .order-card.is-fullscreen-invoice .btn-deliver { position:sticky!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;z-index:15!important;min-height:52px!important;box-shadow:0 -5px 18px rgba(255,255,255,.95)!important; }
+      .order-card.is-fullscreen-invoice .invoice-expand-toggle { display:none!important; }
+      @media(min-width:700px){.order-card.is-fullscreen-invoice{left:50%!important;right:auto!important;transform:translateX(-50%);width:min(680px,100vw)!important;padding:20px!important;box-shadow:0 0 0 100vmax rgba(15,23,42,.62)!important;border-radius:18px!important;}}
     `;
     document.head.appendChild(style);
   }
 
   function render() {
+    // تحرير قفل الشاشة إذا أعاد زر التسليم بناء قائمة الفواتير.
+    if (document.body.classList.contains('driver-invoice-open')) {
+      document.body.classList.remove('driver-invoice-open');
+      document.documentElement.classList.remove('driver-invoice-open');
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+    }
     const list =
       $('orders-list');
 
@@ -993,10 +1009,54 @@
       expandButton.className = 'invoice-expand-toggle';
       expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
       expandButton.setAttribute('aria-expanded', 'false');
+      let savedScrollY = 0;
+      let previousBodyOverflow = '';
+      let previousHtmlOverflow = '';
+      let fullscreenHead = null;
+      const closeInvoiceFullscreen = () => {
+        node.classList.remove('is-fullscreen-invoice');
+        node.classList.add('is-compact');
+        document.body.classList.remove('driver-invoice-open');
+        document.documentElement.classList.remove('driver-invoice-open');
+        document.body.style.overflow = previousBodyOverflow;
+        document.documentElement.style.overflow = previousHtmlOverflow;
+        if (fullscreenHead) fullscreenHead.remove();
+        fullscreenHead = null;
+        expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
+        expandButton.setAttribute('aria-expanded', 'false');
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' });
+      };
       const toggleInvoiceDetails = () => {
-        const compact = node.classList.toggle('is-compact');
-        expandButton.textContent = compact ? 'عرض تفاصيل الفاتورة ▼' : 'إخفاء التفاصيل ▲';
-        expandButton.setAttribute('aria-expanded', String(!compact));
+        if (node.classList.contains('is-fullscreen-invoice')) {
+          closeInvoiceFullscreen();
+          return;
+        }
+        savedScrollY = window.scrollY || window.pageYOffset || 0;
+        previousBodyOverflow = document.body.style.overflow || '';
+        previousHtmlOverflow = document.documentElement.style.overflow || '';
+        document.body.classList.add('driver-invoice-open');
+        document.documentElement.classList.add('driver-invoice-open');
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+        node.classList.remove('is-compact');
+        node.classList.add('is-fullscreen-invoice');
+        fullscreenHead = document.createElement('div');
+        fullscreenHead.className = 'invoice-fullscreen-head';
+        const heading = document.createElement('strong');
+        heading.className = 'invoice-fullscreen-title';
+        heading.textContent = `تفاصيل الفاتورة ${firstValue(order, ['order_number', 'orderNumber', 'invoice_number', 'invoice_no']) || ''}`.trim();
+        const closeButton = document.createElement('button');
+        closeButton.type = 'button';
+        closeButton.className = 'invoice-fullscreen-close';
+        closeButton.textContent = '✕ إغلاق الفاتورة';
+        closeButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          closeInvoiceFullscreen();
+        });
+        fullscreenHead.append(heading, closeButton);
+        node.insertBefore(fullscreenHead, node.firstChild);
+        expandButton.textContent = 'الفاتورة مفتوحة';
+        expandButton.setAttribute('aria-expanded', 'true');
       };
       expandButton.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -1593,6 +1653,7 @@
 
       node.addEventListener('click', (event) => {
         if (event.target.closest('button, a, input, select, textarea, label')) return;
+        if (node.classList.contains('is-fullscreen-invoice')) return;
         toggleInvoiceDetails();
       });
 
