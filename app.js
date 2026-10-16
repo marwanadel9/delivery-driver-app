@@ -2417,6 +2417,9 @@
       button.addEventListener('click', () => setMasterView(button.dataset.masterGo));
     });
     $('master-modal-close')?.addEventListener('click', closeMasterModal);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && $('master-modal')?.classList.contains('open')) closeMasterModal();
+    });
 
     $('master-modal')?.addEventListener('click', (event) => {
       if (event.target.id === 'master-modal') {
@@ -2489,11 +2492,18 @@
       if ($('master-departure-count')) $('master-departure-count').textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
       if ($('master-departure-today')) $('master-departure-today').textContent = todayCount.toLocaleString('ar-EG');
       if ($('master-departure-last')) $('master-departure-last').textContent = masterDriverDepartures[0]?.departed_at ? new Date(masterDriverDepartures[0].departed_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) : '—';
-      if (!masterDriverDepartures.length) {
-        list.innerHTML = '<div class="master-departure-empty">لا توجد تحركات مسجلة حتى الآن.</div>';
+      // يعرض الماستر تحركات اليوم فقط؛ السجلات القديمة تبقى محفوظة ولا تُحذف.
+      const todaysDepartures = masterDriverDepartures.filter(row => {
+        const date = new Date(row.departed_at || '');
+        if (Number.isNaN(date.getTime())) return false;
+        const localKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+        return localKey === todayKey;
+      });
+      if (!todaysDepartures.length) {
+        list.innerHTML = '<div class="master-departure-empty">لا توجد تحركات مسجلة اليوم. تظهر التحركات في الماستر خلال يوم تسجيلها فقط.</div>';
         return;
       }
-      list.innerHTML = masterDriverDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
+      list.innerHTML = todaysDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
       if (newDepartureCount > 0) {
         const notice = document.createElement('div');
         notice.className = 'master-departure-empty';
@@ -3018,6 +3028,9 @@
 
       const tr =
         document.createElement('tr');
+      tr.classList.add('master-invoice-compact-row');
+      tr.title = 'اضغط لفتح تفاصيل الفاتورة';
+      tr.style.cursor = 'pointer';
 
       if (!paidInAdvance && payment === 'bank_transfer') {
         tr.classList.add(order.bank_transfer_received === true
@@ -3119,6 +3132,11 @@
           </div>
         </td>
       `;
+
+      tr.addEventListener('click', (event) => {
+        if (event.target.closest('button, a, input, select, textarea, label')) return;
+        openMasterOrder(order);
+      });
 
       const viewButton =
         tr.querySelector(
@@ -3405,6 +3423,7 @@
     );
 
     modal.classList.add('open');
+    lockMasterBackgroundScroll();
   }
 
   function openMasterEdit(order) {
@@ -3869,10 +3888,42 @@
     }
   }
 
+  let masterModalScrollY = 0;
+  let masterModalScrollLocked = false;
+
+  function lockMasterBackgroundScroll() {
+    if (masterModalScrollLocked) return;
+    masterModalScrollY = window.scrollY || window.pageYOffset || 0;
+    const body = document.body;
+    body.dataset.masterPreviousPosition = body.style.position || '';
+    body.dataset.masterPreviousTop = body.style.top || '';
+    body.dataset.masterPreviousWidth = body.style.width || '';
+    body.dataset.masterPreviousOverflow = body.style.overflow || '';
+    body.style.position = 'fixed';
+    body.style.top = `-${masterModalScrollY}px`;
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    masterModalScrollLocked = true;
+  }
+
+  function unlockMasterBackgroundScroll() {
+    if (!masterModalScrollLocked) return;
+    const body = document.body;
+    body.style.position = body.dataset.masterPreviousPosition || '';
+    body.style.top = body.dataset.masterPreviousTop || '';
+    body.style.width = body.dataset.masterPreviousWidth || '';
+    body.style.overflow = body.dataset.masterPreviousOverflow || '';
+    delete body.dataset.masterPreviousPosition;
+    delete body.dataset.masterPreviousTop;
+    delete body.dataset.masterPreviousWidth;
+    delete body.dataset.masterPreviousOverflow;
+    masterModalScrollLocked = false;
+    window.scrollTo(0, masterModalScrollY);
+  }
+
   function closeMasterModal() {
-    $('master-modal')?.classList.remove(
-      'open'
-    );
+    $('master-modal')?.classList.remove('open');
+    unlockMasterBackgroundScroll();
   }
 
   function masterLogout(message = '') {
