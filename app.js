@@ -2443,9 +2443,15 @@
             <p>من هنا تقدر تراجع أهم أرقام الشغل بسرعة، وتدخل على الفواتير أو التحويلات السابقة من الأزرار بالأعلى. الأرقام تتحدث من بيانات الماستر الحالية.</p>
             <button class="master-home-cta" type="button" data-master-go="orders">فتح الفواتير وإدارتها ←</button>
           </section>
-          <section class="master-stats">
+          <section class="master-stats-wrap" aria-label="ملخص اليوم">
+            <div id="master-stats-day-label" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:10px 14px;background:#eaf2ff;border:1px solid #cbdcf5;border-radius:12px;color:#173b68;font-size:14px;font-weight:900">
+              <span>ملخص اليوم المحدد</span>
+              <span id="master-stats-day-date">تاريخ اليوم</span>
+            </div>
+            <section class="master-stats">
             <div class="master-stat prepaid"><div class="master-stat-label">مدفوع مقدم</div><div class="master-stat-value" id="master-total-prepaid">0 درهم</div><div class="master-stat-hint" id="master-prepaid-hint">عدد الفواتير: ٠</div></div>
-            <div class="master-stat count"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">عدد الفواتير بدون تكرار</div></div>
+            <div class="master-stat count"><div class="master-stat-label">عدد الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">عدد فواتير اليوم المحدد بدون تكرار</div></div>
+            <div class="master-stat count"><div class="master-stat-label">إجمالي قيمة الفواتير</div><div class="master-stat-value" id="master-day-invoice-total">0 درهم</div><div class="master-stat-hint">قيمة كل فواتير التاريخ المحدد</div></div>
             <div class="master-stat cash"><div class="master-stat-label">فواتير الكاش</div><div class="master-stat-value" id="master-cash-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
             <div class="master-stat cash"><div class="master-stat-label">إجمالي الكاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div><div class="master-stat-hint">إجمالي الفواتير المسجلة كاش</div></div>
             <div class="master-stat bank"><div class="master-stat-label">فواتير التحويل البنكي</div><div class="master-stat-value" id="master-bank-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
@@ -2454,6 +2460,7 @@
             <div class="master-stat pending-bank"><div class="master-stat-label">المتبقي من التحويلات</div><div class="master-stat-value" id="master-bank-pending">0 درهم</div><div class="master-stat-hint">تحويلات لم يتم تأكيد استلامها</div></div>
             <div class="master-stat collected"><div class="master-stat-label">إجمالي المبالغ المسجلة/المستلمة</div><div class="master-stat-value" id="master-total-received">0 درهم</div><div class="master-stat-hint">الكاش المسجل + التحويلات المؤكدة</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
+            </section>
           </section>
 
           <section class="master-customer-balances" id="master-customer-balances">
@@ -2983,10 +2990,17 @@
   }
 
   function renderMasterStats() {
-    // اجعل بطاقات الملخص تتبع نفس الفواتير الظاهرة في الجدول:
-    // العرض الافتراضي يعرض فواتير اليوم والطلبات القديمة التي ما زالت معلقة،
-    // والبحث بالتاريخ يعرض فواتير التاريخ المختار فقط.
-    const orders = getMasterFilteredOrders();
+    // إحصائيات الماستر مستقلة عن البحث وفلتر المندوب وحالة التسليم:
+    // تعرض كل فواتير اليوم المحدد بالكامل، حتى لو كان المستخدم يعرض فاتورة واحدة من يوم سابق.
+    const dateInput = $('master-search-date');
+    const selectedDate = String(dateInput?.value || '').trim() || masterDateInput(new Date());
+    const orders = getMasterUniqueOrders().filter(
+      (order) => masterDateInput(order.created_at) === selectedDate
+    );
+    const dayLabel = $('master-stats-day-date');
+    if (dayLabel) {
+      dayLabel.textContent = `التاريخ: ${selectedDate.split('-').reverse().join('-')}`;
+    }
 
     const prepaidOrders = orders.filter((order) => isPaidInAdvance(order));
     const cashOrders = orders.filter((order) => !isPaidInAdvance(order) && normalizePayment(order.payment_method) === 'cash');
@@ -3020,6 +3034,12 @@
 
     if ($('master-total-count')) {
       $('master-total-count').textContent = orders.length.toLocaleString('ar-EG');
+    }
+
+    if ($('master-day-invoice-total')) {
+      $('master-day-invoice-total').textContent = moneyText(
+        orders.reduce((sum, order) => sum + masterMoney(order.total), 0)
+      );
     }
 
     if ($('master-cash-count')) {
