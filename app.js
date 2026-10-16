@@ -2159,7 +2159,7 @@
       .master-monthly-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 14px;background:#f8fafc;border-bottom:1px solid #e5ebf0;font-weight:900}
       .master-monthly-section-head.pending{background:#fff1f1;color:#a51d1d}.master-monthly-section-head.received{background:#effaf3;color:#166534}
       .master-monthly-table-wrap{overflow:auto}.master-monthly-table{width:100%;min-width:850px;border-collapse:collapse}.master-monthly-table th,.master-monthly-table td{text-align:right;padding:11px 10px;border-bottom:1px solid #edf1f5;white-space:nowrap;font-size:12px}.master-monthly-table th{background:#fbfcfd;color:#64748b;font-size:11px}.master-monthly-table tbody tr:last-child td{border-bottom:0}.master-monthly-empty{text-align:center;padding:24px!important;color:#64748b;white-space:normal!important}.master-monthly-status{display:inline-flex;border-radius:999px;padding:5px 9px;font-weight:900;font-size:11px}.master-monthly-status.pending{background:#fff0f0;color:#b42318}.master-monthly-status.received{background:#e8f7ee;color:#16723b}
-      .master-driver-departures{display:none!important;background:#fff;border:1px solid #dce8f1;border-radius:16px;padding:16px;box-shadow:0 6px 20px rgba(30,49,67,.05)}
+      .master-driver-departures{display:none;background:#fff;border:1px solid #dce8f1;border-radius:16px;padding:16px;box-shadow:0 6px 20px rgba(30,49,67,.05)}
       .master-departure-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
       .master-departure-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
       .master-departure-stat{border:1px solid #dbeafe;background:#eff6ff;border-radius:12px;padding:12px}
@@ -2493,11 +2493,12 @@
       if ($('master-departure-count')) $('master-departure-count').textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
       if ($('master-departure-today')) $('master-departure-today').textContent = todayCount.toLocaleString('ar-EG');
       if ($('master-departure-last')) $('master-departure-last').textContent = masterDriverDepartures[0]?.departed_at ? new Date(masterDriverDepartures[0].departed_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) : '—';
-      if (!masterDriverDepartures.length) {
-        list.innerHTML = '<div class="master-departure-empty">لا توجد تحركات مسجلة حتى الآن.</div>';
+      const dailyDepartures = masterDriverDepartures.filter(row => masterDateInput(row.departed_at) === dailyKey);
+      if (!dailyDepartures.length) {
+        list.innerHTML = `<div class="master-departure-empty">لا توجد تحركات مسجلة بتاريخ ${masterEscape(dailyKey)}.</div>`;
         return;
       }
-      list.innerHTML = masterDriverDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
+      list.innerHTML = dailyDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
       if (newDepartureCount > 0) {
         const notice = document.createElement('div');
         notice.className = 'master-departure-empty';
