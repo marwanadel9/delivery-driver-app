@@ -2068,7 +2068,21 @@
       .master-old-transfer-empty{text-align:center;color:#718087;font-size:12px;line-height:1.8;padding:20px 8px;background:#fafbfc;border-radius:12px}
 
       .master-table-wrap{background:#fff;border:1px solid #e8edef;border-radius:16px;overflow:auto}
-      .master-table{width:100%;border-collapse:collapse;min-width:1050px}
+      .master-table{width:100%;border-collapse:separate;border-spacing:0 8px;min-width:0}
+      .master-table thead{display:none}
+      .master-table tbody tr.master-invoice-compact-row{cursor:pointer}
+      .master-table tbody tr.master-invoice-compact-row>td.master-compact-cell{padding:0 2px;border:0;background:transparent!important;color:inherit!important;white-space:normal}
+      .master-compact-invoice{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 13px;border:1px solid #d9e8df;border-right:4px solid #16804a;border-radius:13px;background:linear-gradient(110deg,#fff 0%,#f7fcf8 100%);box-shadow:0 2px 7px rgba(20,90,55,.045);min-width:0;box-sizing:border-box}
+      .master-compact-main{display:flex;flex-direction:column;gap:4px;min-width:150px;flex:1}
+      .master-compact-number{font-size:13px;font-weight:950;color:#087443}
+      .master-compact-customer{font-size:13px;font-weight:900;color:#18352a;overflow-wrap:anywhere}
+      .master-compact-area{font-size:11px;color:#64756b;overflow-wrap:anywhere}
+      .master-compact-meta{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;min-width:0;flex:2;font-size:11px;color:#52665a}
+      .master-compact-total{font-size:14px;color:#087443;font-weight:950;white-space:nowrap}
+      .master-compact-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+      .master-compact-actions button{font-size:11px!important;padding:7px 9px!important;white-space:nowrap}
+      .master-compact-invoice .master-edit-btn{border:1px solid #b8e1c7;background:#eaf8ef;color:#146c3a;border-radius:8px;cursor:pointer;font-weight:800}
+      @media(max-width:700px){.master-compact-invoice{align-items:stretch;flex-direction:column;gap:8px;padding:10px}.master-compact-main{min-width:0}.master-compact-meta{gap:6px}.master-compact-actions{justify-content:stretch}.master-compact-actions button{flex:1}.master-table-wrap{overflow:visible}}
       .master-table th,.master-table td{padding:12px;border-bottom:1px solid #edf1f2;text-align:right;white-space:nowrap}
       .master-table th{font-size:11px;color:#718087;background:#fafbfb}
       .master-table td{font-size:12px}
@@ -2231,6 +2245,7 @@
           <button class="master-nav-btn" type="button" data-master-view-tab="transfers">🏦 تحويلات سابقة</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="monthly-transfers">📅 التحويلات الشهرية</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="balances">💰 أرصدة العملاء</button>
+          <button class="master-nav-btn" type="button" data-master-view-tab="departures">🚗 تحرك المندوبين</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="reports">📊 التقارير والإحصائيات</button>
         </nav>
 
@@ -2251,7 +2266,6 @@
             <div class="master-stat pending-bank"><div class="master-stat-label">المتبقي من التحويلات</div><div class="master-stat-value" id="master-bank-pending">0 درهم</div><div class="master-stat-hint">تحويلات لم يتم تأكيد استلامها</div></div>
             <div class="master-stat collected"><div class="master-stat-label">إجمالي المبالغ المسجلة/المستلمة</div><div class="master-stat-value" id="master-total-received">0 درهم</div><div class="master-stat-hint">الكاش المسجل + التحويلات المؤكدة</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
-            <div class="master-stat count"><div class="master-stat-label">تحركات المندوبين في اليوم</div><div class="master-stat-value" id="master-departure-day-stat">0</div><div class="master-stat-hint">حسب تاريخ تسجيل التحرك</div></div>
           </section>
 
           <section class="master-customer-balances" id="master-customer-balances">
@@ -2271,11 +2285,11 @@
 
           <section class="master-driver-departures" id="master-driver-departures">
             <div class="master-departure-toolbar">
-              <div><h2 style="margin:0 0 4px;font-size:18px">🚗 تحرك المندوبين لتسليم الطلبات</h2><div style="color:#64748b;font-size:12px">تظهر هنا الفواتير التي أبلغ المندوب عن تحركه لتسليمها.</div></div>
+              <div><h2 style="margin:0 0 4px;font-size:18px">🚗 تحركات المندوبين اليوم</h2><div style="color:#64748b;font-size:12px">يعرض هذا القسم تحركات اليوم فقط؛ التحركات القديمة محفوظة ولا تظهر في قائمة اليوم.</div></div>
               <button class="master-btn secondary" id="master-departures-refresh" type="button">↻ تحديث التحركات</button>
             </div>
             <div class="master-departure-stats">
-              <div class="master-departure-stat"><span>إجمالي التحركات</span><strong id="master-departure-count">٠</strong></div>
+              <div class="master-departure-stat"><span>تحركات اليوم المسجلة</span><strong id="master-departure-count">٠</strong></div>
               <div class="master-departure-stat"><span>تحركات اليوم</span><strong id="master-departure-today">٠</strong></div>
               <div class="master-departure-stat"><span>آخر تحرك</span><strong id="master-departure-last">—</strong></div>
             </div>
@@ -2417,6 +2431,9 @@
       button.addEventListener('click', () => setMasterView(button.dataset.masterGo));
     });
     $('master-modal-close')?.addEventListener('click', closeMasterModal);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && $('master-modal')?.classList.contains('open')) closeMasterModal();
+    });
 
     $('master-modal')?.addEventListener('click', (event) => {
       if (event.target.id === 'master-modal') {
@@ -2440,7 +2457,6 @@
     if (monthPicker) monthPicker.value = masterDateInput(new Date()).slice(0, 7);
 
     loadMasterOrders();
-    loadMasterDepartures({ quiet: true });
     loadMasterDepartures();
     if (state.masterDeparturePoll) clearInterval(state.masterDeparturePoll);
     state.masterDeparturePoll = setInterval(() => {
@@ -2486,19 +2502,22 @@
       masterDepartureInitialLoadDone = true;
       const today = new Date();
       const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-      const selectedDate = String($('master-search-date')?.value || '').trim();
-      const dailyKey = selectedDate || todayKey;
-      const todayCount = masterDriverDepartures.filter(row => masterDateInput(row.departed_at) === dailyKey).length;
-      if ($('master-departure-day-stat')) $('master-departure-day-stat').textContent = todayCount.toLocaleString('ar-EG');
-      if ($('master-departure-count')) $('master-departure-count').textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
+      const todayCount = masterDriverDepartures.filter(row => String(row.departed_at || '').slice(0,10) === todayKey).length;
+      if ($('master-departure-count')) $('master-departure-count').textContent = todayCount.toLocaleString('ar-EG');
       if ($('master-departure-today')) $('master-departure-today').textContent = todayCount.toLocaleString('ar-EG');
       if ($('master-departure-last')) $('master-departure-last').textContent = masterDriverDepartures[0]?.departed_at ? new Date(masterDriverDepartures[0].departed_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) : '—';
-      const dailyDepartures = masterDriverDepartures.filter(row => masterDateInput(row.departed_at) === dailyKey);
-      if (!dailyDepartures.length) {
-        list.innerHTML = `<div class="master-departure-empty">لا توجد تحركات مسجلة بتاريخ ${masterEscape(dailyKey)}.</div>`;
+      // يعرض الماستر تحركات اليوم فقط؛ السجلات القديمة تبقى محفوظة ولا تُحذف.
+      const todaysDepartures = masterDriverDepartures.filter(row => {
+        const date = new Date(row.departed_at || '');
+        if (Number.isNaN(date.getTime())) return false;
+        const localKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+        return localKey === todayKey;
+      });
+      if (!todaysDepartures.length) {
+        list.innerHTML = '<div class="master-departure-empty">لا توجد تحركات مسجلة اليوم. تظهر التحركات في الماستر خلال يوم تسجيلها فقط.</div>';
         return;
       }
-      list.innerHTML = dailyDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
+      list.innerHTML = todaysDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
       if (newDepartureCount > 0) {
         const notice = document.createElement('div');
         notice.className = 'master-departure-empty';
@@ -2675,11 +2694,25 @@
       const customerName = String(order.customer_name ?? '').toLowerCase();
       const customerPhone = String(order.phone ?? '').toLowerCase();
 
-      // الإحصائيات والقائمة الافتراضية تخص الفواتير المسجلة في تاريخ اليوم فقط.
-      // التحويلات السابقة غير المستلمة تظل ظاهرة في قسمها المستقل ولا تُحذف.
+      // العرض الافتراضي: فواتير اليوم كلها، ومعها الفواتير القديمة غير المسلّمة
+      // والتحويلات البنكية التي لم يتم تأكيد استلامها. البحث بالتاريخ يعرض الأرشيف كاملًا.
       if (!hasExplicitSearch) {
         const orderDate = masterDateInput(order.created_at);
-        if (orderDate !== today) return false;
+        const delivered = isDelivered(order.delivery_status);
+        const transferPending =
+          !isPaidInAdvance(order) &&
+          normalizePayment(order.payment_method) === 'bank_transfer' &&
+          order.bank_transfer_received !== true;
+
+        // الفواتير القديمة ذات التحويل البنكي غير المستلم تُعرض في لوحة مستقلة على اليمين.
+        // فواتير اليوم تظل في الجدول الرئيسي، وكذلك الفواتير القديمة غير المسلّمة التي ليست تحويلًا معلقًا.
+        if (orderDate !== today && transferPending) {
+          return false;
+        }
+
+        if (orderDate !== today && delivered && !transferPending) {
+          return false;
+        }
       }
 
       if (number && !orderNumber.includes(number)) {
@@ -2719,10 +2752,10 @@
   }
 
   function renderMasterStats() {
-    // اجعل بطاقات الملخص تتبع نفس الفواتير الظاهرة في الجدول:
-    // العرض الافتراضي يعرض فواتير اليوم والطلبات القديمة التي ما زالت معلقة،
-    // والبحث بالتاريخ يعرض فواتير التاريخ المختار فقط.
-    const orders = getMasterFilteredOrders();
+    // الإحصائيات تخص تاريخ التسجيل المختار فقط، واليوم الحالي هو الافتراضي.
+    // تبقى التحويلات السابقة غير المستلمة في قسمها المستقل ولا تدخل في إحصائيات اليوم.
+    const statsDate = String($('master-search-date')?.value || '').trim() || masterDateInput(new Date());
+    const orders = getMasterFilteredOrders().filter((order) => masterDateInput(order.created_at) === statsDate);
 
     const prepaidOrders = orders.filter((order) => isPaidInAdvance(order));
     const cashOrders = orders.filter((order) => !isPaidInAdvance(order) && normalizePayment(order.payment_method) === 'cash');
@@ -2742,9 +2775,6 @@
     const delivered = orders.filter(
       (order) => isDelivered(order.delivery_status)
     ).length;
-    const departureDate = String($('master-search-date')?.value || '').trim() || masterDateInput(new Date());
-    const departureCountForDay = masterDriverDepartures.filter((row) => masterDateInput(row.departed_at) === departureDate).length;
-    if ($('master-departure-day-stat')) $('master-departure-day-stat').textContent = departureCountForDay.toLocaleString('ar-EG');
 
     const moneyText = (value) =>
       `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
@@ -3012,6 +3042,9 @@
 
       const tr =
         document.createElement('tr');
+      tr.classList.add('master-invoice-compact-row');
+      tr.title = 'اضغط لفتح تفاصيل الفاتورة';
+      tr.style.cursor = 'pointer';
 
       if (!paidInAdvance && payment === 'bank_transfer') {
         tr.classList.add(order.bank_transfer_received === true
@@ -3020,99 +3053,38 @@
       }
 
       tr.innerHTML = `
-        <td>
-          <strong>
-            #${masterEscape(
-              order.order_number ?? order.id ?? ''
-            )}
-          </strong>
-        </td>
-
-        <td>
-          ${masterEscape(
-            order.customer_name || '—'
-          )}
-        </td>
-
-        <td>
-          ${masterEscape(
-            order.phone || '—'
-          )}
-        </td>
-
-        <td>
-          ${masterEscape(
-            [
-              order.emirate,
-              order.area
-            ]
-              .filter(Boolean)
-              .join(' / ') || '—'
-          )}
-        </td>
-                <td>
-          ${masterEscape(
-            masterDriver(order)
-          )}
-        </td>
-
-        <td>
-          ${deliveryFeeFromOrder(order) > 0 ? `<div style="font-size:11px;color:#64748b">إجمالي المنتجات: ${masterEscape(formatTotal((Number(order.total)||0)-deliveryFeeFromOrder(order)))}</div><div style="margin-top:5px;color:#a16207;font-size:11px;font-weight:900;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:5px 7px">🚚 رسوم التوصيل: ${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</div><strong style="display:block;margin-top:5px;color:#1d4ed8">الإجمالي النهائي: ${masterEscape(formatTotal(order.total))}</strong>` : `<strong>${formatTotal(order.total)}</strong>`}
-        </td>
-
-        <td>
-          <span class="master-badge ${
-            paidInAdvance
-              ? 'advance'
-              : payment === 'cash'
-                ? 'cash'
-                : payment === 'bank_transfer'
-                  ? 'bank'
-                  : ''
-          }">
-            ${masterEscape(
-              paidInAdvance
-                ? 'مدفوع'
-                : masterPaymentText(order.payment_method)
-            )}
-          </span>
-        </td>
-
-        <td>
-          ${!paidInAdvance && payment === 'bank_transfer'
-            ? (order.bank_transfer_received === true
-              ? '<span class="master-transfer-state received">✓ تم الاستلام</span>'
-              : `<button class="master-transfer-btn pending" data-master-transfer="${masterEscape(order.id)}">تأكيد الاستلام</button>`)
-            : '<span class="master-transfer-state">—</span>'}
-        </td>
-
-        <td>
-          <span class="master-badge ${
-            delivered
-              ? 'ok'
-              : 'pending'
-          }">
-            ${
-              delivered
-                ? '✓ تم التسليم'
-                : '⏳ قيد التوصيل'
-            }
-          </span>
-        </td>
-
-        <td>
-          ${masterEscape(
-            masterDate(order.created_at)
-          )}
-        </td>
-
-        <td>
-          <div class="master-edit-row">
-            <button class="master-view" data-master-view="${masterEscape(order.id)}" type="button">عرض</button>
-            <button class="master-edit-btn" data-master-edit="${masterEscape(order.id)}" type="button">✎ تعديل الفاتورة</button>
-          </div>
+        <td colspan="11" class="master-compact-cell">
+          <article class="master-compact-invoice" aria-label="فاتورة ${masterEscape(order.order_number ?? order.id ?? '')}">
+            <div class="master-compact-main">
+              <div class="master-compact-number">#${masterEscape(order.order_number ?? order.id ?? '')}</div>
+              <div class="master-compact-customer">${masterEscape(order.customer_name || '—')}</div>
+              <div class="master-compact-area">${masterEscape([order.emirate, order.area].filter(Boolean).join(' / ') || '—')}</div>
+            </div>
+            <div class="master-compact-meta">
+              <span>📞 ${masterEscape(order.phone || '—')}</span>
+              <span>🚚 ${masterEscape(masterDriver(order))}</span>
+              <strong class="master-compact-total">${masterEscape(formatTotal(order.total))}</strong>
+              <span class="master-badge ${paidInAdvance ? 'advance' : payment === 'cash' ? 'cash' : payment === 'bank_transfer' ? 'bank' : ''}">${masterEscape(paidInAdvance ? 'مدفوع' : masterPaymentText(order.payment_method))}</span>
+              <span class="master-badge ${delivered ? 'ok' : 'pending'}">${delivered ? '✓ تم التسليم' : '⏳ قيد التوصيل'}</span>
+              <small>${masterEscape(masterDate(order.created_at))}</small>
+            </div>
+            <div class="master-compact-actions">
+              ${!paidInAdvance && payment === 'bank_transfer'
+                ? (order.bank_transfer_received === true
+                  ? '<span class="master-transfer-state received">✓ تم الاستلام</span>'
+                  : `<button class="master-transfer-btn pending" data-master-transfer="${masterEscape(order.id)}" type="button">تأكيد الاستلام</button>`)
+                : ''}
+              <button class="master-view" data-master-view="${masterEscape(order.id)}" type="button">عرض التفاصيل</button>
+              <button class="master-edit-btn" data-master-edit="${masterEscape(order.id)}" type="button">✎ تعديل</button>
+            </div>
+          </article>
         </td>
       `;
+
+      tr.addEventListener('click', (event) => {
+        if (event.target.closest('button, a, input, select, textarea, label')) return;
+        openMasterOrder(order);
+      });
 
       const viewButton =
         tr.querySelector(
@@ -3399,6 +3371,7 @@
     );
 
     modal.classList.add('open');
+    lockMasterBackgroundScroll();
   }
 
   function openMasterEdit(order) {
@@ -3863,10 +3836,42 @@
     }
   }
 
+  let masterModalScrollY = 0;
+  let masterModalScrollLocked = false;
+
+  function lockMasterBackgroundScroll() {
+    if (masterModalScrollLocked) return;
+    masterModalScrollY = window.scrollY || window.pageYOffset || 0;
+    const body = document.body;
+    body.dataset.masterPreviousPosition = body.style.position || '';
+    body.dataset.masterPreviousTop = body.style.top || '';
+    body.dataset.masterPreviousWidth = body.style.width || '';
+    body.dataset.masterPreviousOverflow = body.style.overflow || '';
+    body.style.position = 'fixed';
+    body.style.top = `-${masterModalScrollY}px`;
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    masterModalScrollLocked = true;
+  }
+
+  function unlockMasterBackgroundScroll() {
+    if (!masterModalScrollLocked) return;
+    const body = document.body;
+    body.style.position = body.dataset.masterPreviousPosition || '';
+    body.style.top = body.dataset.masterPreviousTop || '';
+    body.style.width = body.dataset.masterPreviousWidth || '';
+    body.style.overflow = body.dataset.masterPreviousOverflow || '';
+    delete body.dataset.masterPreviousPosition;
+    delete body.dataset.masterPreviousTop;
+    delete body.dataset.masterPreviousWidth;
+    delete body.dataset.masterPreviousOverflow;
+    masterModalScrollLocked = false;
+    window.scrollTo(0, masterModalScrollY);
+  }
+
   function closeMasterModal() {
-    $('master-modal')?.classList.remove(
-      'open'
-    );
+    $('master-modal')?.classList.remove('open');
+    unlockMasterBackgroundScroll();
   }
 
   function masterLogout(message = '') {
