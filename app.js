@@ -3388,7 +3388,10 @@
     if (!root) return;
 
     const allOrders = getMasterUniqueOrders();
-    const today = masterDateInput(new Date());
+    // Use the date selected in the invoices screen when available, so the home dashboard
+    // can summarize a previous day without changing any invoice or driver behavior.
+    const selectedDashboardDate = String($('master-search-date')?.value || '').trim();
+    const today = selectedDashboardDate || masterDateInput(new Date());
     const todayOrders = allOrders.filter((order) => masterDateInput(order.created_at) === today);
     const isBalanceOrder = (order) => {
       const method = String(order?.payment_method || '').trim().toLowerCase();
