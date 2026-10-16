@@ -964,7 +964,58 @@
       .invoice-fullscreen-close { border:0;border-radius:10px;background:#dcfce7;color:#166534;min-width:42px;min-height:40px;padding:8px 12px;font:inherit;font-size:14px;font-weight:900;cursor:pointer; }
       .order-card.is-fullscreen-invoice .btn-deliver { position:sticky!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;z-index:15!important;min-height:52px!important;box-shadow:0 -5px 18px rgba(255,255,255,.95)!important; }
       .order-card.is-fullscreen-invoice .invoice-expand-toggle { display:none!important; }
-      @media(min-width:700px){.order-card.is-fullscreen-invoice{left:50%!important;right:auto!important;top:0!important;bottom:0!important;height:auto!important;transform:translateX(-50%);width:min(680px,calc(100vw - 12px))!important;padding:10px!important;box-shadow:0 0 0 100vmax rgba(15,23,42,.62)!important;border-radius:14px!important;}}
+      @media(min-width:700px){
+        .order-card.is-fullscreen-invoice{
+          left:50%!important;right:auto!important;top:16px!important;bottom:16px!important;
+          height:auto!important;max-height:calc(100dvh - 32px)!important;
+          transform:translateX(-50%);width:min(1040px,calc(100vw - 48px))!important;
+          padding:18px 20px!important;gap:12px!important;overflow-y:auto!important;
+          overflow-x:hidden!important;overscroll-behavior:contain!important;
+          box-shadow:0 0 0 100vmax rgba(15,23,42,.62)!important;border-radius:18px!important;
+          display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;
+          align-content:flex-start!important;align-items:stretch!important;
+        }
+        .order-card.is-fullscreen-invoice > .invoice-fullscreen-head,
+        .order-card.is-fullscreen-invoice > .driver-departure-box,
+        .order-card.is-fullscreen-invoice > .order-card-head,
+        .order-card.is-fullscreen-invoice > .customer-row,
+        .order-card.is-fullscreen-invoice > .customer-location-grid,
+        .order-card.is-fullscreen-invoice > .order-details,
+        .order-card.is-fullscreen-invoice > .order-total,
+        .order-card.is-fullscreen-invoice > .delivery-fee-row,
+        .order-card.is-fullscreen-invoice > .delivery-grand-total-row,
+        .order-card.is-fullscreen-invoice > .payment-section,
+        .order-card.is-fullscreen-invoice > .gate-photo-btn,
+        .order-card.is-fullscreen-invoice > .order-actions,
+        .order-card.is-fullscreen-invoice > .btn-deliver {flex:0 0 100%!important;width:100%!important;box-sizing:border-box!important;}
+        .order-card.is-fullscreen-invoice > .products-section{
+          flex:1 1 calc(50% - 8px)!important;width:calc(50% - 8px)!important;
+          min-width:0!important;box-sizing:border-box!important;align-self:stretch!important;
+          border:1px solid #dbe7f3!important;border-radius:14px!important;
+          background:#fbfdff!important;padding:14px!important;margin:0!important;
+        }
+        .order-card.is-fullscreen-invoice .products-section-title strong{font-size:16px!important;}
+        .order-card.is-fullscreen-invoice .product-value{font-size:16px!important;line-height:1.7!important;}
+        .order-card.is-fullscreen-invoice .products-grid{width:100%!important;display:grid!important;grid-template-columns:1fr!important;gap:8px!important;}
+        .order-card.is-fullscreen-invoice .product-box{width:100%!important;box-sizing:border-box!important;border:1px solid #e2e8f0!important;border-radius:9px!important;padding:10px!important;}
+        .order-card.is-fullscreen-invoice .order-card-head{order:1!important;}
+        .order-card.is-fullscreen-invoice .customer-row{order:2!important;}
+        .order-card.is-fullscreen-invoice .customer-location-grid{order:3!important;}
+        .order-card.is-fullscreen-invoice .chicken-section{order:4!important;}
+        .order-card.is-fullscreen-invoice .cuts-section{order:5!important;}
+        .order-card.is-fullscreen-invoice .order-details{order:6!important;}
+        .order-card.is-fullscreen-invoice .order-total{order:7!important;}
+        .order-card.is-fullscreen-invoice .delivery-fee-row{order:8!important;}
+        .order-card.is-fullscreen-invoice .delivery-grand-total-row{order:9!important;}
+        .order-card.is-fullscreen-invoice .payment-section{order:10!important;}
+        .order-card.is-fullscreen-invoice .order-actions{order:11!important;}
+        .order-card.is-fullscreen-invoice .btn-deliver{order:12!important;margin-top:0!important;position:static!important;min-height:48px!important;box-shadow:none!important;}
+        .order-card.is-fullscreen-invoice > .driver-departure-box{order:0!important;}
+      }
+      @media(min-width:700px) and (max-height:700px){
+        .order-card.is-fullscreen-invoice{padding:10px 14px!important;gap:7px!important;top:8px!important;bottom:8px!important;max-height:calc(100dvh - 16px)!important;}
+        .order-card.is-fullscreen-invoice .products-section{padding:8px!important;}
+      }
     `;
     document.head.appendChild(style);
   }
