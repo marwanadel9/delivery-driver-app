@@ -2231,6 +2231,24 @@
       .master-filter input,.master-filter select{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:9px;background:#fff}
 
       .master-orders-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px;align-items:start;direction:rtl}
+      .master-orders-sidebar{display:flex;flex-direction:column;gap:12px;min-width:0}
+      .master-day-summary-panel{display:block;background:#fff;border:1px solid #cfe0f4;border-radius:14px;padding:12px;box-shadow:0 5px 18px rgba(30,49,67,.06);direction:rtl}
+      .master-day-summary-head{display:flex;flex-direction:column;gap:4px;padding:0 0 10px;margin-bottom:10px;border-bottom:1px solid #e5edf6}
+      .master-day-summary-head strong{font-size:15px;font-weight:900;color:#102744}
+      .master-day-summary-head span{font-size:11px;color:#64748b;font-weight:800}
+      .master-day-summary-grid{display:grid;grid-template-columns:1fr;gap:7px}
+      .master-day-summary-card{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;min-width:0}
+      .master-day-summary-card .label{font-size:11px;line-height:1.45;color:#475569;font-weight:800}
+      .master-day-summary-card .numbers{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:left;min-width:0}
+      .master-day-summary-card strong{font-size:16px;line-height:1.3;color:#102744;font-weight:900;overflow-wrap:anywhere}
+      .master-day-summary-card small{font-size:10px;color:#64748b;font-weight:800;overflow-wrap:anywhere}
+      .master-day-summary-card.cash{background:#f0fdf4;border-color:#bbf7d0}.master-day-summary-card.cash strong{color:#15803d}
+      .master-day-summary-card.bank{background:#eff6ff;border-color:#bfdbfe}.master-day-summary-card.bank strong{color:#1d4ed8}
+      .master-day-summary-card.prepaid{background:#fff1f2;border-color:#fecdd3}.master-day-summary-card.prepaid strong{color:#be123c}
+      .master-day-summary-card.balance{background:#f5f3ff;border-color:#ddd6fe}.master-day-summary-card.balance strong{color:#6d28d9}
+      .master-day-summary-card.pending{background:#fff7ed;border-color:#fed7aa}.master-day-summary-card.pending strong{color:#c2410c}
+      @media(max-width:900px){.master-orders-sidebar{order:0}.master-table-wrap{order:1}.master-day-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.master-day-summary-card{align-items:flex-start;flex-direction:column}.master-day-summary-card .numbers{align-items:flex-start;text-align:right}}
+      @media(max-width:650px){.master-day-summary-panel{padding:10px}.master-day-summary-head strong{font-size:14px}.master-day-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-day-summary-card{padding:8px}.master-day-summary-card .label{font-size:10px}.master-day-summary-card strong{font-size:14px}.master-day-summary-card small{font-size:9px}}
       .master-old-transfer-panel{padding:11px;border-radius:14px}
       .master-old-transfer-head{margin-bottom:8px}
       .master-old-transfer-title{font-size:12px}
@@ -2334,7 +2352,7 @@
       .master-page[data-view="home"] .master-stats{grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
       .master-page[data-view="home"] .master-filters,.master-page[data-view="home"] .master-orders-layout{display:none}
       .master-page[data-view="orders"] .master-stats,.master-page[data-view="orders"] .master-home-intro,.master-page[data-view="orders"] #master-old-transfer-panel{display:none}
-      .master-page[data-view="orders"] .master-orders-layout{display:block}
+      .master-page[data-view="orders"] .master-orders-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px;align-items:start;direction:rtl}
       .master-page[data-view="orders"] .master-filters{display:grid}
       .master-page[data-view="transfers"] .master-stats,.master-page[data-view="transfers"] .master-home-intro,.master-page[data-view="transfers"] .master-filters,.master-page[data-view="transfers"] .master-table-wrap{display:none}
       .master-page[data-view="transfers"] .master-orders-layout{display:block}
@@ -2443,15 +2461,9 @@
             <p>من هنا تقدر تراجع أهم أرقام الشغل بسرعة، وتدخل على الفواتير أو التحويلات السابقة من الأزرار بالأعلى. الأرقام تتحدث من بيانات الماستر الحالية.</p>
             <button class="master-home-cta" type="button" data-master-go="orders">فتح الفواتير وإدارتها ←</button>
           </section>
-          <section class="master-stats-wrap" aria-label="ملخص اليوم">
-            <div id="master-stats-day-label" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:10px 14px;background:#eaf2ff;border:1px solid #cbdcf5;border-radius:12px;color:#173b68;font-size:14px;font-weight:900">
-              <span>ملخص اليوم المحدد</span>
-              <span id="master-stats-day-date">تاريخ اليوم</span>
-            </div>
-            <section class="master-stats">
+          <section class="master-stats">
             <div class="master-stat prepaid"><div class="master-stat-label">مدفوع مقدم</div><div class="master-stat-value" id="master-total-prepaid">0 درهم</div><div class="master-stat-hint" id="master-prepaid-hint">عدد الفواتير: ٠</div></div>
-            <div class="master-stat count"><div class="master-stat-label">عدد الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">عدد فواتير اليوم المحدد بدون تكرار</div></div>
-            <div class="master-stat count"><div class="master-stat-label">إجمالي قيمة الفواتير</div><div class="master-stat-value" id="master-day-invoice-total">0 درهم</div><div class="master-stat-hint">قيمة كل فواتير التاريخ المحدد</div></div>
+            <div class="master-stat count"><div class="master-stat-label">إجمالي الفواتير</div><div class="master-stat-value" id="master-total-count">0</div><div class="master-stat-hint">عدد الفواتير بدون تكرار</div></div>
             <div class="master-stat cash"><div class="master-stat-label">فواتير الكاش</div><div class="master-stat-value" id="master-cash-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
             <div class="master-stat cash"><div class="master-stat-label">إجمالي الكاش</div><div class="master-stat-value" id="master-total-cash">0 درهم</div><div class="master-stat-hint">إجمالي الفواتير المسجلة كاش</div></div>
             <div class="master-stat bank"><div class="master-stat-label">فواتير التحويل البنكي</div><div class="master-stat-value" id="master-bank-count">0</div><div class="master-stat-hint">عدد الفواتير</div></div>
@@ -2460,7 +2472,6 @@
             <div class="master-stat pending-bank"><div class="master-stat-label">المتبقي من التحويلات</div><div class="master-stat-value" id="master-bank-pending">0 درهم</div><div class="master-stat-hint">تحويلات لم يتم تأكيد استلامها</div></div>
             <div class="master-stat collected"><div class="master-stat-label">إجمالي المبالغ المسجلة/المستلمة</div><div class="master-stat-value" id="master-total-received">0 درهم</div><div class="master-stat-hint">الكاش المسجل + التحويلات المؤكدة</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
-            </section>
           </section>
 
           <section class="master-customer-balances" id="master-customer-balances">
@@ -2565,7 +2576,25 @@
           </section>
 
           <div class="master-orders-layout">
-            <aside class="master-old-transfer-panel" id="master-old-transfer-panel" aria-label="التحويلات القديمة غير المستلمة">
+            <aside class="master-orders-sidebar" aria-label="ملخص اليوم والتحويلات السابقة">
+              <section class="master-day-summary-panel" id="master-day-summary-panel" aria-label="ملخص اليوم المحدد">
+                <div class="master-day-summary-head">
+                  <strong>📊 ملخص اليوم المحدد</strong>
+                  <span id="master-day-summary-date">تاريخ اليوم</span>
+                </div>
+                <div class="master-day-summary-grid">
+                  <div class="master-day-summary-card"><span class="label">إجمالي الفواتير</span><div class="numbers"><strong id="day-summary-count">٠</strong><small>فاتورة</small></div></div>
+                  <div class="master-day-summary-card cash"><span class="label">عملاء دفعوا كاش</span><div class="numbers"><strong id="day-summary-cash-count">٠</strong><small id="day-summary-cash-total">٠ درهم</small></div></div>
+                  <div class="master-day-summary-card bank"><span class="label">عملاء دفعوا تحويل</span><div class="numbers"><strong id="day-summary-bank-count">٠</strong><small id="day-summary-bank-total">٠ درهم إجمالي</small></div></div>
+                  <div class="master-day-summary-card pending"><span class="label">تحويلات مستلمة</span><div class="numbers"><strong id="day-summary-bank-received">٠ درهم</strong><small>تم تأكيد الاستلام</small></div></div>
+                  <div class="master-day-summary-card pending"><span class="label">تحويلات غير مستلمة</span><div class="numbers"><strong id="day-summary-bank-pending">٠ درهم</strong><small>تحتاج تأكيد</small></div></div>
+                  <div class="master-day-summary-card prepaid"><span class="label">عملاء دفعوا مقدمًا</span><div class="numbers"><strong id="day-summary-prepaid-count">٠</strong><small id="day-summary-prepaid-total">٠ درهم</small></div></div>
+                  <div class="master-day-summary-card balance"><span class="label">عملاء دفعوا من الرصيد</span><div class="numbers"><strong id="day-summary-balance-count">٠</strong><small id="day-summary-balance-total">٠ درهم</small></div></div>
+                  <div class="master-day-summary-card"><span class="label">الفواتير المسلّمة</span><div class="numbers"><strong id="day-summary-delivered">٠</strong><small>من فواتير التاريخ</small></div></div>
+                  <div class="master-day-summary-card"><span class="label">إجمالي المبالغ المسجلة/المستلمة</span><div class="numbers"><strong id="day-summary-received-total">٠ درهم</strong><small>كاش + تحويل مستلم + مقدم + رصيد</small></div></div>
+                </div>
+              </section>
+              <section class="master-old-transfer-panel" id="master-old-transfer-panel" aria-label="التحويلات القديمة غير المستلمة">
               <div class="master-old-transfer-head">
                 <div class="master-old-transfer-title">التحويلات السابقة غير المستلمة</div>
                 <span class="master-old-transfer-count" id="master-old-transfer-count">٠</span>
@@ -2580,6 +2609,7 @@
               <div class="master-old-transfer-list" id="master-old-transfer-list">
                 <div class="master-old-transfer-empty">جاري تحميل التحويلات…</div>
               </div>
+              </section>
             </aside>
             <section class="master-table-wrap">
             <table class="master-table">
@@ -2990,17 +3020,10 @@
   }
 
   function renderMasterStats() {
-    // إحصائيات الماستر مستقلة عن البحث وفلتر المندوب وحالة التسليم:
-    // تعرض كل فواتير اليوم المحدد بالكامل، حتى لو كان المستخدم يعرض فاتورة واحدة من يوم سابق.
-    const dateInput = $('master-search-date');
-    const selectedDate = String(dateInput?.value || '').trim() || masterDateInput(new Date());
-    const orders = getMasterUniqueOrders().filter(
-      (order) => masterDateInput(order.created_at) === selectedDate
-    );
-    const dayLabel = $('master-stats-day-date');
-    if (dayLabel) {
-      dayLabel.textContent = `التاريخ: ${selectedDate.split('-').reverse().join('-')}`;
-    }
+    // اجعل بطاقات الملخص تتبع نفس الفواتير الظاهرة في الجدول:
+    // العرض الافتراضي يعرض فواتير اليوم والطلبات القديمة التي ما زالت معلقة،
+    // والبحث بالتاريخ يعرض فواتير التاريخ المختار فقط.
+    const orders = getMasterFilteredOrders();
 
     const prepaidOrders = orders.filter((order) => isPaidInAdvance(order));
     const cashOrders = orders.filter((order) => !isPaidInAdvance(order) && normalizePayment(order.payment_method) === 'cash');
@@ -3034,12 +3057,6 @@
 
     if ($('master-total-count')) {
       $('master-total-count').textContent = orders.length.toLocaleString('ar-EG');
-    }
-
-    if ($('master-day-invoice-total')) {
-      $('master-day-invoice-total').textContent = moneyText(
-        orders.reduce((sum, order) => sum + masterMoney(order.total), 0)
-      );
     }
 
     if ($('master-cash-count')) {
@@ -3261,6 +3278,49 @@
     });
   }
 
+  function isBalancePaymentOrder(order) {
+    const method = String(order?.payment_method || '').trim().toLowerCase();
+    const marked = [order?.paid_from_balance, order?.balance_used, order?.customer_balance_used, order?.paid_by_balance]
+      .some((value) => value === true || value === 1 || String(value ?? '').trim().toLowerCase() === 'true' || String(value ?? '').trim() === '1');
+    return marked || method.includes('balance') || method.includes('رصيد') || method.includes('الرصيد');
+  }
+
+  function renderMasterDaySummary() {
+    const selectedDate = String($('master-search-date')?.value || '').trim() || masterDateInput(new Date());
+    const orders = getMasterUniqueOrders().filter((order) => masterDateInput(order.created_at) === selectedDate);
+    const prepaid = orders.filter((order) => isPaidInAdvance(order));
+    const balance = orders.filter((order) => !isPaidInAdvance(order) && isBalancePaymentOrder(order));
+    const cash = orders.filter((order) => !isPaidInAdvance(order) && !isBalancePaymentOrder(order) && normalizePayment(order.payment_method) === 'cash');
+    const bank = orders.filter((order) => !isPaidInAdvance(order) && !isBalancePaymentOrder(order) && normalizePayment(order.payment_method) === 'bank_transfer');
+    const bankReceived = bank.filter((order) => order.bank_transfer_received === true);
+    const bankPending = bank.filter((order) => order.bank_transfer_received !== true);
+    const sum = (items) => items.reduce((total, order) => total + masterMoney(order.total), 0);
+    const money = (value) => `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+    const formatCount = (value) => value.toLocaleString('ar-EG');
+    const customerCount = (items) => new Set(items.map((order) => String(order.customer_code || order.phone || order.customer_name || order.id || '').trim()).filter(Boolean)).size;
+    const dateLabel = $('master-day-summary-date');
+    if (dateLabel) dateLabel.textContent = `التاريخ: ${selectedDate.split('-').reverse().join('-')}`;
+    const values = {
+      'day-summary-count': formatCount(orders.length),
+      'day-summary-cash-count': formatCount(customerCount(cash)),
+      'day-summary-cash-total': money(sum(cash)),
+      'day-summary-bank-count': formatCount(customerCount(bank)),
+      'day-summary-bank-total': `${money(sum(bank))} إجمالي`,
+      'day-summary-bank-received': money(sum(bankReceived)),
+      'day-summary-bank-pending': money(sum(bankPending)),
+      'day-summary-prepaid-count': formatCount(customerCount(prepaid)),
+      'day-summary-prepaid-total': money(sum(prepaid)),
+      'day-summary-balance-count': formatCount(customerCount(balance)),
+      'day-summary-balance-total': money(sum(balance)),
+      'day-summary-delivered': formatCount(orders.filter((order) => isDelivered(order.delivery_status)).length),
+      'day-summary-received-total': money(sum(cash) + sum(bankReceived) + sum(prepaid) + sum(balance))
+    };
+    Object.entries(values).forEach(([id, value]) => {
+      const element = $(id);
+      if (element) element.textContent = value;
+    });
+  }
+
   function renderMasterOrders() {
     const body = $('master-orders-body');
 
@@ -3273,6 +3333,7 @@
     renderMasterOldPendingTransfers();
     renderMasterMonthlyTransfers();
     renderMasterStats();
+    renderMasterDaySummary();
 
     if (!orders.length) {
       body.innerHTML =
