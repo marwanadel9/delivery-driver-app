@@ -916,6 +916,27 @@
       : '—';
   }
 
+  function ensureCompactDriverInvoiceStyles() {
+    if ($('compact-driver-invoice-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'compact-driver-invoice-styles';
+    style.textContent = `
+      .order-card.is-compact .products-section,
+      .order-card.is-compact .order-details,
+      .order-card.is-compact .payment-section,
+      .order-card.is-compact .gate-photo-btn,
+      .order-card.is-compact .delivery-fee-row,
+      .order-card.is-compact .delivery-grand-total-row { display:none!important; }
+      .order-card.is-compact { padding:12px!important; gap:8px!important; cursor:pointer; }
+      .order-card.is-compact .customer-location-grid { margin-top:5px!important; }
+      .order-card.is-compact .order-total { margin-top:7px!important; padding:9px 11px!important; }
+      .order-card .invoice-expand-toggle { display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;margin:8px 0;padding:8px 10px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer; }
+      .order-card.is-compact .invoice-expand-toggle { margin:6px 0 0; }
+      .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
+    `;
+    document.head.appendChild(style);
+  }
+
   function render() {
     const list =
       $('orders-list');
@@ -930,6 +951,7 @@
       return;
     }
 
+    ensureCompactDriverInvoiceStyles();
     updateStats();
 
     const shown =
@@ -963,6 +985,24 @@
         template.content
           .firstElementChild
           .cloneNode(true);
+      node.classList.add('is-compact');
+
+      // زر فتح التفاصيل يبقى ظاهرًا في البطاقة المختصرة.
+      const expandButton = document.createElement('button');
+      expandButton.type = 'button';
+      expandButton.className = 'invoice-expand-toggle';
+      expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
+      expandButton.setAttribute('aria-expanded', 'false');
+      const toggleInvoiceDetails = () => {
+        const compact = node.classList.toggle('is-compact');
+        expandButton.textContent = compact ? 'عرض تفاصيل الفاتورة ▼' : 'إخفاء التفاصيل ▲';
+        expandButton.setAttribute('aria-expanded', String(!compact));
+      };
+      expandButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleInvoiceDetails();
+      });
+      node.appendChild(expandButton);
 
       // Button is injected into the existing card, so no HTML template change is required.
       const departureBox = document.createElement('div');
@@ -1551,6 +1591,11 @@
         }
       }
 
+      node.addEventListener('click', (event) => {
+        if (event.target.closest('button, a, input, select, textarea, label')) return;
+        toggleInvoiceDetails();
+      });
+
       list.appendChild(node);
     }
 
@@ -2072,15 +2117,6 @@
       .master-table th,.master-table td{padding:12px;border-bottom:1px solid #edf1f2;text-align:right;white-space:nowrap}
       .master-table th{font-size:11px;color:#718087;background:#fafbfb}
       .master-table td{font-size:12px}
-      .master-page[data-view="orders"] .master-table{min-width:0;width:100%;table-layout:auto}
-      .master-page[data-view="orders"] .master-table thead{display:none}
-      .master-page[data-view="orders"] .master-table tbody tr.master-invoice-compact-row{display:table-row;cursor:pointer;background:#fff;border-bottom:1px solid #e4eee8}
-      .master-page[data-view="orders"] .master-table tbody tr.master-invoice-compact-row>td{display:block;width:auto;padding:8px 10px;white-space:normal;border-bottom:1px solid #e7efe9;background:#fff!important;color:#172024!important}
-      .master-compact-invoice{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,2fr) minmax(0,1.5fr) auto;align-items:center;gap:8px;border:1px solid #d7e9dc;border-right:4px solid #16834a;border-radius:12px;padding:9px 11px;background:linear-gradient(110deg,#fff,#f7fcf8);box-shadow:0 2px 7px rgba(22,101,52,.04)}
-      .master-compact-invoice:hover{background:#f0faf2;box-shadow:0 4px 12px rgba(22,101,52,.09)}
-      .master-compact-main{min-width:0;display:flex;flex-direction:column;gap:4px}.master-compact-main strong{font-size:12px;font-weight:900;color:#14532d}.master-compact-main span{font-size:11px;line-height:1.5;overflow-wrap:anywhere}.master-compact-muted{font-size:10px;color:#64748b}.master-compact-total{font-weight:900;color:#15803d;white-space:nowrap;font-size:12px}.master-compact-actions{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:wrap}.master-compact-actions button{font-size:10px!important;padding:6px 8px!important;min-height:30px;border-radius:8px!important}
-      .master-departure-date-control{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;font-weight:800;color:#334155}.master-departure-date-control input{border:1px solid #cbd5e1;border-radius:9px;padding:8px 10px;background:#fff;color:#172024;font:inherit;min-height:36px}
-      @media(max-width:700px){.master-compact-invoice{grid-template-columns:1fr 1fr;gap:7px}.master-compact-actions{grid-column:1/-1;justify-content:stretch}.master-compact-actions button{flex:1}.master-compact-total{font-size:13px}}
       .master-table tbody tr.master-transfer-pending td{background:#fff0f0!important;color:#8f1d1d;border-bottom-color:#ffd2d2}
       .master-table tbody tr.master-transfer-received td{background:#eaf8ef!important;color:#155b32;border-bottom-color:#c8ebd2}
       .master-table tbody tr.master-transfer-pending:hover td{background:#ffe3e3!important}
@@ -2281,15 +2317,16 @@
           <section class="master-driver-departures" id="master-driver-departures">
             <div class="master-departure-toolbar">
               <div><h2 style="margin:0 0 4px;font-size:18px">🚗 تحرك المندوبين لتسليم الطلبات</h2><div style="color:#64748b;font-size:12px">تظهر هنا الفواتير التي أبلغ المندوب عن تحركه لتسليمها.</div></div>
-              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-                <label class="master-departure-date-control" for="master-departure-date">📅 تاريخ التحركات <input id="master-departure-date" type="date" aria-label="اختيار تاريخ تحركات السيارة"></label>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <label for="master-departure-date" style="font-size:12px;font-weight:800;color:#475569">📅 تاريخ التحركات</label>
+                <input id="master-departure-date" type="date" style="border:1px solid #dbe5ef;border-radius:9px;padding:8px 10px;font:inherit;background:#fff" />
                 <button class="master-btn secondary" id="master-departures-refresh" type="button">↻ تحديث التحركات</button>
               </div>
             </div>
             <div class="master-departure-stats">
               <div class="master-departure-stat"><span>إجمالي التحركات</span><strong id="master-departure-count">٠</strong></div>
-              <div class="master-departure-stat"><span>تحركات التاريخ المحدد</span><strong id="master-departure-today">٠</strong></div>
-              <div class="master-departure-stat"><span>آخر تحرك</span><strong id="master-departure-last">—</strong></div>
+              <div class="master-departure-stat"><span>تحركات اليوم</span><strong id="master-departure-today">٠</strong></div>
+              <div class="master-departure-stat"><span>تحركات التاريخ المحدد</span><strong id="master-departure-selected">٠</strong></div>
             </div>
             <div class="master-departure-list" id="master-departure-list"><div class="master-departure-empty">جارٍ تحميل التحركات…</div></div>
           </section>
@@ -2415,9 +2452,16 @@
       </div>
     `;
 
+    const departureDateInput = $('master-departure-date');
+    if (departureDateInput && !departureDateInput.value) {
+      try { departureDateInput.value = localStorage.getItem('master_departure_selected_date') || masterDateInput(new Date()); } catch { departureDateInput.value = masterDateInput(new Date()); }
+    }
     $('master-refresh')?.addEventListener('click', loadMasterOrders);
     $('master-departures-refresh')?.addEventListener('click', loadMasterDepartures);
-    $('master-departure-date')?.addEventListener('change', (event) => { try { localStorage.setItem('master_departure_date', event.target.value || masterDateInput(new Date())); } catch {} loadMasterDepartures(); });
+    $('master-departure-date')?.addEventListener('change', () => {
+      try { localStorage.setItem('master_departure_selected_date', $('master-departure-date').value || ''); } catch {}
+      renderMasterDeparturesForSelectedDate();
+    });
     $('master-balance-refresh')?.addEventListener('click', loadMasterCustomerBalances);
     $('master-monthly-refresh')?.addEventListener('click', loadMasterOrders);
     $('master-transfer-month')?.addEventListener('change', renderMasterMonthlyTransfers);
@@ -2454,31 +2498,26 @@
 
     const monthPicker = $('master-transfer-month');
     if (monthPicker) monthPicker.value = masterDateInput(new Date()).slice(0, 7);
-    const departureDatePicker = $('master-departure-date');
-    if (departureDatePicker) {
-      let savedDepartureDate = '';
-      try { savedDepartureDate = localStorage.getItem('master_departure_date') || ''; } catch {}
-      departureDatePicker.value = /^\d{4}-\d{2}-\d{2}$/.test(savedDepartureDate) ? savedDepartureDate : masterDateInput(new Date());
-    }
 
-    let savedMasterView = 'home';
-    try { savedMasterView = localStorage.getItem('master_current_view') || 'home'; } catch {}
-    setMasterView(savedMasterView, { preserveScroll: true });
     loadMasterOrders();
     loadMasterDepartures();
+    try {
+      const rememberedView = localStorage.getItem('master_last_view');
+      if (rememberedView && rememberedView !== 'home') setMasterView(rememberedView);
+    } catch {}
     if (state.masterDeparturePoll) clearInterval(state.masterDeparturePoll);
     state.masterDeparturePoll = setInterval(() => {
       if (state.masterSession?.access_token) loadMasterDepartures({ quiet: true });
     }, 30000);
   }
 
-  function setMasterView(view, options = {}) {
+  function setMasterView(view) {
     const allowed = new Set(['home', 'orders', 'transfers', 'monthly-transfers', 'reports', 'balances', 'departures']);
     const nextView = allowed.has(view) ? view : 'home';
     const page = $('master-page');
     if (!page) return;
     page.dataset.view = nextView;
-    try { localStorage.setItem('master_current_view', nextView); } catch {}
+    try { localStorage.setItem('master_last_view', nextView); } catch {}
     document.querySelectorAll('[data-master-view-tab]').forEach((button) => {
       if (button.dataset.masterViewTab === nextView) {
         button.setAttribute('aria-current', 'page');
@@ -2491,7 +2530,7 @@
     if (nextView === 'reports') renderMasterStats();
     if (nextView === 'balances') loadMasterCustomerBalances();
     if (nextView === 'departures') loadMasterDepartures();
-    if (!options.preserveScroll) window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   let masterDriverDepartures = [];
@@ -2510,26 +2549,15 @@
       masterDriverDepartures.forEach(row => { if (row && row.id != null) masterDepartureSeenIds.add(String(row.id)); });
       masterDepartureInitialLoadDone = true;
       const today = new Date();
-      const todayKey = masterDateInput(today);
-      const picker = $('master-departure-date');
-      let selectedKey = picker?.value || todayKey;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedKey)) selectedKey = todayKey;
-      try { localStorage.setItem('master_departure_date', selectedKey); } catch {}
-      const countForDate = (key) => masterDriverDepartures.filter(row => masterDateInput(row.departed_at) === key).length;
-      const selectedCount = countForDate(selectedKey);
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      const todayCount = masterDriverDepartures.filter(row => String(row.departed_at || '').slice(0,10) === todayKey).length;
       if ($('master-departure-count')) $('master-departure-count').textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
-      if ($('master-departure-today')) $('master-departure-today').textContent = selectedCount.toLocaleString('ar-EG');
-      const lastForDate = masterDriverDepartures.find(row => masterDateInput(row.departed_at) === selectedKey);
-      if ($('master-departure-last')) $('master-departure-last').textContent = lastForDate?.departed_at ? new Date(lastForDate.departed_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) : '—';
-      // يعرض التاريخ المختار فقط، ويمكن الرجوع لأي يوم سابق من منتقي التاريخ؛ لا يتم حذف السجلات.
-      const todaysDepartures = masterDriverDepartures.filter(row => masterDateInput(row.departed_at) === selectedKey);
-      const selectedLabel = selectedKey === todayKey ? 'اليوم' : selectedKey;
-      if (!todaysDepartures.length) {
-        list.innerHTML = `<div class="master-departure-empty">لا توجد تحركات مسجلة بتاريخ ${masterEscape(selectedLabel)}. اختر تاريخًا آخر لعرض التحركات السابقة.</div>`;
-        return;
-      }
-      list.innerHTML = todaysDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
-      if (newDepartureCount > 0) {
+      if ($('master-departure-today')) $('master-departure-today').textContent = todayCount.toLocaleString('ar-EG');
+      if ($('master-departure-last')) $('master-departure-last').textContent = masterDriverDepartures[0]?.departed_at ? new Date(masterDriverDepartures[0].departed_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) : '—';
+      const dateInput = $('master-departure-date');
+      if (dateInput && !dateInput.value) dateInput.value = todayKey;
+      renderMasterDeparturesForSelectedDate();
+      if (newDepartureCount > 0 && (!$('master-departure-date')?.value || $('master-departure-date').value === todayKey)) {
         const notice = document.createElement('div');
         notice.className = 'master-departure-empty';
         notice.style.cssText = 'background:#ecfdf3;border:1px solid #abefc6;color:#067647;font-weight:900;text-align:right;margin-bottom:10px;';
@@ -2539,6 +2567,41 @@
     } catch (error) {
       if (!options.quiet && error.message !== 'expired') list.innerHTML = `<div class="master-departure-empty">${masterEscape(error.message || 'تعذر تحميل التحركات')}</div>`;
     }
+  }
+
+  function renderMasterDeparturesForSelectedDate() {
+    const list = $('master-departure-list');
+    if (!list) return;
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const selectedKey = $('master-departure-date')?.value || todayKey;
+    const selectedDepartures = masterDriverDepartures.filter((row) => {
+      const date = new Date(row?.departed_at || '');
+      if (Number.isNaN(date.getTime())) return false;
+      const localKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+      return localKey === selectedKey;
+    });
+    const selectedCount = selectedDepartures.length;
+    const selectedStat = $('master-departure-selected');
+    if (selectedStat) selectedStat.textContent = selectedCount.toLocaleString('ar-EG');
+    const countStat = $('master-departure-count');
+    if (countStat) countStat.textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
+    const todayStat = $('master-departure-today');
+    if (todayStat) todayStat.textContent = masterDriverDepartures.filter((row) => {
+      const date = new Date(row?.departed_at || '');
+      if (Number.isNaN(date.getTime())) return false;
+      const key = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+      return key === todayKey;
+    }).length.toLocaleString('ar-EG');
+    const statLabel = countStat?.previousElementSibling;
+    if (statLabel) statLabel.textContent = 'إجمالي التحركات (كل الأيام)';
+    const todayLabel = todayStat?.previousElementSibling;
+    if (todayLabel) todayLabel.textContent = 'تحركات اليوم';
+    if (!selectedDepartures.length) {
+      list.innerHTML = `<div class="master-departure-empty">لا توجد تحركات مسجلة بتاريخ ${masterEscape(selectedKey)}. اختر تاريخًا آخر لعرض التحركات السابقة.</div>`;
+      return;
+    }
+    list.innerHTML = selectedDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
   }
 
   let masterCustomerBalances = [];
@@ -3063,35 +3126,97 @@
           : 'master-transfer-pending');
       }
 
-      const invoiceNumber = order.order_number ?? order.id ?? '';
-      const areaText = [order.emirate, order.area].filter(Boolean).join(' / ') || '—';
-      const paymentText = paidInAdvance ? 'مدفوع مقدمًا' : masterPaymentText(order.payment_method);
-      const statusText = delivered ? '✓ تم التسليم' : '⏳ قيد التوصيل';
       tr.innerHTML = `
-        <td colspan="11">
-          <div class="master-compact-invoice" role="button" tabindex="0" aria-label="فتح تفاصيل الفاتورة ${masterEscape(invoiceNumber)}">
-            <div class="master-compact-main">
-              <strong>فاتورة #${masterEscape(invoiceNumber)}</strong>
-              <span class="master-compact-muted">${masterEscape(masterDate(order.created_at))}</span>
-            </div>
-            <div class="master-compact-main">
-              <strong>${masterEscape(order.customer_name || '—')}</strong>
-              <span>${masterEscape(areaText)}</span>
-            </div>
-            <div class="master-compact-main">
-              <span class="master-compact-muted">${masterEscape(masterDriver(order))} · ${masterEscape(paymentText)}</span>
-              <span style="font-weight:800;color:${delivered ? '#15803d' : '#1d4ed8'}">${statusText}</span>
-            </div>
-            <div class="master-compact-total">${masterEscape(formatTotal(order.total))}</div>
-            <div class="master-compact-actions">
-              ${!paidInAdvance && payment === 'bank_transfer'
-                ? (order.bank_transfer_received === true
-                  ? '<span class="master-transfer-state received">✓ تم الاستلام</span>'
-                  : `<button class="master-transfer-btn pending" data-master-transfer="${masterEscape(order.id)}" type="button">تأكيد الاستلام</button>`)
-                : ''}
-              <button class="master-view" data-master-view="${masterEscape(order.id)}" type="button">عرض التفاصيل</button>
-              <button class="master-edit-btn" data-master-edit="${masterEscape(order.id)}" type="button">✎ تعديل</button>
-            </div>
+        <td>
+          <strong>
+            #${masterEscape(
+              order.order_number ?? order.id ?? ''
+            )}
+          </strong>
+        </td>
+
+        <td>
+          ${masterEscape(
+            order.customer_name || '—'
+          )}
+        </td>
+
+        <td>
+          ${masterEscape(
+            order.phone || '—'
+          )}
+        </td>
+
+        <td>
+          ${masterEscape(
+            [
+              order.emirate,
+              order.area
+            ]
+              .filter(Boolean)
+              .join(' / ') || '—'
+          )}
+        </td>
+                <td>
+          ${masterEscape(
+            masterDriver(order)
+          )}
+        </td>
+
+        <td>
+          ${deliveryFeeFromOrder(order) > 0 ? `<div style="font-size:11px;color:#64748b">إجمالي المنتجات: ${masterEscape(formatTotal((Number(order.total)||0)-deliveryFeeFromOrder(order)))}</div><div style="margin-top:5px;color:#a16207;font-size:11px;font-weight:900;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:5px 7px">🚚 رسوم التوصيل: ${masterEscape(formatTotal(deliveryFeeFromOrder(order)))}</div><strong style="display:block;margin-top:5px;color:#1d4ed8">الإجمالي النهائي: ${masterEscape(formatTotal(order.total))}</strong>` : `<strong>${formatTotal(order.total)}</strong>`}
+        </td>
+
+        <td>
+          <span class="master-badge ${
+            paidInAdvance
+              ? 'advance'
+              : payment === 'cash'
+                ? 'cash'
+                : payment === 'bank_transfer'
+                  ? 'bank'
+                  : ''
+          }">
+            ${masterEscape(
+              paidInAdvance
+                ? 'مدفوع'
+                : masterPaymentText(order.payment_method)
+            )}
+          </span>
+        </td>
+
+        <td>
+          ${!paidInAdvance && payment === 'bank_transfer'
+            ? (order.bank_transfer_received === true
+              ? '<span class="master-transfer-state received">✓ تم الاستلام</span>'
+              : `<button class="master-transfer-btn pending" data-master-transfer="${masterEscape(order.id)}">تأكيد الاستلام</button>`)
+            : '<span class="master-transfer-state">—</span>'}
+        </td>
+
+        <td>
+          <span class="master-badge ${
+            delivered
+              ? 'ok'
+              : 'pending'
+          }">
+            ${
+              delivered
+                ? '✓ تم التسليم'
+                : '⏳ قيد التوصيل'
+            }
+          </span>
+        </td>
+
+        <td>
+          ${masterEscape(
+            masterDate(order.created_at)
+          )}
+        </td>
+
+        <td>
+          <div class="master-edit-row">
+            <button class="master-view" data-master-view="${masterEscape(order.id)}" type="button">عرض</button>
+            <button class="master-edit-btn" data-master-edit="${masterEscape(order.id)}" type="button">✎ تعديل الفاتورة</button>
           </div>
         </td>
       `;
@@ -3099,13 +3224,6 @@
       tr.addEventListener('click', (event) => {
         if (event.target.closest('button, a, input, select, textarea, label')) return;
         openMasterOrder(order);
-      });
-      const compactCard = tr.querySelector('.master-compact-invoice');
-      compactCard?.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          openMasterOrder(order);
-        }
       });
 
       const viewButton =
