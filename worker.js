@@ -1422,76 +1422,115 @@ export default {
         request.method === "POST"
       ) {
         const secret = request.headers.get("X-Excel-Sync-Secret") || "";
-
         if (secret !== env.EXCEL_SYNC_SECRET) {
           return json({ error: "غير مصرح" }, 401);
         }
-
         if (!env.SUPABASE_SERVICE_ROLE_KEY) {
           return json({ error: "إعداد رفع الصور غير مكتمل" }, 500);
         }
 
         const contentType = request.headers.get("Content-Type") || "";
         if (!contentType.toLowerCase().includes("multipart/form-data")) {
-          return json({ error: "يجب إرسال الصورة بصيغة multipart/form-data" }, 400);
+          return json({ error: "يجب إرسال الصور بصيغة multipart/form-data" }, 400);
         }
 
         const form = await request.formData().catch(function () { return null; });
         if (!form) {
-          return json({ error: "تعذر قراءة بيانات الصورة" }, 400);
+          return json({ error: "تعذر قراءة بيانات الصور" }, 400);
         }
 
-        const file = form.get("file");
         const invoiceNumber = String(form.get("invoice_number") || "").trim();
-
-        if (!file || typeof file.arrayBuffer !== "function") {
-          return json({ error: "لم يتم اختيار صورة" }, 400);
-        }
-
         if (!invoiceNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(invoiceNumber)) {
           return json({ error: "رقم الفاتورة غير صحيح" }, 400);
         }
 
-        const mimeType = String(file.type || "").toLowerCase();
+        // يدعم الملف القديم (file) وكذلك عدة ملفات تحت file أو files أو photo.
+        const submittedFiles = [];
+        for (const fieldName of ["file", "files", "photo", "photos"]) {
+          for (const item of form.getAll(fieldName)) {
+            if (item && typeof item.arrayBuffer === "function" && Number(item.size) >= 0) {
+              submittedFiles.push(item);
+            }
+          }
+        }
+        // يدعم كذلك أسماء حقول مرقمة مثل photo_1 وphoto_2.
+        for (const [fieldName, item] of form.entries()) {
+          if (/^(file|photo|image)[_-]?\d+$/i.test(fieldName) && item && typeof item.arrayBuffer === "function" && Number(item.size) >= 0) {
+            submittedFiles.push(item);
+          }
+        }
+
+        const files = submittedFiles.filter((item, index, all) => all.indexOf(item) === index);
+        if (!files.length) {
+          return json({ error: "لم يتم اختيار أي صورة" }, 400);
+        }
+        if (files.length > 10) {
+          return json({ error: "الحد الأقصى 10 صور في الطلب الواحد" }, 400);
+        }
+
         const allowedTypes = {
           "image/jpeg": "jpg",
           "image/png": "png",
           "image/webp": "webp"
         };
-
-        if (!allowedTypes[mimeType]) {
-          return json({ error: "الصيغ المسموحة: JPG وPNG وWEBP" }, 400);
-        }
-
-        if (file.size > 8 * 1024 * 1024) {
-          return json({ error: "حجم الصورة يجب ألا يتجاوز 8 ميجابايت" }, 400);
-        }
-
         const bucketName = "gate-photos 3";
-        const objectPath = "invoices/" + invoiceNumber + "." + allowedTypes[mimeType];
-        const storagePath = "/storage/v1/object/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
-        const uploadResponse = await supabaseRequest(storagePath, {
-          method: "POST",
-          headers: {
-            apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-            Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
-            "Content-Type": mimeType,
-            "x-upsert": "true",
-            "Cache-Control": "3600"
-          },
-          body: await file.arrayBuffer()
-        });
+        const uploadedUrls = [];
+        const requestedIndex = String(form.get("photo_index") || form.get("image_index") || "").trim();
 
-        const uploadData = await uploadResponse.json().catch(function () { return null; });
-        if (!uploadResponse.ok) {
-          return json({
-            error: (uploadData && (uploadData.message || uploadData.error)) || "فشل رفع الصورة إلى التخزين السحابي"
-          }, 502);
+        for (let i = 0; i < files.length; i += 1) {
+          const file = files[i];
+          const mimeType = String(file.type || "").toLowerCase();
+          if (!allowedTypes[mimeType]) {
+            return json({ error: "الصيغ المسموحة: JPG وPNG وWEBP" }, 400);
+          }
+          if (file.size > 8 * 1024 * 1024) {
+            return json({ error: "حجم كل صورة يجب ألا يتجاوز 8 ميجابايت" }, 400);
+          }
+
+          let objectName;
+          if (files.length > 1) {
+            objectName = invoiceNumber + "-photo-" + (i + 1) + "." + allowedTypes[mimeType];
+          } else if (requestedIndex && /^\d{1,3}$/.test(requestedIndex)) {
+            objectName = invoiceNumber + "-photo-" + requestedIndex + "." + allowedTypes[mimeType];
+          } else {
+            // الحفاظ على مسار الصور القديمة عند استخدام واجهة الرفع القديمة.
+            objectName = invoiceNumber + "." + allowedTypes[mimeType];
+          }
+
+          const objectPath = "invoices/" + objectName;
+          const storagePath = "/storage/v1/object/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
+          const uploadResponse = await supabaseRequest(storagePath, {
+            method: "POST",
+            headers: {
+              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+              Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
+              "Content-Type": mimeType,
+              "x-upsert": "true",
+              "Cache-Control": "3600"
+            },
+            body: await file.arrayBuffer()
+          });
+
+          const uploadData = await uploadResponse.json().catch(function () { return null; });
+          if (!uploadResponse.ok) {
+            return json({
+              error: (uploadData && (uploadData.message || uploadData.error)) || "فشل رفع الصورة رقم " + (i + 1),
+              uploaded_count: uploadedUrls.length,
+              gate_photo_urls: uploadedUrls
+            }, 502);
+          }
+
+          const publicUrl = SUPABASE_URL + "/storage/v1/object/public/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
+          uploadedUrls.push(publicUrl);
         }
 
-        const publicUrl = SUPABASE_URL + "/storage/v1/object/public/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
-
-        return json({ success: true, invoice_number: invoiceNumber, gate_photo_url: publicUrl });
+        return json({
+          success: true,
+          invoice_number: invoiceNumber,
+          gate_photo_urls: uploadedUrls,
+          gate_photo_url: uploadedUrls[0],
+          uploaded_count: uploadedUrls.length
+        });
       }
 
       if (
