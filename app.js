@@ -12,11 +12,11 @@
 
   const $ = (id) => document.getElementById(id);
 
-  // Navy/blue compact driver UI theme. Presentation only; order and API logic remain unchanged.
-  function installFroogNavyDriverTheme() {
-    if (document.getElementById('froog-navy-driver-theme')) return;
+  // Froog Alzain green-and-white driver UI theme. Presentation only; order and API logic remain unchanged.
+  function installFroogGreenDriverTheme() {
+    if (document.getElementById('froog-green-driver-theme')) return;
     const style = document.createElement('style');
-    style.id = 'froog-navy-driver-theme';
+    style.id = 'froog-green-driver-theme';
     style.textContent = `
       :root{--fz-navy:#082f55;--fz-navy2:#0b3a66;--fz-blue:#1264e8;--fz-blue2:#dbeafe;--fz-line:#d9e6f5;--fz-muted:#647b98;--fz-bg:#f3f7fc;--fz-ink:#102a49}
       body{background:var(--fz-bg);color:var(--fz-ink)}
@@ -200,10 +200,42 @@
       .invoice-detail-modal .order-card .order-actions>*{min-width:0!important;width:100%!important;min-height:42px!important;border-radius:11px!important}
       .invoice-detail-modal .order-card button,.invoice-detail-modal .order-card a{pointer-events:none!important}
       @media(max-width:480px){.main-content{padding:9px 8px 22px!important}.order-card{padding:9px!important}.invoice-detail-backdrop{padding:8px!important}.invoice-detail-modal{width:100%!important;max-width:430px!important;max-height:94dvh!important;padding:9px!important;border-radius:17px!important}.invoice-detail-modal .order-card{padding:9px!important;gap:8px!important}.invoice-detail-modal .order-card .customer-location-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.invoice-detail-modal .order-card .order-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.invoice-detail-modal .order-card .order-total strong{font-size:19px!important}}
+      /* Final palette pass: calm emerald green + soft white, matching the approved Froog Alzain reference */
+      :root{--fz-navy:#075c39;--fz-navy2:#087a4a;--fz-blue:#087a4a;--fz-blue2:#e4f5e9;--fz-line:#d8eadf;--fz-muted:#668173;--fz-bg:#f4faf6;--fz-ink:#173b2a}
+      body{background:#f4faf6!important;color:#173b2a!important}
+      .app-shell{background:linear-gradient(180deg,#eaf6ee 0,#f8fcf9 260px,#f4faf6 100%)!important}
+      .login-view{background:linear-gradient(145deg,#075c39 0%,#0b8b53 48%,#e9f7ee 100%)!important}
+      .login-background{background:radial-gradient(circle at 20% 12%,rgba(255,255,255,.24),transparent 32%),linear-gradient(145deg,#075c39,#0b8b53 60%,#e5f6eb)!important}
+      .brand-icon{background:linear-gradient(145deg,#075c39,#0b8b53)!important;box-shadow:0 8px 20px rgba(8,122,74,.2)!important}
+      .brand-name,.login-heading h1,.welcome-section h1,.order-number strong,.customer-main h2{color:#075c39!important}
+      .brand-subtitle,.login-heading p,.login-footer{color:#668173!important}
+      .input-wrap{border-color:#d6e9dc!important;background:#f8fcf9!important}
+      .input-wrap:focus-within{border-color:#6cbd8b!important;box-shadow:0 0 0 3px rgba(8,122,74,.12)!important}
+      .login-btn{background:linear-gradient(135deg,#0b8b53,#05683e)!important;box-shadow:0 9px 20px rgba(8,122,74,.2)!important}
+      .topbar{background:linear-gradient(110deg,#075c39,#07834f 72%,#15945c)!important}
+      .icon-btn{background:rgba(255,255,255,.14)!important;border-color:rgba(255,255,255,.24)!important}
+      .welcome-section,.stat-card{border-color:#d8eadf!important;box-shadow:0 4px 15px rgba(13,91,51,.045)!important}
+      .orders-counter,.tabs{background:#edf7f0!important;border-color:#dceee2!important;color:#087443!important}
+      .tab{color:#4d6d5a!important}.tab.active{background:linear-gradient(135deg,#0b8b53,#05683e)!important;box-shadow:0 4px 10px rgba(8,122,74,.18)!important}
+      .order-card{background:rgba(255,255,255,.97)!important;border-color:#dceee2!important;box-shadow:0 3px 12px rgba(13,91,51,.055)!important}
+      .order-card:before{background:#b7e8c7!important}.order-card.is-done:before{background:#07834f!important}
+      .customer-avatar,.call-btn,.location-btn{background:#e8f7ed!important;color:#087443!important;border-color:#d0edda!important}
+      .customer-main h2,.order-number strong{color:#075c39!important}
+      .phone-link{color:#4c7560!important}
+      .info-item,.products-section{background:#f4faf5!important;border-color:#e1f0e5!important}
+      .info-label{color:#688675!important}.info-item strong,.product-value{color:#214c32!important}
+      .order-total{background:#e7f8ec!important;border-color:#bfe8cb!important;color:#4d7560!important}
+      .order-total strong{color:#087443!important}
+      .primary-btn,.success-btn,.deliver-btn,.order-actions .primary,.order-actions .success{background:linear-gradient(135deg,#0b8b53,#05683e)!important;border-color:#0b8b53!important;color:#fff!important}
+      .invoice-detail-backdrop{background:rgba(10,44,27,.54)!important;backdrop-filter:blur(6px)!important}
+      .invoice-detail-modal{background:rgba(255,255,255,.985)!important;border-color:#d1ead9!important}
+      .invoice-detail-close{background:#e8f7ed!important;color:#087443!important;border-color:#ccebd5!important}
+      .invoice-detail-modal .order-card{background:#fff!important;border-color:#e0eee4!important}
+      @media(max-width:480px){.main-content{padding:9px 8px 22px!important}.order-card{padding:9px!important}.invoice-detail-modal{max-width:430px!important}}
     `;
     document.head.appendChild(style);
   }
-  installFroogNavyDriverTheme();
+  installFroogGreenDriverTheme();
 
   // Lock the page behind the invoice modal and restore its exact scroll position on close.
   let invoiceModalScrollY = 0;
