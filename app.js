@@ -2076,20 +2076,6 @@
       .master-table tbody tr.master-transfer-received td{background:#eaf8ef!important;color:#155b32;border-bottom-color:#c8ebd2}
       .master-table tbody tr.master-transfer-pending:hover td{background:#ffe3e3!important}
       .master-table tbody tr.master-transfer-received:hover td{background:#d9f2e1!important}
-      /* عرض مختصر للفواتير في الماستر: التفاصيل الكاملة تظهر داخل النافذة عند الضغط */
-      .master-table thead th:nth-child(3),.master-table tbody td:nth-child(3),
-      .master-table thead th:nth-child(4),.master-table tbody td:nth-child(4),
-      .master-table thead th:nth-child(5),.master-table tbody td:nth-child(5),
-      .master-table thead th:nth-child(7),.master-table tbody td:nth-child(7),
-      .master-table thead th:nth-child(10),.master-table tbody td:nth-child(10){display:none!important}
-      .master-table{min-width:650px!important;table-layout:auto}
-      .master-table th,.master-table td{padding:8px 10px!important}
-      .master-table tbody tr{cursor:pointer;transition:background .15s ease}
-      .master-table tbody tr:not(:has(button:hover)):hover td{filter:brightness(.98)}
-      .master-table tbody tr td:first-child{border-right:3px solid #16834b}
-      .master-table .master-edit-row{display:flex;gap:6px;flex-wrap:wrap}
-      .master-table .master-view{background:#e8f7ed!important;color:#126b3b!important;border:1px solid #b9e5c8!important;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer}
-      body.master-modal-locked{overflow:hidden!important;position:fixed!important;width:100%!important;left:0!important;right:0!important}
       .master-badge{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:750;white-space:nowrap}
       .master-badge.paid{background:#fff0f0;color:#c62828;border:1px solid #ffc7c7;box-shadow:0 2px 7px rgba(198,40,40,.10)}
       .paid-advance-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#fff1f1,#ffe2e2);color:#c62828;border:1px solid #ffb9b9;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;box-shadow:0 3px 10px rgba(198,40,40,.10);white-space:nowrap}
@@ -2173,7 +2159,7 @@
       .master-monthly-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 14px;background:#f8fafc;border-bottom:1px solid #e5ebf0;font-weight:900}
       .master-monthly-section-head.pending{background:#fff1f1;color:#a51d1d}.master-monthly-section-head.received{background:#effaf3;color:#166534}
       .master-monthly-table-wrap{overflow:auto}.master-monthly-table{width:100%;min-width:850px;border-collapse:collapse}.master-monthly-table th,.master-monthly-table td{text-align:right;padding:11px 10px;border-bottom:1px solid #edf1f5;white-space:nowrap;font-size:12px}.master-monthly-table th{background:#fbfcfd;color:#64748b;font-size:11px}.master-monthly-table tbody tr:last-child td{border-bottom:0}.master-monthly-empty{text-align:center;padding:24px!important;color:#64748b;white-space:normal!important}.master-monthly-status{display:inline-flex;border-radius:999px;padding:5px 9px;font-weight:900;font-size:11px}.master-monthly-status.pending{background:#fff0f0;color:#b42318}.master-monthly-status.received{background:#e8f7ee;color:#16723b}
-      .master-driver-departures{display:none;background:#fff;border:1px solid #dce8f1;border-radius:16px;padding:16px;box-shadow:0 6px 20px rgba(30,49,67,.05)}
+      .master-driver-departures{display:none!important;background:#fff;border:1px solid #dce8f1;border-radius:16px;padding:16px;box-shadow:0 6px 20px rgba(30,49,67,.05)}
       .master-departure-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
       .master-departure-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
       .master-departure-stat{border:1px solid #dbeafe;background:#eff6ff;border-radius:12px;padding:12px}
@@ -2245,7 +2231,6 @@
           <button class="master-nav-btn" type="button" data-master-view-tab="transfers">🏦 تحويلات سابقة</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="monthly-transfers">📅 التحويلات الشهرية</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="balances">💰 أرصدة العملاء</button>
-          <button class="master-nav-btn" type="button" data-master-view-tab="departures">🚗 تحرك المندوبين</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="reports">📊 التقارير والإحصائيات</button>
         </nav>
 
@@ -2266,6 +2251,7 @@
             <div class="master-stat pending-bank"><div class="master-stat-label">المتبقي من التحويلات</div><div class="master-stat-value" id="master-bank-pending">0 درهم</div><div class="master-stat-hint">تحويلات لم يتم تأكيد استلامها</div></div>
             <div class="master-stat collected"><div class="master-stat-label">إجمالي المبالغ المسجلة/المستلمة</div><div class="master-stat-value" id="master-total-received">0 درهم</div><div class="master-stat-hint">الكاش المسجل + التحويلات المؤكدة</div></div>
             <div class="master-stat delivered"><div class="master-stat-label">تم التسليم</div><div class="master-stat-value" id="master-delivered">0</div><div class="master-stat-hint">عدد الفواتير المسلّمة</div></div>
+            <div class="master-stat count"><div class="master-stat-label">تحركات المندوبين في اليوم</div><div class="master-stat-value" id="master-departure-day-stat">0</div><div class="master-stat-hint">حسب تاريخ تسجيل التحرك</div></div>
           </section>
 
           <section class="master-customer-balances" id="master-customer-balances">
@@ -2454,6 +2440,7 @@
     if (monthPicker) monthPicker.value = masterDateInput(new Date()).slice(0, 7);
 
     loadMasterOrders();
+    loadMasterDepartures({ quiet: true });
     loadMasterDepartures();
     if (state.masterDeparturePoll) clearInterval(state.masterDeparturePoll);
     state.masterDeparturePoll = setInterval(() => {
@@ -2499,7 +2486,10 @@
       masterDepartureInitialLoadDone = true;
       const today = new Date();
       const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-      const todayCount = masterDriverDepartures.filter(row => String(row.departed_at || '').slice(0,10) === todayKey).length;
+      const selectedDate = String($('master-search-date')?.value || '').trim();
+      const dailyKey = selectedDate || todayKey;
+      const todayCount = masterDriverDepartures.filter(row => masterDateInput(row.departed_at) === dailyKey).length;
+      if ($('master-departure-day-stat')) $('master-departure-day-stat').textContent = todayCount.toLocaleString('ar-EG');
       if ($('master-departure-count')) $('master-departure-count').textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
       if ($('master-departure-today')) $('master-departure-today').textContent = todayCount.toLocaleString('ar-EG');
       if ($('master-departure-last')) $('master-departure-last').textContent = masterDriverDepartures[0]?.departed_at ? new Date(masterDriverDepartures[0].departed_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) : '—';
@@ -2684,25 +2674,11 @@
       const customerName = String(order.customer_name ?? '').toLowerCase();
       const customerPhone = String(order.phone ?? '').toLowerCase();
 
-      // العرض الافتراضي: فواتير اليوم كلها، ومعها الفواتير القديمة غير المسلّمة
-      // والتحويلات البنكية التي لم يتم تأكيد استلامها. البحث بالتاريخ يعرض الأرشيف كاملًا.
+      // الإحصائيات والقائمة الافتراضية تخص الفواتير المسجلة في تاريخ اليوم فقط.
+      // التحويلات السابقة غير المستلمة تظل ظاهرة في قسمها المستقل ولا تُحذف.
       if (!hasExplicitSearch) {
         const orderDate = masterDateInput(order.created_at);
-        const delivered = isDelivered(order.delivery_status);
-        const transferPending =
-          !isPaidInAdvance(order) &&
-          normalizePayment(order.payment_method) === 'bank_transfer' &&
-          order.bank_transfer_received !== true;
-
-        // الفواتير القديمة ذات التحويل البنكي غير المستلم تُعرض في لوحة مستقلة على اليمين.
-        // فواتير اليوم تظل في الجدول الرئيسي، وكذلك الفواتير القديمة غير المسلّمة التي ليست تحويلًا معلقًا.
-        if (orderDate !== today && transferPending) {
-          return false;
-        }
-
-        if (orderDate !== today && delivered && !transferPending) {
-          return false;
-        }
+        if (orderDate !== today) return false;
       }
 
       if (number && !orderNumber.includes(number)) {
@@ -2765,6 +2741,9 @@
     const delivered = orders.filter(
       (order) => isDelivered(order.delivery_status)
     ).length;
+    const departureDate = String($('master-search-date')?.value || '').trim() || masterDateInput(new Date());
+    const departureCountForDay = masterDriverDepartures.filter((row) => masterDateInput(row.departed_at) === departureDate).length;
+    if ($('master-departure-day-stat')) $('master-departure-day-stat').textContent = departureCountForDay.toLocaleString('ar-EG');
 
     const moneyText = (value) =>
       `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
@@ -3156,20 +3135,6 @@
         transferButton.addEventListener('click', () => setMasterTransferReceived(order, true, transferButton));
       }
 
-      tr.setAttribute('tabindex', '0');
-      tr.setAttribute('role', 'button');
-      tr.setAttribute('aria-label', `فتح تفاصيل الفاتورة ${order.order_number ?? order.id ?? ''}`);
-      tr.addEventListener('click', (event) => {
-        if (event.target.closest('button, a, input, select, textarea, label')) return;
-        openMasterOrder(order);
-      });
-      tr.addEventListener('keydown', (event) => {
-        if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button, a, input, select, textarea, label')) {
-          event.preventDefault();
-          openMasterOrder(order);
-        }
-      });
-
       body.appendChild(tr);
     });
   }
@@ -3432,7 +3397,6 @@
       () => deleteMasterOrder(order)
     );
 
-    lockMasterBackground();
     modal.classList.add('open');
   }
 
@@ -3699,7 +3663,6 @@
     );
 
     // Ensure the same modal becomes visible when editing directly from the table.
-    lockMasterBackground();
     $('master-modal')?.classList.add('open');
   }
 
@@ -3899,28 +3862,10 @@
     }
   }
 
-  let masterModalScrollY = 0;
-
-  function lockMasterBackground() {
-    if (document.body.classList.contains('master-modal-locked')) return;
-    masterModalScrollY = window.scrollY || window.pageYOffset || 0;
-    document.body.dataset.masterScrollY = String(masterModalScrollY);
-    document.body.style.top = `-${masterModalScrollY}px`;
-    document.body.classList.add('master-modal-locked');
-  }
-
-  function unlockMasterBackground() {
-    if (!document.body.classList.contains('master-modal-locked')) return;
-    const savedY = Number(document.body.dataset.masterScrollY || masterModalScrollY || 0);
-    document.body.classList.remove('master-modal-locked');
-    document.body.style.removeProperty('top');
-    delete document.body.dataset.masterScrollY;
-    window.scrollTo(0, savedY);
-  }
-
   function closeMasterModal() {
-    $('master-modal')?.classList.remove('open');
-    unlockMasterBackground();
+    $('master-modal')?.classList.remove(
+      'open'
+    );
   }
 
   function masterLogout(message = '') {
