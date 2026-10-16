@@ -159,6 +159,47 @@
       .invoice-detail-close{width:100%!important;margin:0 0 9px!important;border:0!important;border-radius:9px!important;padding:10px!important;background:#16803d!important;color:#fff!important;font-weight:700!important;cursor:pointer!important}
       .invoice-detail-modal .order-card button,.invoice-detail-modal .order-card a{pointer-events:none!important}
       @media(max-width:480px){.invoice-detail-backdrop{padding:8px!important;align-items:center!important}.invoice-detail-modal{width:100%!important;max-width:420px!important;max-height:94dvh!important;padding:8px!important;border-radius:13px!important;overflow-y:auto!important;overflow-x:hidden!important}.invoice-detail-modal .order-card .customer-location-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.invoice-detail-modal .order-card .order-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.invoice-detail-modal .order-card{overflow-wrap:anywhere!important}}
+      /* Froog Alzain polished reference layout: compact order cards + clean detail modal */
+      .topbar{background:linear-gradient(110deg,#007a4b,#07834f 68%,#15945c)!important;color:#fff!important;box-shadow:0 5px 18px rgba(0,91,53,.14)!important}
+      .main-content{max-width:1080px!important;padding:12px 12px 28px!important}
+      .welcome-section{border-radius:18px!important;background:rgba(255,255,255,.94)!important;border-color:#d8eee0!important}
+      .tabs{display:flex!important;gap:7px!important;background:#f0f7f2!important;border-color:#e0eee4!important}
+      .tab{color:#476756!important}
+      .tab.active{background:linear-gradient(135deg,#07834f,#006b40)!important;color:#fff!important}
+      .order-card{border-radius:15px!important;padding:10px!important;background:rgba(255,255,255,.96)!important;border:1px solid #dceee2!important;box-shadow:0 3px 12px rgba(13,91,51,.055)!important;backdrop-filter:blur(8px)!important}
+      .order-card:before{background:#b7e8c7!important;width:4px!important}
+      .order-card.is-done:before{background:#07834f!important}
+      .order-card:not(.is-expanded) .customer-row{display:flex!important;align-items:center!important;padding:0 0 7px!important;border-bottom:1px solid #edf5ef!important}
+      .order-card:not(.is-expanded) .customer-main h2{font-size:14px!important;color:#164d31!important}
+      .order-card:not(.is-expanded) .phone-link{font-size:11px!important;color:#4c7560!important}
+      .order-card:not(.is-expanded) .order-number strong{color:#006b40!important;font-size:15px!important}
+      .order-card:not(.is-expanded) .delivery-status{background:#dff6e6!important;color:#087443!important;border-color:#c4ebd0!important}
+      .order-card:not(.is-expanded) .order-total{background:#eaf8ee!important;border-color:#ccebd5!important;border-radius:11px!important;padding:7px 10px!important}
+      .order-card:not(.is-expanded) .order-total strong{color:#087443!important;font-size:15px!important}
+      .order-card:not(.is-expanded) .customer-avatar,.order-card:not(.is-expanded) .call-btn,.order-card:not(.is-expanded) .location-btn{background:#e8f7ed!important;color:#087443!important;border-color:#d0edda!important}
+      .invoice-detail-backdrop{background:rgba(10,44,27,.54)!important;backdrop-filter:blur(6px)!important;padding:16px!important;align-items:center!important;justify-content:center!important}
+      .invoice-detail-modal{width:min(560px,100%)!important;max-height:92dvh!important;overflow-x:hidden!important;overflow-y:auto!important;background:rgba(255,255,255,.985)!important;border:1px solid #d1ead9!important;border-radius:22px!important;padding:14px!important;box-shadow:0 24px 80px rgba(0,45,25,.28)!important}
+      .invoice-detail-close{width:auto!important;min-width:94px!important;float:left!important;margin:0 0 10px!important;padding:9px 15px!important;border-radius:11px!important;background:#e8f7ed!important;color:#087443!important;border:1px solid #ccebd5!important;font-weight:900!important}
+      .invoice-detail-modal .order-card{clear:both!important;display:flex!important;flex-direction:column!important;gap:10px!important;width:100%!important;padding:12px!important;border-radius:16px!important;background:#fff!important;border:1px solid #e0eee4!important;box-shadow:none!important}
+      .invoice-detail-modal .order-card:before{display:none!important}
+      .invoice-detail-modal .order-card .customer-row{display:flex!important;align-items:center!important;gap:10px!important;padding-bottom:10px!important;border-bottom:1px solid #eaf3ec!important}
+      .invoice-detail-modal .order-card .customer-main h2{font-size:17px!important;color:#164d31!important}
+      .invoice-detail-modal .order-card .customer-location-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+      .invoice-detail-modal .order-card .info-item{background:#f4faf5!important;border:1px solid #e1f0e5!important;border-radius:12px!important;padding:9px!important}
+      .invoice-detail-modal .order-card .info-label{color:#688675!important;font-size:10px!important}
+      .invoice-detail-modal .order-card .info-item strong{color:#214c32!important;font-size:12px!important}
+      .invoice-detail-modal .order-card .products-section{display:block!important;background:#f2faf4!important;border:1px solid #dcefe1!important;border-radius:13px!important;padding:10px!important}
+      .invoice-detail-modal .order-card .products-section-title strong{color:#087443!important;font-size:13px!important}
+      .invoice-detail-modal .order-card .product-value{color:#214c32!important;font-size:13px!important;line-height:1.75!important}
+      .invoice-detail-modal .order-card .order-details{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+      .invoice-detail-modal .order-card .note-item{background:#f7faf8!important;border-color:#e2eee6!important}
+      .invoice-detail-modal .order-card .order-total{background:#e7f8ec!important;border:1px solid #bfe8cb!important;border-radius:13px!important;padding:12px!important}
+      .invoice-detail-modal .order-card .order-total strong{font-size:21px!important;color:#087443!important}
+      .invoice-detail-modal .order-card .payment-section{display:block!important;border-top:1px solid #e5f0e8!important;padding-top:10px!important}
+      .invoice-detail-modal .order-card .order-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+      .invoice-detail-modal .order-card .order-actions>*{min-width:0!important;width:100%!important;min-height:42px!important;border-radius:11px!important}
+      .invoice-detail-modal .order-card button,.invoice-detail-modal .order-card a{pointer-events:none!important}
+      @media(max-width:480px){.main-content{padding:9px 8px 22px!important}.order-card{padding:9px!important}.invoice-detail-backdrop{padding:8px!important}.invoice-detail-modal{width:100%!important;max-width:430px!important;max-height:94dvh!important;padding:9px!important;border-radius:17px!important}.invoice-detail-modal .order-card{padding:9px!important;gap:8px!important}.invoice-detail-modal .order-card .customer-location-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.invoice-detail-modal .order-card .order-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.invoice-detail-modal .order-card .order-total strong{font-size:19px!important}}
     `;
     document.head.appendChild(style);
   }
