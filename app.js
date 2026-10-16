@@ -967,6 +967,7 @@
       .order-card.is-fullscreen-invoice .driver-products-tables { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; direction:rtl!important; gap:8px!important; width:100%!important; min-width:0!important; align-items:start!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables.single-table { grid-template-columns:minmax(0,1fr)!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables > .products-section { display:block!important; width:100%!important; min-width:0!important; padding:7px!important; border:1px solid #cfe0f5!important; border-radius:10px!important; background:#fff!important; box-sizing:border-box!important; overflow:hidden!important; }
+      .order-card.is-fullscreen-invoice .driver-products-tables > .products-section.is-empty-product-table { display:none!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables .driver-product-table { width:100%!important; table-layout:fixed!important; border-collapse:collapse!important; font-size:14px!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables .driver-product-table th { padding:7px 3px!important; font-size:13px!important; line-height:1.3!important; background:#eaf2ff!important; color:#173b68!important; border:1px solid #d5e1f1!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables .driver-product-table td { padding:8px 3px!important; font-size:15px!important; line-height:1.45!important; font-weight:900!important; border:1px solid #dfe7f1!important; overflow-wrap:anywhere!important; }
@@ -1351,6 +1352,9 @@
         const productsWrapper = document.createElement('div');
         productsWrapper.className = 'driver-products-tables';
         if (!(hasChicken && hasCuts)) productsWrapper.classList.add('single-table');
+        if (chickenSection) chickenSection.classList.toggle('is-empty-product-table', !hasChicken);
+        if (cutsSection) cutsSection.classList.toggle('is-empty-product-table', !hasCuts);
+        productsWrapper.style.display = (hasChicken || hasCuts) ? 'grid' : 'none';
         const firstSection = chickenSection.parentNode === cutsSection.parentNode
           ? (chickenSection.compareDocumentPosition(cutsSection) & Node.DOCUMENT_POSITION_FOLLOWING
               ? chickenSection
