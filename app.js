@@ -2076,6 +2076,20 @@
       .master-table tbody tr.master-transfer-received td{background:#eaf8ef!important;color:#155b32;border-bottom-color:#c8ebd2}
       .master-table tbody tr.master-transfer-pending:hover td{background:#ffe3e3!important}
       .master-table tbody tr.master-transfer-received:hover td{background:#d9f2e1!important}
+      /* عرض مختصر للفواتير في الماستر: التفاصيل الكاملة تظهر داخل النافذة عند الضغط */
+      .master-table thead th:nth-child(3),.master-table tbody td:nth-child(3),
+      .master-table thead th:nth-child(4),.master-table tbody td:nth-child(4),
+      .master-table thead th:nth-child(5),.master-table tbody td:nth-child(5),
+      .master-table thead th:nth-child(7),.master-table tbody td:nth-child(7),
+      .master-table thead th:nth-child(10),.master-table tbody td:nth-child(10){display:none!important}
+      .master-table{min-width:650px!important;table-layout:auto}
+      .master-table th,.master-table td{padding:8px 10px!important}
+      .master-table tbody tr{cursor:pointer;transition:background .15s ease}
+      .master-table tbody tr:not(:has(button:hover)):hover td{filter:brightness(.98)}
+      .master-table tbody tr td:first-child{border-right:3px solid #16834b}
+      .master-table .master-edit-row{display:flex;gap:6px;flex-wrap:wrap}
+      .master-table .master-view{background:#e8f7ed!important;color:#126b3b!important;border:1px solid #b9e5c8!important;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer}
+      body.master-modal-locked{overflow:hidden!important;position:fixed!important;width:100%!important;left:0!important;right:0!important}
       .master-badge{display:inline-flex;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:750;white-space:nowrap}
       .master-badge.paid{background:#fff0f0;color:#c62828;border:1px solid #ffc7c7;box-shadow:0 2px 7px rgba(198,40,40,.10)}
       .paid-advance-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#fff1f1,#ffe2e2);color:#c62828;border:1px solid #ffb9b9;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;box-shadow:0 3px 10px rgba(198,40,40,.10);white-space:nowrap}
@@ -2417,9 +2431,6 @@
       button.addEventListener('click', () => setMasterView(button.dataset.masterGo));
     });
     $('master-modal-close')?.addEventListener('click', closeMasterModal);
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && $('master-modal')?.classList.contains('open')) closeMasterModal();
-    });
 
     $('master-modal')?.addEventListener('click', (event) => {
       if (event.target.id === 'master-modal') {
@@ -2492,18 +2503,11 @@
       if ($('master-departure-count')) $('master-departure-count').textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
       if ($('master-departure-today')) $('master-departure-today').textContent = todayCount.toLocaleString('ar-EG');
       if ($('master-departure-last')) $('master-departure-last').textContent = masterDriverDepartures[0]?.departed_at ? new Date(masterDriverDepartures[0].departed_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) : '—';
-      // يعرض الماستر تحركات اليوم فقط؛ السجلات القديمة تبقى محفوظة ولا تُحذف.
-      const todaysDepartures = masterDriverDepartures.filter(row => {
-        const date = new Date(row.departed_at || '');
-        if (Number.isNaN(date.getTime())) return false;
-        const localKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-        return localKey === todayKey;
-      });
-      if (!todaysDepartures.length) {
-        list.innerHTML = '<div class="master-departure-empty">لا توجد تحركات مسجلة اليوم. تظهر التحركات في الماستر خلال يوم تسجيلها فقط.</div>';
+      if (!masterDriverDepartures.length) {
+        list.innerHTML = '<div class="master-departure-empty">لا توجد تحركات مسجلة حتى الآن.</div>';
         return;
       }
-      list.innerHTML = todaysDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
+      list.innerHTML = masterDriverDepartures.map(row => `<article class="master-departure-card"><div><small>الفاتورة</small><strong>${masterEscape(row.invoice_number || row.order_id || '—')}</strong></div><div><small>العميل</small><strong>${masterEscape(row.customer_name || '—')}</strong></div><div><small>المندوب</small><strong>${masterEscape(row.driver_name || row.sheet_name || '—')}</strong></div><div><small>وقت التحرك</small><strong>${masterEscape(masterDate(row.departed_at))}</strong></div><div><small>الإمارة / المنطقة</small><strong>${masterEscape([row.emirate,row.area].filter(Boolean).join(' / ') || '—')}</strong></div><div><small>الهاتف</small><strong dir="ltr">${masterEscape(row.phone || '—')}</strong></div><div><small>الإجمالي</small><strong>${masterEscape(formatTotal(row.total))}</strong></div><div><small>الحالة</small><strong style="color:#067647">🚗 متوجه للعميل</strong></div></article>`).join('');
       if (newDepartureCount > 0) {
         const notice = document.createElement('div');
         notice.className = 'master-departure-empty';
@@ -3028,9 +3032,6 @@
 
       const tr =
         document.createElement('tr');
-      tr.classList.add('master-invoice-compact-row');
-      tr.title = 'اضغط لفتح تفاصيل الفاتورة';
-      tr.style.cursor = 'pointer';
 
       if (!paidInAdvance && payment === 'bank_transfer') {
         tr.classList.add(order.bank_transfer_received === true
@@ -3133,11 +3134,6 @@
         </td>
       `;
 
-      tr.addEventListener('click', (event) => {
-        if (event.target.closest('button, a, input, select, textarea, label')) return;
-        openMasterOrder(order);
-      });
-
       const viewButton =
         tr.querySelector(
           '[data-master-view]'
@@ -3159,6 +3155,20 @@
       if (transferButton) {
         transferButton.addEventListener('click', () => setMasterTransferReceived(order, true, transferButton));
       }
+
+      tr.setAttribute('tabindex', '0');
+      tr.setAttribute('role', 'button');
+      tr.setAttribute('aria-label', `فتح تفاصيل الفاتورة ${order.order_number ?? order.id ?? ''}`);
+      tr.addEventListener('click', (event) => {
+        if (event.target.closest('button, a, input, select, textarea, label')) return;
+        openMasterOrder(order);
+      });
+      tr.addEventListener('keydown', (event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button, a, input, select, textarea, label')) {
+          event.preventDefault();
+          openMasterOrder(order);
+        }
+      });
 
       body.appendChild(tr);
     });
@@ -3422,8 +3432,8 @@
       () => deleteMasterOrder(order)
     );
 
+    lockMasterBackground();
     modal.classList.add('open');
-    lockMasterBackgroundScroll();
   }
 
   function openMasterEdit(order) {
@@ -3689,6 +3699,7 @@
     );
 
     // Ensure the same modal becomes visible when editing directly from the table.
+    lockMasterBackground();
     $('master-modal')?.classList.add('open');
   }
 
@@ -3889,41 +3900,27 @@
   }
 
   let masterModalScrollY = 0;
-  let masterModalScrollLocked = false;
 
-  function lockMasterBackgroundScroll() {
-    if (masterModalScrollLocked) return;
+  function lockMasterBackground() {
+    if (document.body.classList.contains('master-modal-locked')) return;
     masterModalScrollY = window.scrollY || window.pageYOffset || 0;
-    const body = document.body;
-    body.dataset.masterPreviousPosition = body.style.position || '';
-    body.dataset.masterPreviousTop = body.style.top || '';
-    body.dataset.masterPreviousWidth = body.style.width || '';
-    body.dataset.masterPreviousOverflow = body.style.overflow || '';
-    body.style.position = 'fixed';
-    body.style.top = `-${masterModalScrollY}px`;
-    body.style.width = '100%';
-    body.style.overflow = 'hidden';
-    masterModalScrollLocked = true;
+    document.body.dataset.masterScrollY = String(masterModalScrollY);
+    document.body.style.top = `-${masterModalScrollY}px`;
+    document.body.classList.add('master-modal-locked');
   }
 
-  function unlockMasterBackgroundScroll() {
-    if (!masterModalScrollLocked) return;
-    const body = document.body;
-    body.style.position = body.dataset.masterPreviousPosition || '';
-    body.style.top = body.dataset.masterPreviousTop || '';
-    body.style.width = body.dataset.masterPreviousWidth || '';
-    body.style.overflow = body.dataset.masterPreviousOverflow || '';
-    delete body.dataset.masterPreviousPosition;
-    delete body.dataset.masterPreviousTop;
-    delete body.dataset.masterPreviousWidth;
-    delete body.dataset.masterPreviousOverflow;
-    masterModalScrollLocked = false;
-    window.scrollTo(0, masterModalScrollY);
+  function unlockMasterBackground() {
+    if (!document.body.classList.contains('master-modal-locked')) return;
+    const savedY = Number(document.body.dataset.masterScrollY || masterModalScrollY || 0);
+    document.body.classList.remove('master-modal-locked');
+    document.body.style.removeProperty('top');
+    delete document.body.dataset.masterScrollY;
+    window.scrollTo(0, savedY);
   }
 
   function closeMasterModal() {
     $('master-modal')?.classList.remove('open');
-    unlockMasterBackgroundScroll();
+    unlockMasterBackground();
   }
 
   function masterLogout(message = '') {
