@@ -135,8 +135,8 @@
       .stat-card{background:rgba(255,255,255,.86)!important;border-color:#d5e9d9!important}
       .stat-card strong{color:#14532d!important}
       @media(max-width:480px){.order-card{padding:8px!important;gap:5px!important}.customer-row{gap:7px!important}.customer-avatar{width:31px!important;height:31px!important;min-width:31px!important}.customer-main h2{font-size:13px!important}.info-item{padding:6px!important}.info-item strong{font-size:11px!important}.order-number strong{font-size:15px!important}.order-total strong{font-size:15px!important}}
-      /* الفاتورة مختصرة افتراضيًا؛ اضغط البطاقة لعرض كل التفاصيل ثم اضغط ثانية للإخفاء */
-      .order-card{cursor:pointer!important;scroll-margin-top:12px!important;transition:box-shadow .15s ease!important;transform:none!important}
+      /* بطاقة مختصرة ثابتة؛ التفاصيل تفتح كنافذة فوق الصفحة دون تحريك ترتيب الفواتير */
+      .order-card{cursor:pointer!important;transition:none!important;transform:none!important}
       .order-card:active{transform:none!important}
       .order-card:not(.is-expanded) .customer-location-grid,
       .order-card:not(.is-expanded) .products-section,
@@ -145,20 +145,63 @@
       .order-card:not(.is-expanded) .order-actions{display:none!important}
       .order-card:not(.is-expanded) .order-total{margin-top:4px!important}
       .order-card:not(.is-expanded) .customer-row{border-bottom:0!important;padding-bottom:0!important}
-      .order-card.is-expanded{box-shadow:0 5px 16px rgba(22,101,52,.10)!important}
       .order-card .order-total{display:flex!important}
+      .invoice-detail-backdrop{position:fixed!important;inset:0!important;z-index:999999!important;background:rgba(12,35,20,.48)!important;backdrop-filter:blur(3px)!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:14px!important;box-sizing:border-box!important}
+      .invoice-detail-modal{width:min(620px,100%)!important;max-height:90dvh!important;overflow:auto!important;background:#f5fff7!important;border:1px solid #a9d8b5!important;border-radius:16px!important;box-shadow:0 18px 60px rgba(0,0,0,.24)!important;padding:12px!important;box-sizing:border-box!important}
+      .invoice-detail-modal .order-card{display:flex!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;box-sizing:border-box!important;cursor:default!important}
+      .invoice-detail-modal .order-card .customer-location-grid,
+      .invoice-detail-modal .order-card .products-section,
+      .invoice-detail-modal .order-card .order-details,
+      .invoice-detail-modal .order-card .payment-section,
+      .invoice-detail-modal .order-card .order-actions{display:flex!important}
+      .invoice-detail-modal .order-card .order-actions{flex-wrap:wrap!important}
+      .invoice-detail-close{width:100%!important;margin:0 0 9px!important;border:0!important;border-radius:9px!important;padding:10px!important;background:#16803d!important;color:#fff!important;font-weight:700!important;cursor:pointer!important}
+      .invoice-detail-modal .order-card button,.invoice-detail-modal .order-card a{pointer-events:none!important}
+      @media(max-width:480px){.invoice-detail-backdrop{padding:8px!important}.invoice-detail-modal{max-height:94dvh!important;padding:8px!important;border-radius:13px!important}}
     `;
     document.head.appendChild(style);
   }
   installFroogNavyDriverTheme();
 
-  // Toggle invoice details only when the user clicks the card background/content.
-  // Buttons, links, payment controls and form fields keep their original actions.
+  // Open invoice details in a fixed overlay so expanding never pushes cards up/down.
   document.addEventListener('click', (event) => {
+    const close = event.target.closest?.('[data-invoice-detail-close]');
+    if (close) {
+      event.preventDefault();
+      event.stopPropagation();
+      close.closest('.invoice-detail-backdrop')?.remove();
+      return;
+    }
+    const backdrop = event.target.closest?.('.invoice-detail-backdrop');
+    if (backdrop && event.target === backdrop) {
+      backdrop.remove();
+      return;
+    }
     const card = event.target.closest?.('.order-card');
-    if (!card) return;
+    if (!card || card.closest('.invoice-detail-modal')) return;
     if (event.target.closest('button, a, input, select, textarea, label')) return;
-    card.classList.toggle('is-expanded');
+    event.preventDefault();
+    event.stopPropagation();
+    if (document.querySelector('.invoice-detail-backdrop')) return;
+    const backdropEl = document.createElement('div');
+    backdropEl.className = 'invoice-detail-backdrop';
+    const modal = document.createElement('div');
+    modal.className = 'invoice-detail-modal';
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'invoice-detail-close';
+    closeButton.setAttribute('data-invoice-detail-close', '1');
+    closeButton.textContent = 'إغلاق الفاتورة';
+    const clone = card.cloneNode(true);
+    clone.classList.add('is-expanded');
+    clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+    modal.appendChild(closeButton);
+    modal.appendChild(clone);
+    backdropEl.appendChild(modal);
+    document.body.appendChild(backdropEl);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') document.querySelector('.invoice-detail-backdrop')?.remove();
   });
 
   const normalizePayment = (value) => {
