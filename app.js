@@ -934,14 +934,34 @@
       .order-card.is-compact .invoice-expand-toggle { margin:6px 0 0; }
       .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
       html.driver-invoice-open, body.driver-invoice-open { overflow:hidden!important; overscroll-behavior:none!important; }
-      .order-card.is-fullscreen-invoice { position:fixed!important; top:1dvh!important; bottom:1dvh!important; left:8px!important; right:8px!important; z-index:2147483000!important; width:calc(100vw - 16px)!important; max-width:none!important; height:auto!important; min-height:0!important; max-height:none!important; margin:0 auto!important; padding:14px 12px calc(18px + env(safe-area-inset-bottom))!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:1px solid #dcfce7!important; border-radius:14px!important; background:#fff!important; box-shadow:0 0 0 8px rgba(15,23,42,.30)!important; display:flex!important; flex-direction:column!important; gap:10px!important; cursor:default!important; }
+      .order-card.is-fullscreen-invoice { position:fixed!important; top:env(safe-area-inset-top, 0px)!important; bottom:env(safe-area-inset-bottom, 0px)!important; left:6px!important; right:6px!important; z-index:2147483000!important; width:calc(100vw - 12px)!important; max-width:none!important; height:auto!important; min-height:0!important; max-height:none!important; margin:0 auto!important; padding:7px 8px 8px!important; box-sizing:border-box!important; overflow:hidden!important; overscroll-behavior:none!important; border:1px solid #dcfce7!important; border-radius:12px!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
+      .order-card.is-fullscreen-invoice .order-card-head { margin:0!important; gap:5px!important; }
+      .order-card.is-fullscreen-invoice .customer-row { margin:0!important; padding:4px 0!important; gap:7px!important; }
+      .order-card.is-fullscreen-invoice .customer-main h2 { font-size:15px!important; margin:0!important; line-height:1.25!important; }
+      .order-card.is-fullscreen-invoice .customer-location-grid { gap:5px!important; margin:0!important; }
+      .order-card.is-fullscreen-invoice .info-item { padding:5px 7px!important; gap:2px!important; }
+      .order-card.is-fullscreen-invoice .info-item strong { font-size:12px!important; line-height:1.25!important; }
+      .order-card.is-fullscreen-invoice .products-section { margin:0!important; padding:6px 8px!important; gap:4px!important; }
+      .order-card.is-fullscreen-invoice .products-section-title strong { font-size:13px!important; }
+      .order-card.is-fullscreen-invoice .product-value { font-size:15px!important; line-height:1.35!important; }
+      .order-card.is-fullscreen-invoice .order-details { margin:0!important; gap:4px!important; }
+      .order-card.is-fullscreen-invoice .order-details .info-item { padding:4px 7px!important; }
+      .order-card.is-fullscreen-invoice .order-total { margin:0!important; padding:6px 9px!important; }
+      .order-card.is-fullscreen-invoice .payment-section { margin:0!important; padding:5px 7px!important; gap:4px!important; }
+      .order-card.is-fullscreen-invoice .payment-buttons { gap:6px!important; }
+      .order-card.is-fullscreen-invoice .payment-btn { min-height:36px!important; padding:5px 7px!important; }
+      .order-card.is-fullscreen-invoice .invoice-fullscreen-head { flex:0 0 auto!important; padding:3px 0 5px!important; }
+      .order-card.is-fullscreen-invoice .invoice-fullscreen-close { min-height:34px!important; padding:5px 9px!important; font-size:12px!important; }
+      .order-card.is-fullscreen-invoice .btn-deliver { position:relative!important; bottom:auto!important; flex:0 0 auto!important; min-height:42px!important; margin-top:auto!important; box-shadow:none!important; }
+      .order-card.is-fullscreen-invoice .order-actions { flex:0 0 auto!important; margin:0!important; gap:6px!important; }
+      .order-card.is-fullscreen-invoice .location-btn { min-height:36px!important; }
       .order-card.is-fullscreen-invoice .invoice-expand-toggle { flex:0 0 auto; }
       .invoice-fullscreen-head { position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;box-sizing:border-box;padding:8px 0 10px;background:#fff;border-bottom:1px solid #dcfce7; }
       .invoice-fullscreen-title { color:#166534;font-size:15px;font-weight:900; }
       .invoice-fullscreen-close { border:0;border-radius:10px;background:#dcfce7;color:#166534;min-width:42px;min-height:40px;padding:8px 12px;font:inherit;font-size:14px;font-weight:900;cursor:pointer; }
       .order-card.is-fullscreen-invoice .btn-deliver { position:sticky!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;z-index:15!important;min-height:52px!important;box-shadow:0 -5px 18px rgba(255,255,255,.95)!important; }
       .order-card.is-fullscreen-invoice .invoice-expand-toggle { display:none!important; }
-      @media(min-width:700px){.order-card.is-fullscreen-invoice{left:50%!important;right:auto!important;top:1dvh!important;bottom:1dvh!important;height:auto!important;transform:translateX(-50%);width:min(680px,calc(100vw - 16px))!important;padding:20px!important;box-shadow:0 0 0 100vmax rgba(15,23,42,.62)!important;border-radius:18px!important;}}
+      @media(min-width:700px){.order-card.is-fullscreen-invoice{left:50%!important;right:auto!important;top:0!important;bottom:0!important;height:auto!important;transform:translateX(-50%);width:min(680px,calc(100vw - 12px))!important;padding:10px!important;box-shadow:0 0 0 100vmax rgba(15,23,42,.62)!important;border-radius:14px!important;}}
     `;
     document.head.appendChild(style);
   }
