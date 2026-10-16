@@ -964,58 +964,22 @@
       .invoice-fullscreen-close { border:0;border-radius:10px;background:#dcfce7;color:#166534;min-width:42px;min-height:40px;padding:8px 12px;font:inherit;font-size:14px;font-weight:900;cursor:pointer; }
       .order-card.is-fullscreen-invoice .btn-deliver { position:sticky!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;z-index:15!important;min-height:52px!important;box-shadow:0 -5px 18px rgba(255,255,255,.95)!important; }
       .order-card.is-fullscreen-invoice .invoice-expand-toggle { display:none!important; }
-      @media(min-width:700px){
-        .order-card.is-fullscreen-invoice{
-          left:50%!important;right:auto!important;top:16px!important;bottom:16px!important;
-          height:auto!important;max-height:calc(100dvh - 32px)!important;
-          transform:translateX(-50%);width:min(1040px,calc(100vw - 48px))!important;
-          padding:18px 20px!important;gap:12px!important;overflow-y:auto!important;
-          overflow-x:hidden!important;overscroll-behavior:contain!important;
-          box-shadow:0 0 0 100vmax rgba(15,23,42,.62)!important;border-radius:18px!important;
-          display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;
-          align-content:flex-start!important;align-items:stretch!important;
-        }
-        .order-card.is-fullscreen-invoice > .invoice-fullscreen-head,
-        .order-card.is-fullscreen-invoice > .driver-departure-box,
-        .order-card.is-fullscreen-invoice > .order-card-head,
-        .order-card.is-fullscreen-invoice > .customer-row,
-        .order-card.is-fullscreen-invoice > .customer-location-grid,
-        .order-card.is-fullscreen-invoice > .order-details,
-        .order-card.is-fullscreen-invoice > .order-total,
-        .order-card.is-fullscreen-invoice > .delivery-fee-row,
-        .order-card.is-fullscreen-invoice > .delivery-grand-total-row,
-        .order-card.is-fullscreen-invoice > .payment-section,
-        .order-card.is-fullscreen-invoice > .gate-photo-btn,
-        .order-card.is-fullscreen-invoice > .order-actions,
-        .order-card.is-fullscreen-invoice > .btn-deliver {flex:0 0 100%!important;width:100%!important;box-sizing:border-box!important;}
-        .order-card.is-fullscreen-invoice > .products-section{
-          flex:1 1 calc(50% - 8px)!important;width:calc(50% - 8px)!important;
-          min-width:0!important;box-sizing:border-box!important;align-self:stretch!important;
-          border:1px solid #dbe7f3!important;border-radius:14px!important;
-          background:#fbfdff!important;padding:14px!important;margin:0!important;
-        }
-        .order-card.is-fullscreen-invoice .products-section-title strong{font-size:16px!important;}
-        .order-card.is-fullscreen-invoice .product-value{font-size:16px!important;line-height:1.7!important;}
-        .order-card.is-fullscreen-invoice .products-grid{width:100%!important;display:grid!important;grid-template-columns:1fr!important;gap:8px!important;}
-        .order-card.is-fullscreen-invoice .product-box{width:100%!important;box-sizing:border-box!important;border:1px solid #e2e8f0!important;border-radius:9px!important;padding:10px!important;}
-        .order-card.is-fullscreen-invoice .order-card-head{order:1!important;}
-        .order-card.is-fullscreen-invoice .customer-row{order:2!important;}
-        .order-card.is-fullscreen-invoice .customer-location-grid{order:3!important;}
-        .order-card.is-fullscreen-invoice .chicken-section{order:4!important;}
-        .order-card.is-fullscreen-invoice .cuts-section{order:5!important;}
-        .order-card.is-fullscreen-invoice .order-details{order:6!important;}
-        .order-card.is-fullscreen-invoice .order-total{order:7!important;}
-        .order-card.is-fullscreen-invoice .delivery-fee-row{order:8!important;}
-        .order-card.is-fullscreen-invoice .delivery-grand-total-row{order:9!important;}
-        .order-card.is-fullscreen-invoice .payment-section{order:10!important;}
-        .order-card.is-fullscreen-invoice .order-actions{order:11!important;}
-        .order-card.is-fullscreen-invoice .btn-deliver{order:12!important;margin-top:0!important;position:static!important;min-height:48px!important;box-shadow:none!important;}
-        .order-card.is-fullscreen-invoice > .driver-departure-box{order:0!important;}
+      .order-card.is-fullscreen-invoice .driver-products-tables { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; direction:rtl!important; gap:8px!important; width:100%!important; min-width:0!important; align-items:start!important; }
+      .order-card.is-fullscreen-invoice .driver-products-tables.single-table { grid-template-columns:minmax(0,1fr)!important; }
+      .order-card.is-fullscreen-invoice .driver-products-tables > .products-section { display:block!important; width:100%!important; min-width:0!important; padding:7px!important; border:1px solid #cfe0f5!important; border-radius:10px!important; background:#fff!important; box-sizing:border-box!important; overflow:hidden!important; }
+      .order-card.is-fullscreen-invoice .driver-products-tables .driver-product-table { width:100%!important; table-layout:fixed!important; border-collapse:collapse!important; font-size:14px!important; }
+      .order-card.is-fullscreen-invoice .driver-products-tables .driver-product-table th { padding:7px 3px!important; font-size:13px!important; line-height:1.3!important; background:#eaf2ff!important; color:#173b68!important; border:1px solid #d5e1f1!important; }
+      .order-card.is-fullscreen-invoice .driver-products-tables .driver-product-table td { padding:8px 3px!important; font-size:15px!important; line-height:1.45!important; font-weight:900!important; border:1px solid #dfe7f1!important; overflow-wrap:anywhere!important; }
+      .order-card.is-fullscreen-invoice .driver-products-tables > .products-section > div:first-child { margin:0 0 6px!important; font-size:14px!important; line-height:1.4!important; font-weight:900!important; }
+      @media(max-width:480px) {
+        .order-card.is-fullscreen-invoice { gap:6px!important; padding:7px!important; }
+        .order-card.is-fullscreen-invoice .driver-products-tables { gap:6px!important; }
+        .order-card.is-fullscreen-invoice .driver-products-tables > .products-section { padding:5px!important; border-radius:9px!important; }
+        .order-card.is-fullscreen-invoice .driver-products-tables .driver-product-table th { padding:7px 2px!important; font-size:12px!important; }
+        .order-card.is-fullscreen-invoice .driver-products-tables .driver-product-table td { padding:8px 2px!important; font-size:14px!important; line-height:1.45!important; }
+        .order-card.is-fullscreen-invoice .driver-products-tables > .products-section > div:first-child { font-size:13px!important; }
       }
-      @media(min-width:700px) and (max-height:700px){
-        .order-card.is-fullscreen-invoice{padding:10px 14px!important;gap:7px!important;top:8px!important;bottom:8px!important;max-height:calc(100dvh - 16px)!important;}
-        .order-card.is-fullscreen-invoice .products-section{padding:8px!important;}
-      }
+      @media(min-width:700px){.order-card.is-fullscreen-invoice{left:50%!important;right:auto!important;top:0!important;bottom:0!important;height:auto!important;transform:translateX(-50%);width:min(760px,calc(100vw - 24px))!important;padding:14px!important;box-shadow:0 0 0 100vmax rgba(15,23,42,.62)!important;border-radius:14px!important;}}
     `;
     document.head.appendChild(style);
   }
@@ -1380,6 +1344,22 @@
         plateQtyList,
         false
       );
+
+      // Keep both product tables side by side on the driver's invoice.
+      // RTL places the cartons table on the right and cuts on the left.
+      if (chickenSection && cutsSection) {
+        const productsWrapper = document.createElement('div');
+        productsWrapper.className = 'driver-products-tables';
+        if (!(hasChicken && hasCuts)) productsWrapper.classList.add('single-table');
+        const firstSection = chickenSection.parentNode === cutsSection.parentNode
+          ? (chickenSection.compareDocumentPosition(cutsSection) & Node.DOCUMENT_POSITION_FOLLOWING
+              ? chickenSection
+              : cutsSection)
+          : chickenSection;
+        firstSection.parentNode.insertBefore(productsWrapper, firstSection);
+        productsWrapper.appendChild(chickenSection);
+        productsWrapper.appendChild(cutsSection);
+      }
 
       // If the template has no dedicated section, keep the product data visible
       // rather than silently hiding it.
