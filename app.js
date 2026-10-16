@@ -916,115 +916,12 @@
       : '—';
   }
 
-  function renderDriverProductGrid(node, chickenWeights, chickenQtys, plateNames, plateQtys) {
-    const weightList = extractNumbers(chickenWeights);
-    const chickenQuantityList = extractNumbers(chickenQtys);
-    const chickenRows = [];
-    const chickenCount = Math.max(weightList.length, chickenQuantityList.length);
-
-    for (let i = 0; i < chickenCount; i += 1) {
-      const weight = weightList[i] || '';
-      const quantity = chickenQuantityList[i] || '';
-      if (!weight && !quantity) continue;
-      chickenRows.push({
-        name: '🐔 الدجاج الكامل',
-        weight: weight ? `${weight} جرام` : '—',
-        quantity: quantity || '—'
-      });
-    }
-
-    const plateNameList = extractPlateNames(plateNames);
-    const plateQuantityList = extractPlateQuantities(plateQtys);
-    const plateRows = [];
-    const plateCount = Math.max(plateNameList.length, plateQuantityList.length);
-
-    for (let i = 0; i < plateCount; i += 1) {
-      const name = plateNameList[i] || '';
-      const quantity = plateQuantityList[i] || '';
-      if (!name && !quantity) continue;
-      plateRows.push({
-        name: `🍗 ${name || 'مقطعات'}`,
-        weight: '—',
-        quantity: quantity || '—'
-      });
-    }
-
-    const oldGrid = node.querySelector('.driver-products-grid');
-    if (oldGrid) oldGrid.remove();
-
-    const chickenSection = node.querySelector('.chicken-section');
-    const cutsSection = node.querySelector('.cuts-section');
-    if (chickenSection) chickenSection.style.display = 'none';
-    if (cutsSection) cutsSection.style.display = 'none';
-
-    if (!chickenRows.length && !plateRows.length) return;
-
-    const grid = document.createElement('div');
-    grid.className = 'driver-products-grid';
-    grid.setAttribute('aria-label', 'جداول أصناف الفاتورة');
-
-    const makeTable = (title, rows, kind) => {
-      if (!rows.length) return null;
-      const wrap = document.createElement('section');
-      wrap.className = `driver-product-table-wrap driver-product-${kind}`;
-      const heading = document.createElement('h4');
-      heading.className = 'driver-product-table-title';
-      heading.textContent = title;
-      const table = document.createElement('table');
-      table.className = 'driver-product-table';
-      const thead = document.createElement('thead');
-      const headerRow = document.createElement('tr');
-      ['الصنف', 'الوزن', 'الكمية'].forEach((label) => {
-        const th = document.createElement('th');
-        th.scope = 'col';
-        th.textContent = label;
-        headerRow.appendChild(th);
-      });
-      thead.appendChild(headerRow);
-      const tbody = document.createElement('tbody');
-      rows.forEach((row) => {
-        const tr = document.createElement('tr');
-        [row.name, row.weight, row.quantity].forEach((value, index) => {
-          const td = document.createElement('td');
-          td.textContent = value;
-          if (index === 0) td.className = 'driver-product-name';
-          tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-      });
-      table.append(thead, tbody);
-      wrap.append(heading, table);
-      return wrap;
-    };
-
-    // RTL grid: first column is on the right (whole chicken cartons); cuts are on the left.
-    const chickenTable = makeTable('الكراتين — الدجاج الكامل 🐔', chickenRows, 'chicken');
-    const cutsTable = makeTable('المقطعات 🍗', plateRows, 'cuts');
-    if (chickenTable) grid.appendChild(chickenTable);
-    if (cutsTable) grid.appendChild(cutsTable);
-
-    const productsSection = node.querySelector('.products-section');
-    if (productsSection) {
-      const title = productsSection.querySelector('.products-section-title');
-      if (title && title.parentNode === productsSection) {
-        title.insertAdjacentElement('afterend', grid);
-      } else {
-        productsSection.prepend(grid);
-      }
-    } else {
-      const anchor = node.querySelector('.order-details, .order-total, .payment-section, .btn-deliver');
-      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(grid, anchor);
-      else node.appendChild(grid);
-    }
-  }
-
   function ensureCompactDriverInvoiceStyles() {
     if ($('compact-driver-invoice-styles')) return;
     const style = document.createElement('style');
     style.id = 'compact-driver-invoice-styles';
     style.textContent = `
       .order-card.is-compact .products-section,
-      .order-card.is-compact .driver-products-grid,
       .order-card.is-compact .order-details,
       .order-card.is-compact .payment-section,
       .order-card.is-compact .gate-photo-btn,
@@ -1037,7 +934,7 @@
       .order-card.is-compact .invoice-expand-toggle { margin:6px 0 0; }
       .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
       html.driver-invoice-open, body.driver-invoice-open { overflow:hidden!important; overscroll-behavior:none!important; }
-      .order-card.is-fullscreen-invoice { position:fixed!important; top:env(safe-area-inset-top, 0px)!important; bottom:env(safe-area-inset-bottom, 0px)!important; left:6px!important; right:6px!important; z-index:2147483000!important; width:calc(100vw - 12px)!important; max-width:none!important; height:auto!important; min-height:0!important; max-height:none!important; margin:0 auto!important; padding:7px 8px 8px!important; box-sizing:border-box!important; overflow:hidden!important; overscroll-behavior:none!important; border:1px solid #dcfce7!important; border-radius:12px!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
+      .order-card.is-fullscreen-invoice { position:fixed!important; top:env(safe-area-inset-top, 0px)!important; bottom:env(safe-area-inset-bottom, 0px)!important; left:6px!important; right:6px!important; z-index:2147483000!important; width:calc(100vw - 12px)!important; max-width:none!important; height:auto!important; min-height:0!important; max-height:none!important; margin:0 auto!important; padding:7px 8px 8px!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:1px solid #dcfce7!important; border-radius:12px!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
       .order-card.is-fullscreen-invoice .order-card-head { margin:0!important; gap:5px!important; }
       .order-card.is-fullscreen-invoice .customer-row { margin:0!important; padding:4px 0!important; gap:7px!important; }
       .order-card.is-fullscreen-invoice .customer-main h2 { font-size:15px!important; margin:0!important; line-height:1.25!important; }
@@ -1045,20 +942,10 @@
       .order-card.is-fullscreen-invoice .info-item { padding:5px 7px!important; gap:2px!important; }
       .order-card.is-fullscreen-invoice .info-item strong { font-size:12px!important; line-height:1.25!important; }
       .order-card.is-fullscreen-invoice .products-section { margin:0!important; padding:6px 8px!important; gap:4px!important; }
+      .order-card.is-fullscreen-invoice .products-section { min-width:0!important; }
+      .order-card.is-fullscreen-invoice .driver-product-table { width:100%!important; }
+      .order-card.is-fullscreen-invoice .chicken-section, .order-card.is-fullscreen-invoice .cuts-section { flex:1 1 0!important; min-width:0!important; }
       .order-card.is-fullscreen-invoice .products-section-title strong { font-size:13px!important; }
-      .driver-products-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:8px!important;width:100%!important;direction:rtl!important;align-items:start!important;box-sizing:border-box!important;margin:5px 0!important}
-      .driver-product-table-wrap{min-width:0!important;border:1px solid #cbd5e1!important;border-radius:8px!important;overflow:hidden!important;background:#fff!important}
-      .driver-product-table-title{margin:0!important;padding:7px 5px!important;background:#eaf4ee!important;color:#14532d!important;border-bottom:1px solid #cbd5e1!important;text-align:center!important;font-size:12px!important;font-weight:900!important;line-height:1.35!important}
-      .driver-product-table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;font-family:inherit!important;font-size:11px!important;direction:rtl!important}
-      .driver-product-table th,.driver-product-table td{border:1px solid #d1d5db!important;padding:6px 3px!important;text-align:center!important;vertical-align:middle!important;overflow-wrap:anywhere!important;line-height:1.45!important}
-      .driver-product-table th{background:#f1f5f9!important;color:#334155!important;font-weight:900!important}
-      .driver-product-table td{color:#111827!important;background:#fff!important;font-weight:700!important}
-      .driver-product-table .driver-product-name{text-align:right!important}
-      .driver-product-table-empty{padding:10px 4px!important;text-align:center!important;color:#64748b!important;font-size:11px!important}
-      .order-card.is-fullscreen-invoice .driver-products-grid{gap:6px!important;margin:3px 0!important}
-      .order-card.is-fullscreen-invoice .driver-product-table-title{padding:5px 3px!important;font-size:11px!important}
-      .order-card.is-fullscreen-invoice .driver-product-table th,.order-card.is-fullscreen-invoice .driver-product-table td{padding:4px 2px!important;font-size:10px!important}
-      @media(max-width:360px){.driver-products-grid{gap:4px!important}.driver-product-table-title{font-size:10px!important}.driver-product-table th,.driver-product-table td{font-size:9px!important;padding:4px 1px!important}}
       .order-card.is-fullscreen-invoice .product-value { font-size:15px!important; line-height:1.35!important; }
       .order-card.is-fullscreen-invoice .order-details { margin:0!important; gap:4px!important; }
       .order-card.is-fullscreen-invoice .order-details .info-item { padding:4px 7px!important; }
@@ -1316,7 +1203,12 @@
             'chicken_weights',
             'chickenWeights',
             'chicken_weight',
-            'data_weights'
+            'data_weights',
+            'carton_weights',
+            'carton_weight',
+            'chicken_cartons',
+            'carton_sizes',
+            'weights'
           ]
         );
 
@@ -1327,7 +1219,12 @@
             'chicken_qtys',
             'chickenQtys',
             'chicken_quantities',
-            'chicken_quantities_text'
+            'chicken_quantities_text',
+            'carton_qtys',
+            'carton_quantities',
+            'chicken_qty',
+            'data_qtys',
+            'quantities'
           ]
         );
 
@@ -1338,7 +1235,10 @@
             'plate_names',
             'plateNames',
             'plates',
-            'cut_names'
+            'cut_names',
+            'plate_items',
+            'pieces',
+            'data_items'
           ]
         );
 
@@ -1349,131 +1249,103 @@
             'plate_qtys',
             'plateQtys',
             'plate_quantities',
-            'cut_quantities'
+            'cut_quantities',
+            'cut_qtys',
+            'pieces_qty',
+            'data_plate_qtys'
           ]
         );
 
-      const chickenDisplay =
-        formatChickenLines(
-          chickenWeights,
-          chickenQtys
-        );
+      const chickenDisplay = formatChickenLines(chickenWeights, chickenQtys);
+      const plateDisplay = formatPlateLines(plateNames, plateQtys);
 
-      const plateDisplay =
-        formatPlateLines(
-          plateNames,
-          plateQtys
-        );
+      // Build real spreadsheet-style product tables inside the driver's invoice.
+      // This is driver invoice rendering only; the master rendering is not changed.
+      const buildProductTable = (section, title, firstHeading, firstValues, secondValues, firstIsWeight) => {
+        if (!section) return false;
+        const names = Array.isArray(firstValues) ? firstValues : extractNumbers(firstValues);
+        const quantities = Array.isArray(secondValues) ? secondValues : extractPlateQuantities(secondValues);
+        const rows = Math.max(names.length, quantities.length);
+        section.style.display = rows ? '' : 'none';
+        if (!rows) return false;
 
-      const chickenSection =
-        node.querySelector(
-          '.chicken-section'
-        );
+        const table = document.createElement('table');
+        table.className = 'driver-product-table';
+        table.style.cssText = 'width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px;text-align:center;direction:rtl;background:#fff;border:1px solid #dbe4ee;border-radius:8px;overflow:hidden;';
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        [firstHeading, 'الكمية'].forEach((label) => {
+          const th = document.createElement('th');
+          th.textContent = label;
+          th.style.cssText = 'padding:7px 4px;background:#edf4ff;color:#173b68;border:1px solid #dbe4ee;font-weight:900;';
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
 
-      const cutsSection =
-        node.querySelector(
-          '.cuts-section'
-        );
-
-      const hasChicken =
-        chickenDisplay !== '—' &&
-        String(chickenDisplay).trim() !== '';
-
-      const hasCuts =
-        plateDisplay !== '—' &&
-        String(plateDisplay).trim() !== '';
-
-      if (chickenSection) chickenSection.style.display = 'none';
-      if (cutsSection) cutsSection.style.display = 'none';
-      renderDriverProductGrid(
-        node,
-        chickenWeights,
-        chickenQtys,
-        plateNames,
-        plateQtys
-      );
-
-      setText(
-        node,
-        'chicken_weights',
-        chickenDisplay
-      );
-
-      setText(
-        node,
-        'chicken_qtys',
-        ''
-      );
-
-      setText(
-        node,
-        'plate_names',
-        plateDisplay
-      );
-
-      setText(
-        node,
-        'plate_qtys',
-        ''
-      );
-
-      const chickenQtyElement =
-        node.querySelector(
-          '[data-f="chicken_qtys"]'
-        );
-
-      if (chickenQtyElement) {
-        const chickenQtyRow =
-          chickenQtyElement.closest(
-            '.info-item, .order-section, .detail-row, .field-row, .product-box'
-          );
-
-        if (chickenQtyRow) {
-          chickenQtyRow.style.display = 'none';
-        } else {
-          chickenQtyElement.style.display = 'none';
+        const tbody = document.createElement('tbody');
+        for (let i = 0; i < rows; i += 1) {
+          const tr = document.createElement('tr');
+          const first = document.createElement('td');
+          const second = document.createElement('td');
+          first.textContent = String(names[i] ?? '—').trim() || '—';
+          second.textContent = String(quantities[i] ?? '—').trim() || '—';
+          [first, second].forEach((td) => {
+            td.style.cssText = 'padding:7px 4px;border:1px solid #e2e8f0;white-space:pre-line;overflow-wrap:anywhere;color:#111827;font-weight:800;line-height:1.45;';
+          });
+          tr.append(first, second);
+          tbody.appendChild(tr);
         }
+        table.appendChild(tbody);
+
+        const heading = document.createElement('div');
+        heading.textContent = title;
+        heading.style.cssText = 'font-size:13px;font-weight:900;color:#111827;margin:0 0 6px;text-align:right;';
+        section.replaceChildren(heading, table);
+        section.style.cssText += ';padding:7px!important;margin:0!important;box-sizing:border-box!important;min-width:0!important;';
+        return true;
+      };
+
+      const chickenSection = node.querySelector('.chicken-section');
+      const cutsSection = node.querySelector('.cuts-section');
+      const chickenWeightsList = extractNumbers(chickenWeights);
+      const chickenQtyList = extractNumbers(chickenQtys);
+      const plateNamesList = extractPlateNames(plateNames);
+      const plateQtyList = extractPlateQuantities(plateQtys);
+
+      const hasChicken = buildProductTable(
+        chickenSection,
+        '🐔 الكراتين',
+        'الوزن',
+        chickenWeightsList,
+        chickenQtyList,
+        true
+      );
+      const hasCuts = buildProductTable(
+        cutsSection,
+        '🍗 المقطعات',
+        'الصنف',
+        plateNamesList,
+        plateQtyList,
+        false
+      );
+
+      // If the template has no dedicated section, keep the product data visible
+      // rather than silently hiding it.
+      if (!chickenSection && (chickenWeightsList.length || chickenQtyList.length)) {
+        const fallback = document.createElement('div');
+        fallback.className = 'driver-product-fallback';
+        fallback.textContent = `الكراتين: ${chickenDisplay}`;
+        fallback.style.cssText = 'padding:8px;border:1px solid #dbe4ee;border-radius:8px;white-space:pre-line;font-weight:800;';
+        node.appendChild(fallback);
       }
-
-      const plateQtyElement =
-        node.querySelector(
-          '[data-f="plate_qtys"]'
-        );
-
-      if (plateQtyElement) {
-        const plateQtyRow =
-          plateQtyElement.closest(
-            '.info-item, .order-section, .detail-row, .field-row, .product-box'
-          );
-
-        if (plateQtyRow) {
-          plateQtyRow.style.display = 'none';
-        } else {
-          plateQtyElement.style.display = 'none';
-        }
+      if (!cutsSection && (plateNamesList.length || plateQtyList.length)) {
+        const fallback = document.createElement('div');
+        fallback.className = 'driver-product-fallback';
+        fallback.textContent = `المقطعات: ${plateDisplay}`;
+        fallback.style.cssText = 'padding:8px;border:1px solid #dbe4ee;border-radius:8px;white-space:pre-line;font-weight:800;';
+        node.appendChild(fallback);
       }
-
-      [
-        'chicken_weights',
-        'chicken_qtys',
-        'plate_names',
-        'plate_qtys'
-      ].forEach(
-        (field) => {
-          const element =
-            node.querySelector(
-              `[data-f="${field}"]`
-            );
-
-          if (element) {
-            element.style.whiteSpace =
-              'pre-line';
-
-            element.style.lineHeight =
-              '1.9';
-          }
-        }
-      );
 
       const legacyDetails =
         cleanOrderNote(firstValue(
