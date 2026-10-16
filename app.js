@@ -2348,6 +2348,42 @@
       .master-home-intro h2{font-size:18px;margin:0 0 6px;color:#102744}.master-home-intro p{font-size:12px;line-height:1.8;color:#64748b;margin:0 0 12px}
       .master-home-cta{border:0;border-radius:10px;background:#176b57;color:#fff;padding:10px 15px;font-weight:900;cursor:pointer}
       .master-page[data-view="home"] .master-home-intro{display:block}
+      /* لوحة التحكم الجديدة: الصفحة الرئيسية للماستر فقط */
+      .master-home-dashboard{display:none;direction:rtl;gap:14px;margin:0 0 18px}
+      .master-page[data-view="home"] .master-home-dashboard{display:grid}
+      .master-page[data-view="home"] .master-stats{display:none!important}
+      .master-home-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+      .master-home-kpi{background:#fff;border:1px solid #e0e8f1;border-radius:15px;padding:15px;box-shadow:0 5px 18px rgba(30,49,67,.045);min-width:0;border-right:4px solid #64748b}
+      .master-home-kpi.sales{border-right-color:#0f9f6e}.master-home-kpi.received{border-right-color:#2563eb}.master-home-kpi.pending{border-right-color:#dc2626}.master-home-kpi.delivered{border-right-color:#7c3aed}
+      .master-home-kpi-label{font-size:12px;color:#64748b;font-weight:800;margin-bottom:8px}
+      .master-home-kpi-value{font-size:clamp(20px,2vw,28px);line-height:1.35;color:#102744;font-weight:900;overflow-wrap:anywhere}
+      .master-home-kpi-hint{font-size:11px;color:#94a3b8;margin-top:5px;font-weight:700}
+      .master-home-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;align-items:stretch}
+      .master-home-panel{background:#fff;border:1px solid #e0e8f1;border-radius:16px;padding:16px;box-shadow:0 5px 18px rgba(30,49,67,.045);min-width:0}
+      .master-home-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:13px}
+      .master-home-panel-head h3{font-size:15px;font-weight:900;color:#102744;margin:0}
+      .master-home-panel-head span{font-size:11px;color:#64748b;font-weight:800}
+      .master-home-alerts{display:grid;gap:9px}
+      .master-home-alert{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border-radius:11px;background:#f8fafc;border:1px solid #e2e8f0}
+      .master-home-alert-copy{display:flex;align-items:center;gap:9px;min-width:0;font-size:12px;color:#334155;font-weight:800}
+      .master-home-alert-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#fff1f2;color:#be123c;flex-shrink:0}
+      .master-home-alert-count{font-size:15px;font-weight:900;color:#be123c;white-space:nowrap}
+      .master-home-alert.ok .master-home-alert-icon{background:#dcfce7;color:#15803d}.master-home-alert.ok .master-home-alert-count{color:#15803d}
+      .master-home-driver-table{width:100%;border-collapse:collapse;font-size:12px}
+      .master-home-driver-table th,.master-home-driver-table td{padding:11px 8px;text-align:right;border-bottom:1px solid #edf2f7;white-space:nowrap}
+      .master-home-driver-table th{font-size:10px;color:#64748b;font-weight:900;background:#f8fafc}
+      .master-home-driver-table td{color:#334155;font-weight:800}.master-home-driver-table tr:last-child td{border-bottom:0}
+      .master-home-progress{height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden;min-width:48px;margin-top:5px}.master-home-progress span{display:block;height:100%;background:#15966d;border-radius:99px}
+      .master-home-chart{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;align-items:end;min-height:180px;padding:12px 4px 0}
+      .master-home-chart-day{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:7px;min-width:0;height:180px}
+      .master-home-chart-value{font-size:10px;color:#475569;font-weight:800;text-align:center;overflow-wrap:anywhere;max-width:100%}
+      .master-home-chart-track{height:112px;width:min(100%,34px);display:flex;align-items:flex-end;background:#f1f5f9;border-radius:8px 8px 4px 4px;overflow:hidden}
+      .master-home-chart-bar{width:100%;min-height:3px;border-radius:7px 7px 3px 3px;background:linear-gradient(180deg,#15966d,#176b57)}
+      .master-home-chart-label{font-size:10px;color:#64748b;font-weight:800;text-align:center;white-space:nowrap}
+      .master-home-chart-note{font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.7}
+      .master-home-empty{padding:14px;text-align:center;color:#94a3b8;font-size:12px;font-weight:700}
+      @media(max-width:900px){.master-home-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.master-home-grid{grid-template-columns:minmax(0,1fr)}}
+      @media(max-width:520px){.master-home-kpis{gap:8px}.master-home-kpi{padding:11px}.master-home-kpi-value{font-size:20px}.master-home-panel{padding:12px}.master-home-chart{gap:5px}.master-home-chart-track{width:22px}.master-home-chart-value,.master-home-chart-label{font-size:9px}.master-home-driver-table{font-size:10px}.master-home-driver-table th,.master-home-driver-table td{padding:9px 4px}}
       .master-page[data-view="home"] .master-stats .master-stat:nth-child(1),.master-page[data-view="home"] .master-stats .master-stat:nth-child(3),.master-page[data-view="home"] .master-stats .master-stat:nth-child(5),.master-page[data-view="home"] .master-stats .master-stat:nth-child(6),.master-page[data-view="home"] .master-stats .master-stat:nth-child(9){display:none}
       .master-page[data-view="home"] .master-stats{grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
       .master-page[data-view="home"] .master-filters,.master-page[data-view="home"] .master-orders-layout{display:none}
@@ -2460,6 +2496,31 @@
             <h2>ملخص الإدارة اليوم</h2>
             <p>من هنا تقدر تراجع أهم أرقام الشغل بسرعة، وتدخل على الفواتير أو التحويلات السابقة من الأزرار بالأعلى. الأرقام تتحدث من بيانات الماستر الحالية.</p>
             <button class="master-home-cta" type="button" data-master-go="orders">فتح الفواتير وإدارتها ←</button>
+          </section>
+          <section class="master-home-dashboard" id="master-home-dashboard" aria-label="لوحة متابعة الإدارة">
+            <div class="master-home-kpis">
+              <article class="master-home-kpi"><div class="master-home-kpi-label">فواتير اليوم</div><div class="master-home-kpi-value" id="home-kpi-count">٠</div><div class="master-home-kpi-hint">عدد الفواتير بدون تكرار</div></article>
+              <article class="master-home-kpi sales"><div class="master-home-kpi-label">إجمالي مبيعات اليوم</div><div class="master-home-kpi-value" id="home-kpi-sales">٠ درهم</div><div class="master-home-kpi-hint">قيمة فواتير اليوم</div></article>
+              <article class="master-home-kpi received"><div class="master-home-kpi-label">المبالغ المستلمة</div><div class="master-home-kpi-value" id="home-kpi-received">٠ درهم</div><div class="master-home-kpi-hint">كاش + تحويل مؤكد + مدفوع مقدمًا + رصيد</div></article>
+              <article class="master-home-kpi pending"><div class="master-home-kpi-label">تحويلات تحتاج متابعة</div><div class="master-home-kpi-value" id="home-kpi-pending">٠ درهم</div><div class="master-home-kpi-hint" id="home-kpi-pending-hint">٠ فاتورة غير مؤكدة</div></article>
+            </div>
+            <div class="master-home-grid">
+              <section class="master-home-panel" aria-label="تنبيهات الإدارة">
+                <div class="master-home-panel-head"><h3>🔔 تنبيهات تحتاج متابعة</h3><span id="home-alert-date">اليوم</span></div>
+                <div class="master-home-alerts" id="master-home-alerts"></div>
+              </section>
+              <section class="master-home-panel" aria-label="أداء المندوبين">
+                <div class="master-home-panel-head"><h3>🚚 أداء المندوبين اليوم</h3><span>حسب فواتير اليوم</span></div>
+                <div style="overflow-x:auto">
+                  <table class="master-home-driver-table"><thead><tr><th>المندوب</th><th>الفواتير</th><th>تم التسليم</th><th>المتبقي</th></tr></thead><tbody id="master-home-driver-body"><tr><td colspan="4">جارٍ تجهيز الملخص…</td></tr></tbody></table>
+                </div>
+              </section>
+            </div>
+            <section class="master-home-panel" aria-label="مبيعات آخر سبعة أيام">
+              <div class="master-home-panel-head"><h3>📈 حركة المبيعات — آخر ٧ أيام</h3><span>حسب تاريخ الفاتورة</span></div>
+              <div class="master-home-chart" id="master-home-chart"></div>
+              <div class="master-home-chart-note">الرسم يعرض إجمالي قيمة الفواتير لكل يوم. البيانات للعرض فقط ولا تغيّر الفواتير أو عمليات التحصيل.</div>
+            </section>
           </section>
           <section class="master-stats">
             <div class="master-stat prepaid"><div class="master-stat-label">مدفوع مقدم</div><div class="master-stat-value" id="master-total-prepaid">0 درهم</div><div class="master-stat-hint" id="master-prepaid-hint">عدد الفواتير: ٠</div></div>
@@ -2722,6 +2783,7 @@
     if (nextView === 'transfers') renderMasterOldPendingTransfers();
     if (nextView === 'monthly-transfers') renderMasterMonthlyTransfers();
     if (nextView === 'reports') renderMasterStats();
+    if (nextView === 'home') renderMasterHomeDashboard();
     if (nextView === 'balances') loadMasterCustomerBalances();
     if (nextView === 'departures') loadMasterDepartures();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3321,6 +3383,86 @@
     });
   }
 
+  function renderMasterHomeDashboard() {
+    const root = $('master-home-dashboard');
+    if (!root) return;
+
+    const allOrders = getMasterUniqueOrders();
+    const today = masterDateInput(new Date());
+    const todayOrders = allOrders.filter((order) => masterDateInput(order.created_at) === today);
+    const isBalanceOrder = (order) => {
+      const method = String(order?.payment_method || '').trim().toLowerCase();
+      const marked = [order?.paid_from_balance, order?.balance_used, order?.customer_balance_used, order?.paid_by_balance]
+        .some((value) => value === true || value === 1 || String(value ?? '').trim().toLowerCase() === 'true' || String(value ?? '').trim() === '1');
+      return marked || method.includes('balance') || method.includes('رصيد') || method.includes('الرصيد');
+    };
+    const sum = (items) => items.reduce((total, order) => total + masterMoney(order.total), 0);
+    const money = (value) => `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+    const countText = (value) => value.toLocaleString('ar-EG');
+    const customerCount = (items) => new Set(items.map((order) => String(order.customer_code || order.phone || order.customer_name || order.id || '').trim()).filter(Boolean)).size;
+    const cash = todayOrders.filter((order) => !isPaidInAdvance(order) && !isBalanceOrder(order) && normalizePayment(order.payment_method) === 'cash');
+    const bank = todayOrders.filter((order) => !isPaidInAdvance(order) && !isBalanceOrder(order) && normalizePayment(order.payment_method) === 'bank_transfer');
+    const prepaid = todayOrders.filter((order) => isPaidInAdvance(order));
+    const balance = todayOrders.filter((order) => !isPaidInAdvance(order) && isBalanceOrder(order));
+    const bankReceived = bank.filter((order) => order.bank_transfer_received === true);
+    const bankPending = bank.filter((order) => order.bank_transfer_received !== true);
+    const delivered = todayOrders.filter((order) => isDelivered(order.delivery_status));
+    const undelivered = todayOrders.filter((order) => !isDelivered(order.delivery_status));
+    const receivedTotal = sum(cash) + sum(bankReceived) + sum(prepaid) + sum(balance);
+
+    const setText = (id, value) => { const element = $(id); if (element) element.textContent = value; };
+    setText('home-kpi-count', countText(todayOrders.length));
+    setText('home-kpi-sales', money(sum(todayOrders)));
+    setText('home-kpi-received', money(receivedTotal));
+    setText('home-kpi-pending', money(sum(bankPending)));
+    setText('home-kpi-pending-hint', `${countText(bankPending.length)} فاتورة تحويل غير مؤكدة`);
+    setText('home-alert-date', `التاريخ: ${today.split('-').reverse().join('-')}`);
+
+    const alerts = $('master-home-alerts');
+    if (alerts) {
+      const alertItems = [
+        { icon: '🏦', label: 'تحويلات بنكية لم يتم تأكيدها', count: bankPending.length, detail: money(sum(bankPending)), kind: bankPending.length ? '' : 'ok' },
+        { icon: '📦', label: 'فواتير لم يتم تسليمها اليوم', count: undelivered.length, detail: `${money(sum(undelivered))} قيمة الفواتير`, kind: undelivered.length ? '' : 'ok' },
+        { icon: '💵', label: 'عملاء دفعوا كاش', count: customerCount(cash), detail: money(sum(cash)), kind: 'ok' },
+        { icon: '💳', label: 'عملاء دفعوا مقدمًا', count: customerCount(prepaid), detail: money(sum(prepaid)), kind: 'ok' },
+        { icon: '👛', label: 'عملاء دفعوا من الرصيد', count: customerCount(balance), detail: money(sum(balance)), kind: 'ok' }
+      ];
+      alerts.innerHTML = alertItems.map((item) => `<div class="master-home-alert ${item.kind}"><div class="master-home-alert-copy"><span class="master-home-alert-icon">${item.icon}</span><span>${item.label}<small style="display:block;color:#94a3b8;font-size:10px;margin-top:3px">${item.detail}</small></span></div><strong class="master-home-alert-count">${countText(item.count)}</strong></div>`).join('');
+    }
+
+    const driverBody = $('master-home-driver-body');
+    if (driverBody) {
+      const driverDefs = [
+        { key: 'Mandoub', label: 'مندوب 1' },
+        { key: 'Mandoub2', label: 'مندوب 2' }
+      ];
+      driverBody.innerHTML = driverDefs.map((driver) => {
+        const orders = todayOrders.filter((order) => String(order.sheet_name || '') === driver.key);
+        const deliveredCount = orders.filter((order) => isDelivered(order.delivery_status)).length;
+        const pendingCount = orders.length - deliveredCount;
+        const percent = orders.length ? Math.round((deliveredCount / orders.length) * 100) : 0;
+        return `<tr><td>${driver.label}</td><td>${countText(orders.length)}</td><td>${countText(deliveredCount)}<div class="master-home-progress"><span style="width:${percent}%"></span></div></td><td>${countText(pendingCount)}</td></tr>`;
+      }).join('');
+    }
+
+    const chart = $('master-home-chart');
+    if (chart) {
+      const days = [];
+      for (let offset = 6; offset >= 0; offset -= 1) {
+        const date = new Date(`${today}T12:00:00`);
+        date.setDate(date.getDate() - offset);
+        const key = masterDateInput(date);
+        const orders = allOrders.filter((order) => masterDateInput(order.created_at) === key);
+        days.push({ key, label: date.toLocaleDateString('ar-EG', { day: '2-digit', month: '2-digit' }), total: sum(orders), count: orders.length });
+      }
+      const max = Math.max(1, ...days.map((day) => day.total));
+      chart.innerHTML = days.map((day) => {
+        const height = day.total > 0 ? Math.max(5, Math.round((day.total / max) * 100)) : 2;
+        return `<div class="master-home-chart-day" title="${day.key}: ${money(day.total)} — ${countText(day.count)} فاتورة"><div class="master-home-chart-value">${day.total.toLocaleString('ar-EG', { maximumFractionDigits: 0 })}</div><div class="master-home-chart-track"><div class="master-home-chart-bar" style="height:${height}%"></div></div><div class="master-home-chart-label">${day.label}</div></div>`;
+      }).join('');
+    }
+  }
+
   function renderMasterOrders() {
     const body = $('master-orders-body');
 
@@ -3334,6 +3476,7 @@
     renderMasterMonthlyTransfers();
     renderMasterStats();
     renderMasterDaySummary();
+    renderMasterHomeDashboard();
 
     if (!orders.length) {
       body.innerHTML =
