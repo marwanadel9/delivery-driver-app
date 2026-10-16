@@ -146,7 +146,8 @@
       .order-card:not(.is-expanded) .order-total{margin-top:4px!important}
       .order-card:not(.is-expanded) .customer-row{border-bottom:0!important;padding-bottom:0!important}
       .order-card .order-total{display:flex!important}
-      .invoice-detail-backdrop{position:fixed!important;inset:0!important;z-index:999999!important;background:rgba(12,35,20,.48)!important;backdrop-filter:blur(3px)!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:14px!important;box-sizing:border-box!important}
+      body.invoice-modal-scroll-locked{overscroll-behavior:none!important;touch-action:none!important}
+      .invoice-detail-backdrop{position:fixed!important;inset:0!important;z-index:999999!important;overscroll-behavior:contain!important;background:rgba(12,35,20,.48)!important;backdrop-filter:blur(3px)!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:14px!important;box-sizing:border-box!important}
       .invoice-detail-modal{width:min(620px,100%)!important;max-height:90dvh!important;overflow:auto!important;background:#f5fff7!important;border:1px solid #a9d8b5!important;border-radius:16px!important;box-shadow:0 18px 60px rgba(0,0,0,.24)!important;padding:12px!important;box-sizing:border-box!important}
       .invoice-detail-modal .order-card{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:8px!important;width:100%!important;min-width:0!important;max-width:none!important;max-height:none!important;overflow:visible!important;box-sizing:border-box!important;cursor:default!important}
       .invoice-detail-modal .order-card .customer-location-grid,
@@ -163,18 +164,56 @@
   }
   installFroogNavyDriverTheme();
 
-  // Open invoice details in a fixed overlay so expanding never pushes cards up/down.
+  // Lock the page behind the invoice modal and restore its exact scroll position on close.
+  let invoiceModalScrollY = 0;
+  let invoiceModalBodyStyle = null;
+  function lockInvoiceBackground() {
+    if (document.body.classList.contains('invoice-modal-scroll-locked')) return;
+    invoiceModalScrollY = window.scrollY || window.pageYOffset || 0;
+    invoiceModalBodyStyle = {
+      position: document.body.style.position,
+      top: document.body.style.top,
+      left: document.body.style.left,
+      right: document.body.style.right,
+      width: document.body.style.width,
+      overflow: document.body.style.overflow
+    };
+    document.body.classList.add('invoice-modal-scroll-locked');
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${invoiceModalScrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+  }
+  function unlockInvoiceBackground() {
+    if (!document.body.classList.contains('invoice-modal-scroll-locked')) return;
+    document.body.classList.remove('invoice-modal-scroll-locked');
+    const old = invoiceModalBodyStyle || {};
+    document.body.style.position = old.position || '';
+    document.body.style.top = old.top || '';
+    document.body.style.left = old.left || '';
+    document.body.style.right = old.right || '';
+    document.body.style.width = old.width || '';
+    document.body.style.overflow = old.overflow || '';
+    window.scrollTo(0, invoiceModalScrollY);
+    invoiceModalBodyStyle = null;
+  }
+  function closeInvoiceDetailModal(backdrop) {
+    backdrop?.remove();
+    unlockInvoiceBackground();
+  }
   document.addEventListener('click', (event) => {
     const close = event.target.closest?.('[data-invoice-detail-close]');
     if (close) {
       event.preventDefault();
       event.stopPropagation();
-      close.closest('.invoice-detail-backdrop')?.remove();
+      closeInvoiceDetailModal(close.closest('.invoice-detail-backdrop'));
       return;
     }
     const backdrop = event.target.closest?.('.invoice-detail-backdrop');
     if (backdrop && event.target === backdrop) {
-      backdrop.remove();
+      closeInvoiceDetailModal(backdrop);
       return;
     }
     const card = event.target.closest?.('.order-card');
@@ -199,9 +238,10 @@
     modal.appendChild(clone);
     backdropEl.appendChild(modal);
     document.body.appendChild(backdropEl);
+    lockInvoiceBackground();
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') document.querySelector('.invoice-detail-backdrop')?.remove();
+    if (event.key === 'Escape') closeInvoiceDetailModal(document.querySelector('.invoice-detail-backdrop'));
   });
 
   const normalizePayment = (value) => {
