@@ -274,7 +274,7 @@ export default {
     }
 
     const url = new URL(request.url);
-    const path = url.pathname;
+    const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
       if (
