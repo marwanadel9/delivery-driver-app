@@ -87,9 +87,18 @@ $("overlay").addEventListener("click",()=>{closeCart();closeCheckout()});
 $("checkoutForm").addEventListener("submit",e=>{
   e.preventDefault();
   const data=Object.fromEntries(new FormData(e.currentTarget).entries());
-  $("prototypeResult").textContent=`تم تجهيز معاينة الطلب بنجاح.\nالعميل: ${data.customer_name}\nالمنطقة: ${data.emirate} - ${data.area}\nعدد الأصناف: ${cartCount()}\nالمجموع الفرعي: ${money(subtotal())}\nرسوم التوصيل: ${deliveryFee()===0 ? "مجانًا" : money(deliveryFee())}\nالإجمالي شامل التوصيل: ${money(orderTotal())}\nطريقة الدفع: ${{cash:"نقدًا عند الاستلام",bank_transfer:"تحويل بنكي",by_agreement:"حسب الاتفاق"}[data.payment_method]}\n\nتنبيه: هذه نسخة واجهة تجريبية، لم يتم إرسال بياناتك إلى أي جهة.`;
+  const itemLines=Object.entries(cart).filter(([id,q])=>q>0).map(([id,q])=>{
+    const p=getProduct(id);
+    return `• ${p.name} × ${q} = ${money(p.price*q)}`;
+  }).join("\n");
+  const paymentLabels={cash:"نقدًا عند الاستلام",bank_transfer:"تحويل بنكي",by_agreement:"حسب الاتفاق"};
+  const message=`طلب جديد من متجر فروج الزين\n\nالاسم: ${data.customer_name}\nالهاتف: ${data.phone}\nالإمارة: ${data.emirate}\nالمنطقة: ${data.area}\nالعنوان: ${data.address}\n\nالمنتجات:\n${itemLines}\n\nالمجموع الفرعي: ${money(subtotal())}\nرسوم التوصيل: ${deliveryFee()===0 ? "مجانًا" : money(deliveryFee())}\nالإجمالي شامل التوصيل: ${money(orderTotal())}\nطريقة الدفع: ${paymentLabels[data.payment_method]}\nملاحظات: ${data.notes || "لا توجد"}`;
+  const encoded=encodeURIComponent(message);
+  const wa1=`https://wa.me/971553737911?text=${encoded}`;
+  const wa2=`https://wa.me/971501951975?text=${encoded}`;
+  $("prototypeResult").innerHTML=`<div>تم تجهيز رسالة الطلب. اضغط على الرقم الذي تريد إرسال الطلب إليه عبر واتساب.</div><div class="order-wa-actions"><a href="${wa1}" target="_blank" rel="noopener">إرسال الطلب عبر واتساب 1</a><a href="${wa2}" target="_blank" rel="noopener">إرسال الطلب عبر واتساب 2</a></div><p style="margin-top:12px;font-size:13px;color:#7d8b7b">سيتم فتح واتساب بالرسالة جاهزة، ويجب الضغط على إرسال داخل واتساب. الطلب لا يُحفظ في قاعدة البيانات حاليًا.</p>`;
   $("prototypeResult").classList.remove("hidden");
-  showToast("تم تجهيز المعاينة — الطلب لم يُرسل");
+  showToast("رسالة الطلب جاهزة للإرسال عبر واتساب");
 });
 $("year").textContent=new Date().getFullYear();
 renderProducts();renderCart();
