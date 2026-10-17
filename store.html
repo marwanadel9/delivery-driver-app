@@ -22,33 +22,19 @@
       <button class="cart-open" id="openCart" type="button"><span>🛒</span><span>السلة</span><b id="cartCount">0</b></button>
     </div>
   </header>
-
   <main>
     <section class="hero">
       <div class="hero-content">
         <span class="eyebrow">اختيارك الطازج كل يوم</span>
         <h1>الطعم الأصيل يبدأ<br><em>من فروج الزين</em></h1>
-        <p>منتجات طازجة بعناية، وأسعار تناسب الأفراد والمطاعم والتجار.</p>
+        <p>منتجات طازجة بعناية، بأسعار واضحة وطلب سهل.</p>
         <a class="hero-cta" href="#products">تسوّق الآن <span>←</span></a>
         <div class="hero-perks"><span>✓ جودة مختارة</span><span>✓ طلب سهل</span><span>✓ خدمة موثوقة</span></div>
       </div>
       <div class="hero-art" aria-hidden="true">
-        <div class="hero-circle"></div>
-        <div class="hero-stamp"><b>طازج</b><small>FRESH<br>QUALITY</small></div>
-        <div class="hero-chicken">🍗</div>
-        <div class="floating-leaf leaf-one">✦</div><div class="floating-leaf leaf-two">✦</div>
+        <div class="hero-circle"></div><div class="hero-stamp"><b>طازج</b><small>FRESH<br>QUALITY</small></div><div class="hero-chicken">🍗</div><div class="floating-leaf leaf-one">✦</div><div class="floating-leaf leaf-two">✦</div>
       </div>
     </section>
-
-    <section class="customer-type-section">
-      <div><span class="section-kicker">أسعار تناسبك</span><h2>تشتري بصفتك إيه؟</h2></div>
-      <div class="type-switch" role="group" aria-label="نوع العميل">
-        <button class="type-btn active" data-type="individual" type="button">فرد <small>سعر التجزئة</small></button>
-        <button class="type-btn" data-type="restaurant" type="button">مطعم <small>سعر المطاعم</small></button>
-        <button class="type-btn" data-type="trader" type="button">تاجر <small>سعر الجملة</small></button>
-      </div>
-    </section>
-
     <section class="catalog" id="products">
       <div class="section-heading"><div><span class="section-kicker">تسوّق منتجاتنا</span><h2>منتجاتنا</h2></div><span class="demo-note">عرض تجريبي للواجهة</span></div>
       <div class="category-tabs" id="categoryTabs">
@@ -57,31 +43,21 @@
         <button class="category-tab" data-category="pieces" type="button">قطع الدجاج</button>
         <button class="category-tab" data-category="other" type="button">منتجات أخرى</button>
       </div>
-      <div class="product-grid" id="productGrid"></div>
-      <div class="empty-state hidden" id="emptyState">لا توجد منتجات مطابقة لبحثك.</div>
+      <div class="product-grid" id="productGrid"></div><div class="empty-state hidden" id="emptyState">لا توجد منتجات مطابقة لبحثك.</div>
     </section>
-
     <section class="quality-strip">
       <div class="quality-icon">❖</div><div><strong>الجودة أولًا</strong><p>نختار منتجاتنا بعناية لتصل إليك بالجودة التي تستحقها.</p></div>
       <div class="quality-icon">⌁</div><div><strong>طلب واضح وسهل</strong><p>اختر الكمية، راجع السلة، ثم أدخل بيانات التوصيل.</p></div>
       <div class="quality-icon">♡</div><div><strong>خدمة فروج الزين</strong><p>تجربة تسوق عربية بسيطة على الجوال والكمبيوتر.</p></div>
     </section>
   </main>
-
   <footer><a class="footer-brand" href="#">🐓 فروج الزين</a><span>FARUJ ALZAIN</span><small>© <span id="year"></span> فروج الزين. جميع الحقوق محفوظة.</small></footer>
-
   <div class="overlay hidden" id="overlay"></div>
   <aside class="cart-drawer" id="cartDrawer" aria-label="سلة التسوق" aria-hidden="true">
     <div class="drawer-head"><div><span class="section-kicker">طلبك</span><h2>سلة التسوق</h2></div><button class="icon-button" id="closeCart" aria-label="إغلاق السلة" type="button">×</button></div>
     <div class="cart-items" id="cartItems"></div>
-    <div class="cart-bottom">
-      <div class="cart-line"><span>المجموع الفرعي</span><strong id="subtotal">0.00 د.إ</strong></div>
-      <p class="cart-hint">رسوم التوصيل النهائية تُحدد حسب المنطقة عند تأكيد الطلب.</p>
-      <button class="primary-button" id="checkoutButton" type="button">متابعة لإتمام الطلب</button>
-      <button class="text-button" id="continueShopping" type="button">متابعة التسوق</button>
-    </div>
+    <div class="cart-bottom"><div class="cart-line"><span>المجموع الفرعي</span><strong id="subtotal">0.00 د.إ</strong></div><p class="cart-hint">رسوم التوصيل النهائية تُحدد حسب المنطقة عند تأكيد الطلب.</p><button class="primary-button" id="checkoutButton" type="button">متابعة لإتمام الطلب</button><button class="text-button" id="continueShopping" type="button">متابعة التسوق</button></div>
   </aside>
-
   <section class="checkout-modal hidden" id="checkoutModal" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
     <div class="modal-head"><div><span class="section-kicker">خطوة أخيرة</span><h2 id="checkoutTitle">بيانات التوصيل</h2></div><button class="icon-button" id="closeCheckout" type="button" aria-label="إغلاق">×</button></div>
     <form id="checkoutForm">
