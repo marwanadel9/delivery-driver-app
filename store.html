@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123d2b">
+  <title>متجر فروج الزين | FARUJ ALZAIN</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="store.css">
+</head>
+<body>
+  <div class="announcement">طازج يوميًا • جودة تثق بها • فروج الزين</div>
+  <header class="site-header">
+    <a class="brand" href="#" aria-label="فروج الزين - الرئيسية">
+      <span class="brand-mark">🐓</span>
+      <span class="brand-copy"><strong>فروج الزين</strong><small>FARUJ ALZAIN · FRESH EVERY DAY</small></span>
+    </a>
+    <div class="header-actions">
+      <label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="ابحث عن منتج..." aria-label="ابحث عن منتج"></label>
+      <button class="cart-open" id="openCart" type="button"><span>🛒</span><span>السلة</span><b id="cartCount">0</b></button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-content">
+        <span class="eyebrow">اختيارك الطازج كل يوم</span>
+        <h1>الطعم الأصيل يبدأ<br><em>من فروج الزين</em></h1>
+        <p>منتجات طازجة بعناية، وأسعار تناسب الأفراد والمطاعم والتجار.</p>
+        <a class="hero-cta" href="#products">تسوّق الآن <span>←</span></a>
+        <div class="hero-perks"><span>✓ جودة مختارة</span><span>✓ طلب سهل</span><span>✓ خدمة موثوقة</span></div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="hero-circle"></div>
+        <div class="hero-stamp"><b>طازج</b><small>FRESH<br>QUALITY</small></div>
+        <div class="hero-chicken">🍗</div>
+        <div class="floating-leaf leaf-one">✦</div><div class="floating-leaf leaf-two">✦</div>
+      </div>
+    </section>
+
+    <section class="customer-type-section">
+      <div><span class="section-kicker">أسعار تناسبك</span><h2>تشتري بصفتك إيه؟</h2></div>
+      <div class="type-switch" role="group" aria-label="نوع العميل">
+        <button class="type-btn active" data-type="individual" type="button">فرد <small>سعر التجزئة</small></button>
+        <button class="type-btn" data-type="restaurant" type="button">مطعم <small>سعر المطاعم</small></button>
+        <button class="type-btn" data-type="trader" type="button">تاجر <small>سعر الجملة</small></button>
+      </div>
+    </section>
+
+    <section class="catalog" id="products">
+      <div class="section-heading"><div><span class="section-kicker">تسوّق منتجاتنا</span><h2>منتجاتنا</h2></div><span class="demo-note">عرض تجريبي للواجهة</span></div>
+      <div class="category-tabs" id="categoryTabs">
+        <button class="category-tab active" data-category="all" type="button">كل المنتجات</button>
+        <button class="category-tab" data-category="chicken" type="button">دجاج كامل</button>
+        <button class="category-tab" data-category="pieces" type="button">قطع الدجاج</button>
+        <button class="category-tab" data-category="other" type="button">منتجات أخرى</button>
+      </div>
+      <div class="product-grid" id="productGrid"></div>
+      <div class="empty-state hidden" id="emptyState">لا توجد منتجات مطابقة لبحثك.</div>
+    </section>
+
+    <section class="quality-strip">
+      <div class="quality-icon">❖</div><div><strong>الجودة أولًا</strong><p>نختار منتجاتنا بعناية لتصل إليك بالجودة التي تستحقها.</p></div>
+      <div class="quality-icon">⌁</div><div><strong>طلب واضح وسهل</strong><p>اختر الكمية، راجع السلة، ثم أدخل بيانات التوصيل.</p></div>
+      <div class="quality-icon">♡</div><div><strong>خدمة فروج الزين</strong><p>تجربة تسوق عربية بسيطة على الجوال والكمبيوتر.</p></div>
+    </section>
+  </main>
+
+  <footer><a class="footer-brand" href="#">🐓 فروج الزين</a><span>FARUJ ALZAIN</span><small>© <span id="year"></span> فروج الزين. جميع الحقوق محفوظة.</small></footer>
+
+  <div class="overlay hidden" id="overlay"></div>
+  <aside class="cart-drawer" id="cartDrawer" aria-label="سلة التسوق" aria-hidden="true">
+    <div class="drawer-head"><div><span class="section-kicker">طلبك</span><h2>سلة التسوق</h2></div><button class="icon-button" id="closeCart" aria-label="إغلاق السلة" type="button">×</button></div>
+    <div class="cart-items" id="cartItems"></div>
+    <div class="cart-bottom">
+      <div class="cart-line"><span>المجموع الفرعي</span><strong id="subtotal">0.00 د.إ</strong></div>
+      <p class="cart-hint">رسوم التوصيل النهائية تُحدد حسب المنطقة عند تأكيد الطلب.</p>
+      <button class="primary-button" id="checkoutButton" type="button">متابعة لإتمام الطلب</button>
+      <button class="text-button" id="continueShopping" type="button">متابعة التسوق</button>
+    </div>
+  </aside>
+
+  <section class="checkout-modal hidden" id="checkoutModal" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
+    <div class="modal-head"><div><span class="section-kicker">خطوة أخيرة</span><h2 id="checkoutTitle">بيانات التوصيل</h2></div><button class="icon-button" id="closeCheckout" type="button" aria-label="إغلاق">×</button></div>
+    <form id="checkoutForm">
+      <div class="form-grid">
+        <label>الاسم الكامل<input name="customer_name" required autocomplete="name" placeholder="اكتب اسمك"></label>
+        <label>رقم الهاتف<input name="phone" required inputmode="tel" autocomplete="tel" placeholder="05xxxxxxxx"></label>
+        <label>الإمارة<select name="emirate" required><option value="">اختر الإمارة</option><option>دبي</option><option>أبوظبي</option><option>الشارقة</option><option>عجمان</option><option>أم القيوين</option><option>رأس الخيمة</option><option>الفجيرة</option></select></label>
+        <label>المنطقة<input name="area" required placeholder="اسم المنطقة"></label>
+        <label class="full-width">العنوان بالتفصيل<textarea name="address" required rows="2" placeholder="اسم الشارع، المبنى، رقم الفيلا أو الشقة"></textarea></label>
+        <label>طريقة الدفع<select name="payment_method" required><option value="">اختر طريقة الدفع</option><option value="cash">نقدًا عند الاستلام</option><option value="bank_transfer">تحويل بنكي</option><option value="by_agreement">حسب الاتفاق</option></select></label>
+        <label>ملاحظات (اختياري)<input name="notes" placeholder="أي تعليمات إضافية"></label>
+      </div>
+      <div class="checkout-summary"><div><span>عدد الأصناف</span><strong id="checkoutItemCount">0</strong></div><div><span>المجموع الفرعي</span><strong id="checkoutSubtotal">0.00 د.إ</strong></div><small>لا يتم إرسال الطلب في هذه النسخة التجريبية. سيتم ربط التأكيد بقاعدة البيانات بعد اختبار الواجهة.</small></div>
+      <button class="primary-button" type="submit">مراجعة الطلب التجريبي</button>
+    </form>
+    <div class="prototype-result hidden" id="prototypeResult"></div>
+  </section>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="store.js"></script>
+</body>
+</html>
