@@ -41,6 +41,8 @@ function renderProducts(){
 }
 function cartCount(){return Object.values(cart).reduce((n,q)=>n+q,0)}
 function subtotal(){return Object.entries(cart).reduce((sum,[id,q])=>sum+priceFor(getProduct(id))*q,0)}
+function deliveryFee(){return subtotal()>0 && subtotal()<200 ? 20 : 0}
+function orderTotal(){return subtotal()+deliveryFee()}
 function renderCart(){
   $("cartCount").textContent=cartCount();
   const ids=Object.keys(cart).filter(id=>cart[id]>0);
@@ -49,9 +51,14 @@ function renderCart(){
     return `<div class="cart-row"><div class="cart-thumb"><img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none';this.parentElement.textContent='🍗'"></div><div><h4>${p.name}</h4><small>${money(p.price)} / ${p.unit}</small><div class="qty-control"><button type="button" data-qty="-1" data-id="${id}" aria-label="تقليل">−</button><span>${q}</span><button type="button" data-qty="1" data-id="${id}" aria-label="زيادة">+</button></div></div><strong class="cart-row-price">${money(p.price*q)}</strong></div>`;
   }).join(""):`<div class="cart-empty">🛒<br>السلة لسه فاضية<br>اختار المنتجات اللي محتاجها وهتظهر هنا.</div>`;
   $("subtotal").textContent=money(subtotal());
+  if($("deliveryFee")) $("deliveryFee").textContent=deliveryFee()===0 ? "مجانًا" : money(deliveryFee());
+  if($("orderTotal")) $("orderTotal").textContent=money(orderTotal());
+  if($("cartDeliveryHint")) $("cartDeliveryHint").textContent=subtotal()===0 ? "رسوم التوصيل 20 د.إ للطلبات الأقل من 200 د.إ." : (subtotal()<200 ? "لأن طلبك أقل من 200 د.إ، تُضاف رسوم توصيل 20 د.إ." : "طلبك 200 د.إ أو أكثر؛ التوصيل مجاني.");
   $("checkoutButton").disabled=ids.length===0;
   $("checkoutItemCount").textContent=cartCount();
   $("checkoutSubtotal").textContent=money(subtotal());
+  if($("checkoutDeliveryFee")) $("checkoutDeliveryFee").textContent=deliveryFee()===0 ? "مجانًا" : money(deliveryFee());
+  if($("checkoutTotal")) $("checkoutTotal").textContent=money(orderTotal());
 }
 function showToast(message){
   $("toast").textContent=message;$("toast").classList.add("show");
@@ -80,7 +87,7 @@ $("overlay").addEventListener("click",()=>{closeCart();closeCheckout()});
 $("checkoutForm").addEventListener("submit",e=>{
   e.preventDefault();
   const data=Object.fromEntries(new FormData(e.currentTarget).entries());
-  $("prototypeResult").textContent=`تم تجهيز معاينة الطلب بنجاح.\nالعميل: ${data.customer_name}\nالمنطقة: ${data.emirate} - ${data.area}\nعدد الأصناف: ${cartCount()}\nالمجموع الفرعي: ${money(subtotal())}\nطريقة الدفع: ${{cash:"نقدًا عند الاستلام",bank_transfer:"تحويل بنكي",by_agreement:"حسب الاتفاق"}[data.payment_method]}\n\nتنبيه: هذه نسخة واجهة تجريبية، لم يتم إرسال بياناتك إلى أي جهة.`;
+  $("prototypeResult").textContent=`تم تجهيز معاينة الطلب بنجاح.\nالعميل: ${data.customer_name}\nالمنطقة: ${data.emirate} - ${data.area}\nعدد الأصناف: ${cartCount()}\nالمجموع الفرعي: ${money(subtotal())}\nرسوم التوصيل: ${deliveryFee()===0 ? "مجانًا" : money(deliveryFee())}\nالإجمالي شامل التوصيل: ${money(orderTotal())}\nطريقة الدفع: ${{cash:"نقدًا عند الاستلام",bank_transfer:"تحويل بنكي",by_agreement:"حسب الاتفاق"}[data.payment_method]}\n\nتنبيه: هذه نسخة واجهة تجريبية، لم يتم إرسال بياناتك إلى أي جهة.`;
   $("prototypeResult").classList.remove("hidden");
   showToast("تم تجهيز المعاينة — الطلب لم يُرسل");
 });
