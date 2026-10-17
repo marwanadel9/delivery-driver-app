@@ -25,18 +25,19 @@ function getProduct(id){return products.find(p=>p.id===id)}
 function priceFor(product){return product.price}
 function visibleProducts(){
   const q = $("searchInput").value.trim().toLowerCase();
-  return products.filter(p=>(selectedCategory==="all"||p.category===selectedCategory)&&(!q||`${p.name} ${p.categoryName} ${p.desc} ${p.unit}`.toLowerCase().includes(q)));
+  return products.filter(p=>!q||`${p.name} ${p.categoryName} ${p.desc} ${p.unit}`.toLowerCase().includes(q));
+}
+function productCard(p){
+  return `<article class="product-card"><div class="product-visual"><span class="product-emoji">${p.emoji}</span>${p.badge?`<span class="product-badge">${p.badge}</span>`:""}</div><div class="product-body"><span class="product-category">${p.categoryName}</span><h3>${p.name}</h3><p class="product-desc">${p.desc}</p><div class="product-bottom"><div class="product-price">${money(p.price)}<small> / ${p.unit}</small></div><button class="add-button" type="button" data-add="${p.id}" aria-label="أضف ${p.name} للسلة">+</button></div></div></article>`;
 }
 function renderProducts(){
   const list=visibleProducts();
-  $("productGrid").innerHTML=list.map(p=>`
-    <article class="product-card">
-      <div class="product-visual"><span class="product-emoji">${p.emoji}</span>${p.badge?`<span class="product-badge">${p.badge}</span>`:""}</div>
-      <div class="product-body"><span class="product-category">${p.categoryName}</span><h3>${p.name}</h3><p class="product-desc">${p.desc}</p>
-        <div class="product-bottom"><div class="product-price">${money(p.price)}<small> / ${p.unit}</small></div><button class="add-button" type="button" data-add="${p.id}" aria-label="أضف ${p.name} للسلة">+</button></div>
-      </div>
-    </article>`).join("");
-  $("emptyState").classList.toggle("hidden",list.length!==0);
+  const groups=[{category:"chicken",grid:"cartonGrid",empty:"cartonEmpty"},{category:"pieces",grid:"piecesGrid",empty:"piecesEmpty"},{category:"other",grid:"otherGrid",empty:"otherEmpty"}];
+  groups.forEach(g=>{
+    const items=list.filter(p=>p.category===g.category);
+    $(g.grid).innerHTML=items.map(productCard).join("");
+    $(g.empty).classList.toggle("hidden",items.length!==0);
+  });
 }
 function cartCount(){return Object.values(cart).reduce((n,q)=>n+q,0)}
 function subtotal(){return Object.entries(cart).reduce((sum,[id,q])=>sum+priceFor(getProduct(id))*q,0)}
@@ -68,8 +69,6 @@ document.addEventListener("click",e=>{
   if(add){cart[add.dataset.add]=(cart[add.dataset.add]||0)+1;renderCart();showToast("اتضاف المنتج للسلة");return}
   const qty=e.target.closest("[data-qty]");
   if(qty){const id=qty.dataset.id;cart[id]=(cart[id]||0)+Number(qty.dataset.qty);if(cart[id]<=0)delete cart[id];renderCart();return}
-  const cat=e.target.closest("[data-category]");
-  if(cat){selectedCategory=cat.dataset.category;document.querySelectorAll(".category-tab").forEach(b=>b.classList.toggle("active",b===cat));renderProducts()}
 });
 $("searchInput").addEventListener("input",renderProducts);
 $("openCart").addEventListener("click",openCart);
