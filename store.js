@@ -1,104 +1,57 @@
-const products = [
-  {id:"carton-700",name:"كرتون 700 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 700 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/carton-700g.jpg",emoji:"🍗",badge:"",price:125,unit:"كرتون"},
-  {id:"carton-800",name:"كرتون 800 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 800 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/carton-800g.jpg",emoji:"🍗",badge:"",price:145,unit:"كرتون"},
-  {id:"carton-900",name:"كرتون 900 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 900 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/carton-900g.jpg",emoji:"🍗",badge:"",price:160,unit:"كرتون"},
-  {id:"carton-1000",name:"كرتون 1000 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1000 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/carton-1000g.jpg",emoji:"🍗",badge:"",price:180,unit:"كرتون"},
-  {id:"carton-1100",name:"كرتون 1100 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1100 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/carton-1100g.jpg",emoji:"🍗",badge:"",price:200,unit:"كرتون"},
-  {id:"carton-1200",name:"كرتون 1200 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1200 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/carton-1200g.jpg",emoji:"🍗",badge:"",price:215,unit:"كرتون"},
-  {id:"carton-1300",name:"كرتون 1300 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1300 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/carton-1300g.jpg",emoji:"🍗",badge:"",price:230,unit:"كرتون"},
-  {id:"carton-1400",name:"كرتون 1400 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1400 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/carton-1400g.jpg",emoji:"🍗",badge:"",price:250,unit:"كرتون"},
-  {id:"carton-1500",name:"كرتون 1500 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1500 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/carton-1500g.jpg",emoji:"🍗",badge:"",price:270,unit:"كرتون"},
-  {id:"breast-500",name:"صحن صدور إسبشيل 500 جرام",category:"pieces",categoryName:"قطع الدجاج",desc:"صحن صدور إسبشيل بوزن 500 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/chicken-breast.jpg",emoji:"🍖",badge:"",price:25,unit:"صحن"},
-  {id:"thighs-500",name:"صحن أفخاذ 500 جرام",category:"pieces",categoryName:"قطع الدجاج",desc:"صحن أفخاذ بوزن 500 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/chicken-thighs.jpg",emoji:"🍗",badge:"",price:15,unit:"صحن"},
-  {id:"drumsticks-500",name:"صحن أرجل دبوس 500 جرام",category:"pieces",categoryName:"قطع الدجاج",desc:"صحن أرجل دبوس بوزن 500 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/chicken-drumsticks.jpg",emoji:"🍗",badge:"",price:15,unit:"صحن"},
-  {id:"wings-500",name:"صحن أجنحة 500 جرام",category:"pieces",categoryName:"قطع الدجاج",desc:"صحن أجنحة بوزن 500 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/chicken-wings.jpg",emoji:"🍗",badge:"",price:15,unit:"صحن"},
-  {id:"liver-500",name:"صحن كبدة 500 جرام",category:"other",categoryName:"منتجات أخرى",desc:"صحن كبدة بوزن 500 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/chicken-liver.jpg",emoji:"🥩",badge:"",price:10,unit:"صحن"},
-  {id:"gizzards-500",name:"صحن قوانص 500 جرام",category:"other",categoryName:"منتجات أخرى",desc:"صحن قوانص بوزن 500 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/chicken-gizzards.jpg",emoji:"🥩",badge:"",price:10,unit:"صحن"},
-  {id:"hearts-500",name:"صحن قلوب 500 جرام",category:"other",categoryName:"منتجات أخرى",desc:"صحن قلوب بوزن 500 جرام.",image:"https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/chicken-hearts.jpg",emoji:"🥩",badge:"",price:10,unit:"صحن"}
-];
-let selectedCategory = "all";
-let cart = {};
-let toastTimer;
-const $ = id => document.getElementById(id);
-const money = value => `${Number(value || 0).toFixed(2)} د.إ`;
-function getProduct(id){return products.find(p=>p.id===id)}
-function priceFor(product){return product.price}
-function visibleProducts(){
-  const q = $("searchInput").value.trim().toLowerCase();
-  return products.filter(p=>!q||`${p.name} ${p.categoryName} ${p.desc} ${p.unit}`.toLowerCase().includes(q));
-}
-function productCard(p){
-  return `<article class="product-card"><div class="product-visual"><img class="product-photo" src="${p.image}" alt="${p.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"> <span class="product-emoji" style="display:none">${p.emoji}</span>${p.badge?`<span class="product-badge">${p.badge}</span>`:""}</div><div class="product-body"><span class="product-category">${p.categoryName}</span><h3>${p.name}</h3><p class="product-desc">${p.desc}</p><div class="product-bottom"><div class="product-price">${money(p.price)}<small> / ${p.unit}</small></div><button class="add-button" type="button" data-add="${p.id}" aria-label="أضف ${p.name} للسلة">+</button></div></div></article>`;
-}
-function renderProducts(){
-  const list=visibleProducts();
-  const groups=[{category:"chicken",grid:"cartonGrid",empty:"cartonEmpty"},{category:"pieces",grid:"piecesGrid",empty:"piecesEmpty"},{category:"other",grid:"otherGrid",empty:"otherEmpty"}];
-  groups.forEach(g=>{
-    const items=list.filter(p=>p.category===g.category);
-    $(g.grid).innerHTML=items.map(productCard).join("");
-    $(g.empty).classList.toggle("hidden",items.length!==0);
-  });
-}
-function cartCount(){return Object.values(cart).reduce((n,q)=>n+q,0)}
-function subtotal(){return Object.entries(cart).reduce((sum,[id,q])=>sum+priceFor(getProduct(id))*q,0)}
-function deliveryFee(){return subtotal()>0 && subtotal()<200 ? 20 : 0}
-function orderTotal(){return subtotal()+deliveryFee()}
-function renderCart(){
-  $("cartCount").textContent=cartCount();
-  const ids=Object.keys(cart).filter(id=>cart[id]>0);
-  $("cartItems").innerHTML=ids.length?ids.map(id=>{
-    const p=getProduct(id),q=cart[id];
-    return `<div class="cart-row"><div class="cart-thumb"><img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none';this.parentElement.textContent='🍗'"></div><div><h4>${p.name}</h4><small>${money(p.price)} / ${p.unit}</small><div class="qty-control"><button type="button" data-qty="-1" data-id="${id}" aria-label="تقليل">−</button><span>${q}</span><button type="button" data-qty="1" data-id="${id}" aria-label="زيادة">+</button></div></div><strong class="cart-row-price">${money(p.price*q)}</strong></div>`;
-  }).join(""):`<div class="cart-empty">🛒<br>السلة لسه فاضية<br>اختار المنتجات اللي محتاجها وهتظهر هنا.</div>`;
-  $("subtotal").textContent=money(subtotal());
-  if($("deliveryFee")) $("deliveryFee").textContent=deliveryFee()===0 ? "مجانًا" : money(deliveryFee());
-  if($("orderTotal")) $("orderTotal").textContent=money(orderTotal());
-  if($("cartDeliveryHint")) $("cartDeliveryHint").textContent=subtotal()===0 ? "رسوم التوصيل 20 د.إ للطلبات الأقل من 200 د.إ." : (subtotal()<200 ? "لأن طلبك أقل من 200 د.إ، تُضاف رسوم توصيل 20 د.إ." : "طلبك 200 د.إ أو أكثر؛ التوصيل مجاني.");
-  $("checkoutButton").disabled=ids.length===0;
-  $("checkoutItemCount").textContent=cartCount();
-  $("checkoutSubtotal").textContent=money(subtotal());
-  if($("checkoutDeliveryFee")) $("checkoutDeliveryFee").textContent=deliveryFee()===0 ? "مجانًا" : money(deliveryFee());
-  if($("checkoutTotal")) $("checkoutTotal").textContent=money(orderTotal());
-}
-function showToast(message){
-  $("toast").textContent=message;$("toast").classList.add("show");
-  clearTimeout(toastTimer);toastTimer=setTimeout(()=>$("toast").classList.remove("show"),2300);
-}
-function openCart(){ $("overlay").classList.remove("hidden");$("cartDrawer").classList.add("open");$("cartDrawer").setAttribute("aria-hidden","false"); }
-function closeCart(){ $("cartDrawer").classList.remove("open");$("cartDrawer").setAttribute("aria-hidden","true");if($("checkoutModal").classList.contains("hidden"))$("overlay").classList.add("hidden"); }
-function openCheckout(){
-  if(!cartCount())return;
-  closeCart();$("overlay").classList.remove("hidden");$("checkoutModal").classList.remove("hidden");$("prototypeResult").classList.add("hidden");renderCart();
-}
-function closeCheckout(){ $("checkoutModal").classList.add("hidden");$("overlay").classList.add("hidden"); }
-document.addEventListener("click",e=>{
-  const add=e.target.closest("[data-add]");
-  if(add){cart[add.dataset.add]=(cart[add.dataset.add]||0)+1;renderCart();showToast("اتضاف المنتج للسلة");return}
-  const qty=e.target.closest("[data-qty]");
-  if(qty){const id=qty.dataset.id;cart[id]=(cart[id]||0)+Number(qty.dataset.qty);if(cart[id]<=0)delete cart[id];renderCart();return}
-});
-$("searchInput").addEventListener("input",renderProducts);
-$("openCart").addEventListener("click",openCart);
-$("closeCart").addEventListener("click",closeCart);
-$("continueShopping").addEventListener("click",closeCart);
-$("checkoutButton").addEventListener("click",openCheckout);
-$("closeCheckout").addEventListener("click",closeCheckout);
-$("overlay").addEventListener("click",()=>{closeCart();closeCheckout()});
-$("checkoutForm").addEventListener("submit",e=>{
-  e.preventDefault();
-  const data=Object.fromEntries(new FormData(e.currentTarget).entries());
-  const itemLines=Object.entries(cart).filter(([id,q])=>q>0).map(([id,q])=>{
-    const p=getProduct(id);
-    return `• ${p.name} × ${q} = ${money(p.price*q)}`;
-  }).join("\n");
-  const paymentLabels={cash:"نقدًا عند الاستلام",bank_transfer:"تحويل بنكي",by_agreement:"حسب الاتفاق"};
-  const message=`طلب جديد من متجر فروج الزين\n\nالاسم: ${data.customer_name}\nالهاتف: ${data.phone}\nالإمارة: ${data.emirate}\nالمنطقة: ${data.area}\nالعنوان: ${data.address}\n\nالمنتجات:\n${itemLines}\n\nالمجموع الفرعي: ${money(subtotal())}\nرسوم التوصيل: ${deliveryFee()===0 ? "مجانًا" : money(deliveryFee())}\nالإجمالي شامل التوصيل: ${money(orderTotal())}\nطريقة الدفع: ${paymentLabels[data.payment_method]}\nملاحظات: ${data.notes || "لا توجد"}`;
-  const encoded=encodeURIComponent(message);
-  const wa1=`https://wa.me/971553737911?text=${encoded}`;
-  const wa2=`https://wa.me/971501951975?text=${encoded}`;
-  $("prototypeResult").innerHTML=`<div>تم تجهيز رسالة الطلب. اضغط على الرقم الذي تريد إرسال الطلب إليه عبر واتساب.</div><div class="order-wa-actions"><a href="${wa1}" target="_blank" rel="noopener">إرسال الطلب عبر واتساب 1</a><a href="${wa2}" target="_blank" rel="noopener">إرسال الطلب عبر واتساب 2</a></div><p style="margin-top:12px;font-size:13px;color:#7d8b7b">سيتم فتح واتساب بالرسالة جاهزة، ويجب الضغط على إرسال داخل واتساب. الطلب لا يُحفظ في قاعدة البيانات حاليًا.</p>`;
-  $("prototypeResult").classList.remove("hidden");
-  showToast("رسالة الطلب جاهزة للإرسال عبر واتساب");
-});
-$("year").textContent=new Date().getFullYear();
-renderProducts();renderCart();
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123d2b">
+  <title>متجر فروج الزين | FARUJ ALZAIN</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="store.css">
+  <style>
+    body{font-family:'Tajawal',sans-serif;background:#fbfcf8;color:#173c2c}
+    .announcement{background:#103e2b;color:#e5f2a0;text-align:center;padding:10px 16px;font-weight:800;font-size:14px}
+    .site-header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #e8eddf;box-shadow:0 5px 22px #123d2b0a}
+    .hero{background:linear-gradient(125deg,#103d2b,#1e5a3e);color:#fff;min-height:300px;border-radius:0 0 28px 28px;margin:0 0 28px;padding:42px clamp(20px,5vw,70px);display:flex;align-items:center;justify-content:space-between;gap:24px;overflow:hidden}
+    .hero-content{max-width:680px}.hero .eyebrow{display:inline-block;background:#dff09b;color:#17412d;border-radius:30px;padding:7px 14px;font-weight:800}.hero h1{font-size:clamp(30px,4vw,52px);line-height:1.2;margin:16px 0}.hero h1 em{font-style:normal;color:#e5f29d}.hero p{font-size:17px;color:#e0eadf;line-height:1.8}.hero-cta{display:inline-flex;gap:14px;align-items:center;background:#e5f29d;color:#173d2b;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:900;margin-top:8px}.hero-art{font-size:clamp(90px,14vw,170px);background:#dff09b;border-radius:50%;width:clamp(150px,20vw,240px);height:clamp(150px,20vw,240px);display:grid;place-items:center;flex-shrink:0;box-shadow:0 18px 50px #071d133b}
+    .shop-intro{max-width:1500px;margin:0 auto;padding:0 24px}.shop-intro h2{font-size:30px;margin:5px 0}.section-kicker{color:#68834d;font-weight:800}
+    .promo-grid{max-width:1500px;margin:22px auto 42px;padding:0 24px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+    .promo-card{position:relative;min-height:220px;border-radius:22px;padding:28px;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:12px;text-decoration:none;box-shadow:0 12px 30px #153d2910;transition:transform .2s}
+    .promo-card:hover{transform:translateY(-3px)}.promo-card.cartons{background:linear-gradient(120deg,#eaf2d8,#d5e7b4);color:#143e2a}.promo-card.pieces{background:linear-gradient(120deg,#fff0d9,#f6d8b2);color:#583a20}
+    .promo-copy{position:relative;z-index:1;max-width:65%}.promo-label{font-size:13px;font-weight:900;opacity:.75}.promo-card h3{font-size:clamp(24px,3vw,36px);margin:8px 0}.promo-card p{line-height:1.8;margin:0 0 16px}.promo-link{display:inline-block;border-radius:10px;background:#153f2c;color:#fff;padding:10px 16px;font-weight:900}.pieces .promo-link{background:#704523}.promo-art{font-size:clamp(65px,9vw,115px);filter:drop-shadow(0 8px 7px #0002)}.promo-photo{width:38%;max-width:330px;height:190px;object-fit:contain;border-radius:16px;position:relative;z-index:1;mix-blend-mode:multiply}.promo-photo-pieces{font-size:clamp(65px,9vw,115px);filter:drop-shadow(0 8px 7px #0002)}
+    .catalog-section{max-width:1500px;margin:0 auto 48px;padding:0 24px;scroll-margin-top:100px}.section-heading{display:flex;align-items:end;justify-content:space-between;gap:14px;margin-bottom:16px}.section-heading h2{font-size:28px;margin:4px 0}.section-heading p{color:#7d8b7b;margin:5px 0 0}.section-count{background:#edf3e3;color:#3f623b;padding:7px 12px;border-radius:30px;font-size:13px;font-weight:800;white-space:nowrap}
+    .product-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.product-card{background:#fff;border:1px solid #e5eadf;border-radius:18px;overflow:hidden;box-shadow:0 5px 18px #153d2908}.product-visual{background:#f0f4e8;min-height:130px;display:grid;place-items:center}.product-emoji{font-size:54px}.product-body{padding:16px}.product-body h3{font-size:17px;line-height:1.5;min-height:48px;margin:6px 0}.product-desc{color:#859183;font-size:13px;min-height:20px}.product-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:15px}.product-price{font-weight:900;color:#123d2b}.product-price small{font-size:12px;color:#829080;font-weight:600}.add-button{background:#123d2b;color:#fff;border:0;border-radius:10px;width:38px;height:38px;font-size:23px;cursor:pointer}.empty-state{padding:20px;text-align:center;color:#778574}.hidden{display:none!important}
+    .quality-strip{max-width:1500px;margin:30px auto;padding:22px 24px;background:#f2f4e9;border-radius:20px;display:grid;grid-template-columns:auto 1fr auto 1fr auto 1fr;align-items:center;gap:14px}.quality-icon{background:#e2edcf;border-radius:12px;padding:12px;font-size:20px}.quality-strip p{font-size:13px;color:#7d8b7b;margin:5px 0 0}.quality-strip strong{font-size:15px}footer{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;padding:22px 5%;border-top:1px solid #e5eadf;background:#fff}.footer-brand{font-weight:900;color:#123d2b;text-decoration:none}
+    @media(max-width:1000px){.product-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.quality-strip{grid-template-columns:auto 1fr;}.hero-art{font-size:100px}}
+    @media(max-width:650px){.contact-bar{gap:6px;padding:8px 6px;font-size:13px}.contact-number{gap:4px;padding:4px}.contact-number b{font-size:12px}.contact-number a{font-size:12px;padding:5px 6px}.product-price{font-size:16px;padding:5px 6px}.product-body h3{font-size:15px}.section-heading h2{font-size:24px}.hero{padding:28px 20px;min-height:0}.hero-art{width:100px;height:100px;font-size:58px}.hero p{font-size:14px}.promo-grid{grid-template-columns:1fr;padding:0 14px;gap:14px;margin-bottom:32px}.promo-card{min-height:175px;padding:20px}.promo-copy{max-width:72%}.promo-card p{font-size:14px}.promo-art{font-size:64px}.promo-photo{width:38%;height:130px;object-fit:contain}.catalog-section,.shop-intro{padding:0 14px}.product-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.product-visual{min-height:100px}.product-emoji{font-size:42px}.product-body{padding:11px}.product-body h3{font-size:14px;min-height:44px}.product-desc{font-size:11px}.product-price{font-size:13px}.product-price small{font-size:10px}.add-button{width:32px;height:32px}.section-heading h2{font-size:23px}.section-heading p{font-size:12px}.quality-strip{margin:24px 14px;padding:17px;gap:10px}.hero h1{font-size:29px}.hero .hero-perks{font-size:11px;gap:8px;flex-wrap:wrap}}
+
+    .contact-bar{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:10px;padding:10px 16px;background:#fff8dc;border-bottom:1px solid #f1d45a;color:#9f1239;font-family:'Tajawal',sans-serif;font-size:15px}.contact-number{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #f0d66b;border-radius:12px;padding:5px 8px;color:#173c2c}.contact-number b{font-size:15px;direction:ltr;white-space:nowrap}.contact-number a{display:inline-block;text-decoration:none;color:#fff;background:#13834b;border-radius:7px;padding:6px 9px;font-weight:900;font-size:14px}.contact-number a:last-child{background:#123d2b}.product-body h3{font-size:19px}.product-price{font-size:20px;color:#b5162e;background:#fff4c2;border:1px solid #f0d66b;border-radius:9px;padding:6px 9px;white-space:nowrap}.product-price small{font-size:13px;color:#6b5a2a}.product-desc{font-size:14px}.section-heading h2{font-size:32px}.section-heading p{font-size:15px}
+  </style>
+</head>
+<body>
+  <div class="contact-bar" dir="rtl" aria-label="التواصل والطلبات"><strong>اطلب أو تواصل معنا</strong><div class="contact-number"><b>00971553737911</b><a href="https://wa.me/971553737911" target="_blank" rel="noopener">واتساب</a><a href="tel:+971553737911">اتصال</a></div><div class="contact-number"><b>00971501951975</b><a href="https://wa.me/971501951975" target="_blank" rel="noopener">واتساب</a><a href="tel:+971501951975">اتصال</a></div></div>
+  <div class="announcement">طازج يوميًا • جودة تثق بها • فروج الزين</div>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="فروج الزين - الرئيسية"><span class="brand-mark">🐓</span><span class="brand-copy"><strong>فروج الزين</strong><small>FARUJ ALZAIN · FRESH EVERY DAY</small></span></a>
+    <div class="header-actions"><label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="ابحث عن منتج..." aria-label="ابحث عن منتج"></label><button class="cart-open" id="openCart" type="button"><span>🛒</span><span>السلة</span><b id="cartCount">0</b></button></div>
+  </header>
+  <main id="top">
+    <section class="hero"><div class="hero-content"><span class="eyebrow">اختيارك الطازج كل يوم</span><h1>كل احتياجاتك من<br><em>فروج الزين</em></h1><p>كراتين الدجاج وقطع الدجاج في مكان واحد، بأسعار واضحة وطلب سهل من الجوال أو الكمبيوتر.</p><a class="hero-cta" href="#promotions">اكتشف أقسامنا <span>←</span></a><div class="hero-perks"><span>✓ جودة مختارة</span>　<span>✓ أسعار واضحة</span>　<span>✓ طلب سهل</span></div></div><div class="hero-art" aria-hidden="true">🍗</div></section>
+    <div class="shop-intro"><span class="section-kicker">تسوّق بطريقة أسهل</span><h2>اختار القسم اللي تحتاجه</h2></div>
+    <section class="promo-grid" id="promotions" aria-label="الأقسام الرئيسية">
+      <a class="promo-card cartons" href="#cartonSection"><div class="promo-copy"><span class="promo-label">القسم الأول · دجاج كامل</span><h3>كراتين الدجاج</h3><p>اختار الوزن المناسب لك من 700 جرام إلى 1500 جرام.</p><span class="promo-link">تسوّق الكراتين ←</span></div><img class="promo-photo" src="https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/a_clean_high_resolution_studio_product_photo_with.png" alt="كرتون دجاج كامل طازج"></a>
+      <a class="promo-card pieces" href="#piecesSection"><div class="promo-copy"><span class="promo-label">القسم الثاني · قطع طازجة</span><h3>قطع الدجاج</h3><p>صدور وأفخاذ وأجنحة وأرجل دبوس، مع أقسام الكبدة والقوانص والقلوب.</p><span class="promo-link">تسوّق قطع الدجاج ←</span></div><img class="promo-photo promo-photo-pieces" src="https://wnfibznjxihilgfedfij.supabase.co/storage/v1/object/public/store-images/chicken-pieces-7-items.jpg" alt="أصناف قطع الدجاج والكبدة والقوانص والقلوب"></a>
+    </section>
+    <section class="catalog-section" id="cartonSection"><div class="section-heading"><div><span class="section-kicker">دجاج كامل</span><h2>كراتين الدجاج</h2><p>اختار وزن الكرتون واضغط (+) لإضافته إلى السلة.</p></div><span class="section-count">9 أوزان</span></div><div class="product-grid" id="cartonGrid"></div><div class="empty-state hidden" id="cartonEmpty">لا توجد نتائج في هذا القسم.</div></section>
+    <section class="catalog-section" id="piecesSection"><div class="section-heading"><div><span class="section-kicker">قطع وتجهيزات</span><h2>قطع الدجاج</h2><p>تشكيلة من الأصناف المجهزة بأوزان واضحة.</p></div><span class="section-count">4 أصناف</span></div><div class="product-grid" id="piecesGrid"></div><div class="empty-state hidden" id="piecesEmpty">لا توجد نتائج في هذا القسم.</div></section>
+    <section class="catalog-section" id="otherSection"><div class="section-heading"><div><span class="section-kicker">أصناف إضافية</span><h2>الكبدة والقوانص والقلوب</h2><p>تظهر هنا بشكل مستقل حتى يسهل الوصول إليها.</p></div><span class="section-count">3 أصناف</span></div><div class="product-grid" id="otherGrid"></div><div class="empty-state hidden" id="otherEmpty">لا توجد نتائج في هذا القسم.</div></section>
+    <section class="quality-strip"><div class="quality-icon">❖</div><div><strong>الجودة أولًا</strong><p>نختار منتجاتنا بعناية.</p></div><div class="quality-icon">⌁</div><div><strong>طلب واضح وسهل</strong><p>أضف المنتجات للسلة وراجع طلبك.</p></div><div class="quality-icon">♡</div><div><strong>خدمة فروج الزين</strong><p>تجربة تسوق عربية بسيطة.</p></div></section>
+  </main>
+  <footer><a class="footer-brand" href="#top">🐓 فروج الزين</a><span>FARUJ ALZAIN</span><small>© <span id="year"></span> فروج الزين. جميع الحقوق محفوظة.</small></footer>
+  <div class="overlay hidden" id="overlay"></div>
+  <aside class="cart-drawer" id="cartDrawer" aria-label="سلة التسوق" aria-hidden="true"><div class="drawer-head"><div><span class="section-kicker">طلبك</span><h2>سلة التسوق</h2></div><button class="icon-button" id="closeCart" aria-label="إغلاق السلة" type="button">×</button></div><div class="cart-items" id="cartItems"></div><div class="cart-bottom"><div class="cart-line"><span>المجموع الفرعي</span><strong id="subtotal">0.00 د.إ</strong></div><p class="cart-hint">رسوم التوصيل النهائية تُحدد حسب المنطقة عند تأكيد الطلب.</p><button class="primary-button" id="checkoutButton" type="button">متابعة لإتمام الطلب</button><button class="text-button" id="continueShopping" type="button">متابعة التسوق</button></div></aside>
+  <section class="checkout-modal hidden" id="checkoutModal" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle"><div class="modal-head"><div><span class="section-kicker">خطوة أخيرة</span><h2 id="checkoutTitle">بيانات التوصيل</h2></div><button class="icon-button" id="closeCheckout" type="button" aria-label="إغلاق">×</button></div><form id="checkoutForm"><div class="form-grid"><label>الاسم الكامل<input name="customer_name" required autocomplete="name" placeholder="اكتب اسمك"></label><label>رقم الهاتف<input name="phone" required inputmode="tel" autocomplete="tel" placeholder="05xxxxxxxx"></label><label>الإمارة<select name="emirate" required><option value="">اختر الإمارة</option><option>دبي</option><option>أبوظبي</option><option>الشارقة</option><option>عجمان</option><option>أم القيوين</option><option>رأس الخيمة</option><option>الفجيرة</option></select></label><label>المنطقة<input name="area" required placeholder="اسم المنطقة"></label><label class="full-width">العنوان بالتفصيل<textarea name="address" required rows="2" placeholder="اسم الشارع، المبنى، رقم الفيلا أو الشقة"></textarea></label><label>طريقة الدفع<select name="payment_method" required><option value="">اختر طريقة الدفع</option><option value="cash">نقدًا عند الاستلام</option><option value="bank_transfer">تحويل بنكي</option><option value="by_agreement">حسب الاتفاق</option></select></label><label>ملاحظات (اختياري)<input name="notes" placeholder="أي تعليمات إضافية"></label></div><div class="checkout-summary"><div><span>عدد الأصناف</span><strong id="checkoutItemCount">0</strong></div><div><span>المجموع الفرعي</span><strong id="checkoutSubtotal">0.00 د.إ</strong></div><small>هذه معاينة للواجهة فقط؛ الطلب لا يُرسل إلى قاعدة البيانات بعد.</small></div><button class="primary-button" type="submit">مراجعة الطلب التجريبي</button></form><div class="prototype-result hidden" id="prototypeResult"></div></section>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div><script src="store.js"></script>
+</body>
+</html>
