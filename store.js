@@ -28,7 +28,10 @@ function visibleProducts(){
   return products.filter(p=>!q||`${p.name} ${p.categoryName} ${p.desc} ${p.unit}`.toLowerCase().includes(q));
 }
 function productCard(p){
-  return `<article class="product-card"><div class="product-visual"><img class="product-photo" src="${p.image}" alt="${p.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"> <span class="product-emoji" style="display:none">${p.emoji}</span>${p.badge?`<span class="product-badge">${p.badge}</span>`:""}</div><div class="product-body"><span class="product-category">${p.categoryName}</span><h3>${p.name}</h3><p class="product-desc">${p.desc}</p><div class="product-bottom"><div class="product-price">${money(p.price)}<small> / ${p.unit}</small></div><button class="add-button" type="button" data-add="${p.id}" aria-label="أضف ${p.name} للسلة">+</button></div></div></article>`;
+  const cartonCountBadge = p.category === "chicken"
+    ? `<span style="position:absolute;top:10px;left:10px;z-index:3;background:#123d2b;color:#fff;padding:6px 11px;border:2px solid #ffdf45;border-radius:9px;font-size:14px;font-weight:900;line-height:1.2;box-shadow:0 3px 10px #0002;pointer-events:none">10 حبات</span>`
+    : "";
+  return `<article class="product-card"><div class="product-visual" style="position:relative">${cartonCountBadge}<img class="product-photo" src="${p.image}" alt="${p.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"> <span class="product-emoji" style="display:none">${p.emoji}</span>${p.badge?`<span class="product-badge">${p.badge}</span>`:""}</div><div class="product-body"><span class="product-category">${p.categoryName}</span><h3>${p.name}</h3><p class="product-desc">${p.desc}</p><div class="product-bottom"><div class="product-price">${money(p.price)}<small> / ${p.unit}</small></div><button class="add-button" type="button" data-add="${p.id}" aria-label="أضف ${p.name} للسلة">+</button></div></div></article>`;
 }
 function renderProducts(){
   const list=visibleProducts();
@@ -87,18 +90,9 @@ $("overlay").addEventListener("click",()=>{closeCart();closeCheckout()});
 $("checkoutForm").addEventListener("submit",e=>{
   e.preventDefault();
   const data=Object.fromEntries(new FormData(e.currentTarget).entries());
-  const itemLines=Object.entries(cart).filter(([id,q])=>q>0).map(([id,q])=>{
-    const p=getProduct(id);
-    return `• ${p.name} × ${q} = ${money(p.price*q)}`;
-  }).join("\n");
-  const paymentLabels={cash:"نقدًا عند الاستلام",bank_transfer:"تحويل بنكي",by_agreement:"حسب الاتفاق"};
-  const message=`طلب جديد من متجر فروج الزين\n\nالاسم: ${data.customer_name}\nالهاتف: ${data.phone}\nالإمارة: ${data.emirate}\nالمنطقة: ${data.area}\nالعنوان: ${data.address}\n\nالمنتجات:\n${itemLines}\n\nالمجموع الفرعي: ${money(subtotal())}\nرسوم التوصيل: ${deliveryFee()===0 ? "مجانًا" : money(deliveryFee())}\nالإجمالي شامل التوصيل: ${money(orderTotal())}\nطريقة الدفع: ${paymentLabels[data.payment_method]}\nملاحظات: ${data.notes || "لا توجد"}`;
-  const encoded=encodeURIComponent(message);
-  const wa1=`https://wa.me/971553737911?text=${encoded}`;
-  const wa2=`https://wa.me/971501951975?text=${encoded}`;
-  $("prototypeResult").innerHTML=`<div class="order-ready-title">تم تجهيز رسالة طلبك. اختر الرقم لإرسالها عبر واتساب:</div><div class="order-wa-actions"><a href="${wa1}" target="_blank" rel="noopener">واتساب 00971553737911</a><a href="${wa2}" target="_blank" rel="noopener">واتساب 00971501951975</a></div><p class="order-ready-note">سيتم فتح واتساب والرسالة جاهزة؛ اضغط إرسال داخل واتساب لتأكيد الطلب. الطلب لا يُحفظ في قاعدة البيانات حاليًا.</p>`;
+  $("prototypeResult").textContent=`تم تجهيز معاينة الطلب بنجاح.\nالعميل: ${data.customer_name}\nالمنطقة: ${data.emirate} - ${data.area}\nعدد الأصناف: ${cartCount()}\nالمجموع الفرعي: ${money(subtotal())}\nرسوم التوصيل: ${deliveryFee()===0 ? "مجانًا" : money(deliveryFee())}\nالإجمالي شامل التوصيل: ${money(orderTotal())}\nطريقة الدفع: ${{cash:"نقدًا عند الاستلام",bank_transfer:"تحويل بنكي",by_agreement:"حسب الاتفاق"}[data.payment_method]}\n\nتنبيه: هذه نسخة واجهة تجريبية، لم يتم إرسال بياناتك إلى أي جهة.`;
   $("prototypeResult").classList.remove("hidden");
-  showToast("رسالة الطلب جاهزة للإرسال عبر واتساب");
+  showToast("تم تجهيز المعاينة — الطلب لم يُرسل");
 });
 $("year").textContent=new Date().getFullYear();
 renderProducts();renderCart();
