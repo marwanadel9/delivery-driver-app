@@ -1,25 +1,31 @@
 const products = [
-  {id:"chicken-1",name:"فروج كامل طازج",category:"chicken",categoryName:"دجاج كامل",desc:"فروج كامل مناسب للوجبات اليومية.",emoji:"🍗",badge:"الأكثر طلبًا",prices:{individual:22,restaurant:19,trader:17}},
-  {id:"chicken-2",name:"فروج كامل كبير",category:"chicken",categoryName:"دجاج كامل",desc:"حجم كبير لتحضير وجبات العائلة.",emoji:"🍗",badge:"حجم كبير",prices:{individual:27,restaurant:24, trader:22}},
-  {id:"pieces-1",name:"صدور دجاج",category:"pieces",categoryName:"قطع الدجاج",desc:"صدور دجاج لوجبات متنوعة.",emoji:"🍖",badge:"اختيار مميز",prices:{individual:28,restaurant:25,trader:23}},
-  {id:"pieces-2",name:"أفخاذ دجاج",category:"pieces",categoryName:"قطع الدجاج",desc:"قطع مناسبة للشوي والطبخ.",emoji:"🍗",badge:"",prices:{individual:24,restaurant:21,trader:19}},
-  {id:"pieces-3",name:"أجنحة دجاج",category:"pieces",categoryName:"قطع الدجاج",desc:"مناسبة للقلي والشوي والتتبيل.",emoji:"🍗",badge:"",prices:{individual:18,restaurant:16,trader:14}},
-  {id:"pieces-4",name:"دجاج مقطع",category:"pieces",categoryName:"قطع الدجاج",desc:"قطع جاهزة للتحضير والطبخ.",emoji:"🥘",badge:"",prices:{individual:25,restaurant:22,trader:20}},
-  {id:"other-1",name:"كبدة وقوانص",category:"other",categoryName:"منتجات أخرى",desc:"منتجات مختارة لوجباتك اليومية.",emoji:"🥩",badge:"",prices:{individual:15,restaurant:13,trader:11}},
-  {id:"other-2",name:"منتجات فروج الزين",category:"other",categoryName:"منتجات أخرى",desc:"أضف منتجاتك الفعلية عند تجهيز الكتالوج.",emoji:"🧺",badge:"قريبًا",prices:{individual:12,restaurant:10,trader:9}}
+  {id:"carton-700",name:"كرتون 700 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 700 جرام.",emoji:"🍗",badge:"",price:125,unit:"كرتون"},
+  {id:"carton-800",name:"كرتون 800 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 800 جرام.",emoji:"🍗",badge:"",price:145,unit:"كرتون"},
+  {id:"carton-900",name:"كرتون 900 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 900 جرام.",emoji:"🍗",badge:"",price:160,unit:"كرتون"},
+  {id:"carton-1000",name:"كرتون 1000 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1000 جرام.",emoji:"🍗",badge:"",price:180,unit:"كرتون"},
+  {id:"carton-1100",name:"كرتون 1100 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1100 جرام.",emoji:"🍗",badge:"",price:200,unit:"كرتون"},
+  {id:"carton-1200",name:"كرتون 1200 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1200 جرام.",emoji:"🍗",badge:"",price:215,unit:"كرتون"},
+  {id:"carton-1300",name:"كرتون 1300 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1300 جرام.",emoji:"🍗",badge:"",price:230,unit:"كرتون"},
+  {id:"carton-1400",name:"كرتون 1400 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1400 جرام.",emoji:"🍗",badge:"",price:250,unit:"كرتون"},
+  {id:"carton-1500",name:"كرتون 1500 جرام",category:"chicken",categoryName:"دجاج كامل",desc:"كرتون فروج بوزن 1500 جرام.",emoji:"🍗",badge:"",price:270,unit:"كرتون"},
+  {id:"breast-500",name:"صحن صدور إسبشيل 500 جرام",category:"pieces",categoryName:"قطع الدجاج",desc:"صحن صدور إسبشيل بوزن 500 جرام.",emoji:"🍖",badge:"",price:25,unit:"صحن"},
+  {id:"thighs-500",name:"صحن أفخاذ 500 جرام",category:"pieces",categoryName:"قطع الدجاج",desc:"صحن أفخاذ بوزن 500 جرام.",emoji:"🍗",badge:"",price:15,unit:"صحن"},
+  {id:"drumsticks-500",name:"صحن أرجل دبوس 500 جرام",category:"pieces",categoryName:"قطع الدجاج",desc:"صحن أرجل دبوس بوزن 500 جرام.",emoji:"🍗",badge:"",price:15,unit:"صحن"},
+  {id:"wings-500",name:"صحن أجنحة 500 جرام",category:"pieces",categoryName:"قطع الدجاج",desc:"صحن أجنحة بوزن 500 جرام.",emoji:"🍗",badge:"",price:15,unit:"صحن"},
+  {id:"liver-500",name:"صحن كبدة 500 جرام",category:"other",categoryName:"منتجات أخرى",desc:"صحن كبدة بوزن 500 جرام.",emoji:"🥩",badge:"",price:10,unit:"صحن"},
+  {id:"gizzards-500",name:"صحن قوانص 500 جرام",category:"other",categoryName:"منتجات أخرى",desc:"صحن قوانص بوزن 500 جرام.",emoji:"🥩",badge:"",price:10,unit:"صحن"},
+  {id:"hearts-500",name:"صحن قلوب 500 جرام",category:"other",categoryName:"منتجات أخرى",desc:"صحن قلوب بوزن 500 جرام.",emoji:"🥩",badge:"",price:10,unit:"صحن"}
 ];
-const typeLabels = {individual:"فرد",restaurant:"مطعم",trader:"تاجر"};
-let customerType = "individual";
 let selectedCategory = "all";
 let cart = {};
 let toastTimer;
 const $ = id => document.getElementById(id);
 const money = value => `${Number(value || 0).toFixed(2)} د.إ`;
 function getProduct(id){return products.find(p=>p.id===id)}
-function priceFor(product){return product.prices[customerType]}
+function priceFor(product){return product.price}
 function visibleProducts(){
   const q = $("searchInput").value.trim().toLowerCase();
-  return products.filter(p=>(selectedCategory==="all"||p.category===selectedCategory)&&(!q||`${p.name} ${p.categoryName} ${p.desc}`.toLowerCase().includes(q)));
+  return products.filter(p=>(selectedCategory==="all"||p.category===selectedCategory)&&(!q||`${p.name} ${p.categoryName} ${p.desc} ${p.unit}`.toLowerCase().includes(q)));
 }
 function renderProducts(){
   const list=visibleProducts();
@@ -27,7 +33,7 @@ function renderProducts(){
     <article class="product-card">
       <div class="product-visual"><span class="product-emoji">${p.emoji}</span>${p.badge?`<span class="product-badge">${p.badge}</span>`:""}</div>
       <div class="product-body"><span class="product-category">${p.categoryName}</span><h3>${p.name}</h3><p class="product-desc">${p.desc}</p>
-        <div class="product-bottom"><div class="product-price">${money(priceFor(p))}<small> / قطعة تجريبية</small></div><button class="add-button" type="button" data-add="${p.id}" aria-label="أضف ${p.name} للسلة">+</button></div>
+        <div class="product-bottom"><div class="product-price">${money(p.price)}<small> / ${p.unit}</small></div><button class="add-button" type="button" data-add="${p.id}" aria-label="أضف ${p.name} للسلة">+</button></div>
       </div>
     </article>`).join("");
   $("emptyState").classList.toggle("hidden",list.length!==0);
@@ -39,7 +45,7 @@ function renderCart(){
   const ids=Object.keys(cart).filter(id=>cart[id]>0);
   $("cartItems").innerHTML=ids.length?ids.map(id=>{
     const p=getProduct(id),q=cart[id];
-    return `<div class="cart-row"><div class="cart-thumb">${p.emoji}</div><div><h4>${p.name}</h4><small>${money(priceFor(p))} للقطعة</small><div class="qty-control"><button type="button" data-qty="-1" data-id="${id}" aria-label="تقليل">−</button><span>${q}</span><button type="button" data-qty="1" data-id="${id}" aria-label="زيادة">+</button></div></div><strong class="cart-row-price">${money(priceFor(p)*q)}</strong></div>`;
+    return `<div class="cart-row"><div class="cart-thumb">${p.emoji}</div><div><h4>${p.name}</h4><small>${money(p.price)} / ${p.unit}</small><div class="qty-control"><button type="button" data-qty="-1" data-id="${id}" aria-label="تقليل">−</button><span>${q}</span><button type="button" data-qty="1" data-id="${id}" aria-label="زيادة">+</button></div></div><strong class="cart-row-price">${money(p.price*q)}</strong></div>`;
   }).join(""):`<div class="cart-empty">🛒<br>السلة لسه فاضية<br>اختار المنتجات اللي محتاجها وهتظهر هنا.</div>`;
   $("subtotal").textContent=money(subtotal());
   $("checkoutButton").disabled=ids.length===0;
@@ -65,9 +71,6 @@ document.addEventListener("click",e=>{
   const cat=e.target.closest("[data-category]");
   if(cat){selectedCategory=cat.dataset.category;document.querySelectorAll(".category-tab").forEach(b=>b.classList.toggle("active",b===cat));renderProducts()}
 });
-document.querySelectorAll(".type-btn").forEach(btn=>btn.addEventListener("click",()=>{
-  customerType=btn.dataset.type;document.querySelectorAll(".type-btn").forEach(b=>b.classList.toggle("active",b===btn));renderProducts();renderCart();
-}));
 $("searchInput").addEventListener("input",renderProducts);
 $("openCart").addEventListener("click",openCart);
 $("closeCart").addEventListener("click",closeCart);
@@ -78,9 +81,7 @@ $("overlay").addEventListener("click",()=>{closeCart();closeCheckout()});
 $("checkoutForm").addEventListener("submit",e=>{
   e.preventDefault();
   const data=Object.fromEntries(new FormData(e.currentTarget).entries());
-  const items=Object.entries(cart).map(([id,qty])=>({product:getProduct(id).name,quantity:qty,unit_price:priceFor(getProduct(id)),total:priceFor(getProduct(id))*qty}));
-  const summary={customer_type:typeLabels[customerType],customer:data,items,subtotal:subtotal(),note:"معاينة فقط — لم يتم إرسال الطلب أو حفظه في قاعدة البيانات."};
-  $("prototypeResult").textContent=`تم تجهيز معاينة الطلب بنجاح.\nالعميل: ${data.customer_name}\nنوع العميل: ${typeLabels[customerType]}\nالمنطقة: ${data.emirate} - ${data.area}\nعدد الأصناف: ${cartCount()}\nالمجموع الفرعي: ${money(subtotal())}\nطريقة الدفع: ${{cash:"نقدًا عند الاستلام",bank_transfer:"تحويل بنكي",by_agreement:"حسب الاتفاق"}[data.payment_method]}\n\nتنبيه: هذه نسخة واجهة تجريبية، لم يتم إرسال بياناتك إلى أي جهة.`;
+  $("prototypeResult").textContent=`تم تجهيز معاينة الطلب بنجاح.\nالعميل: ${data.customer_name}\nالمنطقة: ${data.emirate} - ${data.area}\nعدد الأصناف: ${cartCount()}\nالمجموع الفرعي: ${money(subtotal())}\nطريقة الدفع: ${{cash:"نقدًا عند الاستلام",bank_transfer:"تحويل بنكي",by_agreement:"حسب الاتفاق"}[data.payment_method]}\n\nتنبيه: هذه نسخة واجهة تجريبية، لم يتم إرسال بياناتك إلى أي جهة.`;
   $("prototypeResult").classList.remove("hidden");
   showToast("تم تجهيز المعاينة — الطلب لم يُرسل");
 });
