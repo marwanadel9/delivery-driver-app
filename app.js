@@ -12,6 +12,11 @@
 
   const $ = (id) => document.getElementById(id);
 
+  const toEnglishDigits = (value) => String(value ?? '').replace(/[\u0660-\u0669\u06F0-\u06F9]/g, (digit) => {
+    const code = digit.charCodeAt(0);
+    return String(code >= 0x06F0 ? code - 0x06F0 : code - 0x0660);
+  });
+
   const normalizePayment = (value) => {
     const v = String(value ?? '').trim().toLowerCase();
 
@@ -91,10 +96,10 @@
     );
 
     if (!Number.isFinite(number)) {
-      return text;
+      return toEnglishDigits(text);
     }
 
-    return `${number.toLocaleString('ar-EG', {
+    return `${number.toLocaleString('ar-EG-u-nu-latn', {
       maximumFractionDigits: 2
     })} درهم`;
   };
@@ -545,7 +550,7 @@
   }
 
   function escapeHtml(value) {
-    return String(value ?? '')
+    return toEnglishDigits(value)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -578,14 +583,14 @@
     if (pendingElement) {
       pendingElement.textContent =
         pending.toLocaleString(
-          'ar-EG'
+          'ar-EG-u-nu-latn'
         );
     }
 
     if (doneElement) {
       doneElement.textContent =
         done.toLocaleString(
-          'ar-EG'
+          'ar-EG-u-nu-latn'
         );
     }
 
@@ -595,7 +600,7 @@
 
       counterElement.textContent =
         shown.toLocaleString(
-          'ar-EG'
+          'ar-EG-u-nu-latn'
         );
     }
   }
@@ -645,7 +650,7 @@
         ? String(value)
         : '—';
 
-    element.textContent = text;
+    element.textContent = toEnglishDigits(text);
   }
 
   function firstValue(order, keys) {
@@ -665,7 +670,7 @@
   }
 
   function extractNumbers(value) {
-    return String(value ?? '')
+    return normalizeArabicDigits(value)
       .match(/\d+(?:[.,]\d+)?/g) || [];
   }
 
@@ -1101,7 +1106,7 @@
         fullscreenHead.className = 'invoice-fullscreen-head';
         const heading = document.createElement('strong');
         heading.className = 'invoice-fullscreen-title';
-        heading.textContent = `تفاصيل الفاتورة ${firstValue(order, ['order_number', 'orderNumber', 'invoice_number', 'invoice_no']) || ''}`.trim();
+        heading.textContent = toEnglishDigits(`تفاصيل الفاتورة ${firstValue(order, ['order_number', 'orderNumber', 'invoice_number', 'invoice_no']) || ''}`.trim());
         const closeButton = document.createElement('button');
         closeButton.type = 'button';
         closeButton.className = 'invoice-fullscreen-close';
@@ -1157,7 +1162,7 @@
           departureButton.style.cssText += 'background:#ecfdf3;color:#067647;border-color:#abefc6;box-shadow:none;cursor:default;';
           departureButton.innerHTML = '<span aria-hidden="true">✓</span><span>تم الإبلاغ — متوجه للعميل</span>';
           const time = document.createElement('small');
-          time.textContent = new Date(departureAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+          time.textContent = new Date(departureAt).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' });
           time.style.cssText = 'font-size:12px;font-weight:800;margin-right:4px;';
           departureButton.appendChild(time);
         } else if (!delivered) {
@@ -1823,7 +1828,7 @@
       button.style.cssText += 'background:#ecfdf3;color:#067647;border-color:#abefc6;box-shadow:none;cursor:default;';
       button.innerHTML = '<span aria-hidden="true">✓</span><span>تم الإبلاغ — متوجه للعميل</span>';
       const time = document.createElement('small');
-      time.textContent = new Date(departedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      time.textContent = new Date(departedAt).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' });
       time.style.cssText = 'font-size:12px;font-weight:800;margin-right:4px;';
       button.appendChild(time);
       toast(result.already_marked ? 'تم تسجيل التحرك سابقًا لهذه الفاتورة' : 'تم إرسال إشعار التحرك للماستر بنجاح ✅');
@@ -2184,7 +2189,7 @@
       return String(value);
     }
 
-    return date.toLocaleString('ar-EG', {
+    return date.toLocaleString('ar-EG-u-nu-latn', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -2232,7 +2237,7 @@
   }
 
   function masterEscape(value) {
-    return String(value ?? '')
+    return toEnglishDigits(value)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -2852,9 +2857,9 @@
       const today = new Date();
       const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
       const todayCount = masterDriverDepartures.filter(row => String(row.departed_at || '').slice(0,10) === todayKey).length;
-      if ($('master-departure-count')) $('master-departure-count').textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
-      if ($('master-departure-today')) $('master-departure-today').textContent = todayCount.toLocaleString('ar-EG');
-      if ($('master-departure-last')) $('master-departure-last').textContent = masterDriverDepartures[0]?.departed_at ? new Date(masterDriverDepartures[0].departed_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) : '—';
+      if ($('master-departure-count')) $('master-departure-count').textContent = masterDriverDepartures.length.toLocaleString('ar-EG-u-nu-latn');
+      if ($('master-departure-today')) $('master-departure-today').textContent = todayCount.toLocaleString('ar-EG-u-nu-latn');
+      if ($('master-departure-last')) $('master-departure-last').textContent = masterDriverDepartures[0]?.departed_at ? new Date(masterDriverDepartures[0].departed_at).toLocaleTimeString('ar-EG-u-nu-latn', {hour:'2-digit',minute:'2-digit'}) : '—';
       const dateInput = $('master-departure-date');
       if (dateInput && !dateInput.value) dateInput.value = todayKey;
       renderMasterDeparturesForSelectedDate();
@@ -2862,7 +2867,7 @@
         const notice = document.createElement('div');
         notice.className = 'master-departure-empty';
         notice.style.cssText = 'background:#ecfdf3;border:1px solid #abefc6;color:#067647;font-weight:900;text-align:right;margin-bottom:10px;';
-        notice.textContent = `🔔 تحرك جديد للمندوب: ${newDepartureCount.toLocaleString('ar-EG')} فاتورة. راجع التفاصيل بالأسفل.`;
+        notice.textContent = `🔔 تحرك جديد للمندوب: ${newDepartureCount.toLocaleString('ar-EG-u-nu-latn')} فاتورة. راجع التفاصيل بالأسفل.`;
         list.prepend(notice);
       }
     } catch (error) {
@@ -2884,16 +2889,16 @@
     });
     const selectedCount = selectedDepartures.length;
     const selectedStat = $('master-departure-selected');
-    if (selectedStat) selectedStat.textContent = selectedCount.toLocaleString('ar-EG');
+    if (selectedStat) selectedStat.textContent = selectedCount.toLocaleString('ar-EG-u-nu-latn');
     const countStat = $('master-departure-count');
-    if (countStat) countStat.textContent = masterDriverDepartures.length.toLocaleString('ar-EG');
+    if (countStat) countStat.textContent = masterDriverDepartures.length.toLocaleString('ar-EG-u-nu-latn');
     const todayStat = $('master-departure-today');
     if (todayStat) todayStat.textContent = masterDriverDepartures.filter((row) => {
       const date = new Date(row?.departed_at || '');
       if (Number.isNaN(date.getTime())) return false;
       const key = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
       return key === todayKey;
-    }).length.toLocaleString('ar-EG');
+    }).length.toLocaleString('ar-EG-u-nu-latn');
     const statLabel = countStat?.previousElementSibling;
     if (statLabel) statLabel.textContent = 'إجمالي التحركات (كل الأيام)';
     const todayLabel = todayStat?.previousElementSibling;
@@ -2915,7 +2920,7 @@
       masterCustomerBalances = Array.isArray(data) ? data : (Array.isArray(data?.balances) ? data.balances : []);
       const totalAdded = masterCustomerBalances.reduce((sum, row) => sum + (Number(row.amount_added) || 0), 0);
       const totalCurrent = masterCustomerBalances.reduce((sum, row) => sum + (Number(row.current_balance) || 0), 0);
-      if ($('master-balance-count')) $('master-balance-count').textContent = masterCustomerBalances.length.toLocaleString('ar-EG');
+      if ($('master-balance-count')) $('master-balance-count').textContent = masterCustomerBalances.length.toLocaleString('ar-EG-u-nu-latn');
       if ($('master-balance-added')) $('master-balance-added').textContent = masterMoney(totalAdded) + ' درهم';
       if ($('master-balance-current')) $('master-balance-current').textContent = masterMoney(totalCurrent) + ' درهم';
       renderMasterCustomerBalances();
@@ -2933,7 +2938,7 @@
       body.innerHTML = `<tr><td colspan="10" class="master-balance-empty">${masterCustomerBalances.length ? 'لا توجد نتائج مطابقة للبحث.' : 'لا توجد أرصدة مسجلة حتى الآن. تأكد من مزامنة شيت CustomerBalances من Excel.'}</td></tr>`;
       return;
     }
-    body.innerHTML = rows.map((row, index) => `<tr><td>${(index + 1).toLocaleString('ar-EG')}</td><td><strong>${masterEscape(row.customer_code || '—')}</strong></td><td>${masterEscape(row.customer_name || '—')}</td><td dir="ltr">${masterEscape(row.phone || '—')}</td><td>${masterEscape(row.emirate || '—')}</td><td>${masterEscape(row.area || '—')}</td><td>${masterMoney(row.amount_added || 0)} درهم</td><td>${masterMoney(row.amount_paid || 0)} درهم</td><td style="font-weight:900;color:${Number(row.current_balance) > 0 ? '#c62828' : '#168052'}">${masterMoney(row.current_balance || 0)} درهم</td><td>${masterEscape(row.notes || '—')}</td></tr>`).join('');
+    body.innerHTML = rows.map((row, index) => `<tr><td>${(index + 1).toLocaleString('ar-EG-u-nu-latn')}</td><td><strong>${masterEscape(row.customer_code || '—')}</strong></td><td>${masterEscape(row.customer_name || '—')}</td><td dir="ltr">${masterEscape(row.phone || '—')}</td><td>${masterEscape(row.emirate || '—')}</td><td>${masterEscape(row.area || '—')}</td><td>${masterMoney(row.amount_added || 0)} درهم</td><td>${masterMoney(row.amount_paid || 0)} درهم</td><td style="font-weight:900;color:${Number(row.current_balance) > 0 ? '#c62828' : '#168052'}">${masterMoney(row.current_balance || 0)} درهم</td><td>${masterEscape(row.notes || '—')}</td></tr>`).join('');
   }
 
   async function loadMasterOrders() {
@@ -3152,26 +3157,26 @@
     ).length;
 
     const moneyText = (value) =>
-      `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+      `${value.toLocaleString('ar-EG-u-nu-latn', { maximumFractionDigits: 2 })} درهم`;
 
     if ($('master-total-prepaid')) {
       $('master-total-prepaid').textContent = moneyText(totalPrepaid);
     }
 
     if ($('master-prepaid-hint')) {
-      $('master-prepaid-hint').textContent = `عدد الفواتير: ${prepaidOrders.length.toLocaleString('ar-EG')}`;
+      $('master-prepaid-hint').textContent = `عدد الفواتير: ${prepaidOrders.length.toLocaleString('ar-EG-u-nu-latn')}`;
     }
 
     if ($('master-total-count')) {
-      $('master-total-count').textContent = orders.length.toLocaleString('ar-EG');
+      $('master-total-count').textContent = orders.length.toLocaleString('ar-EG-u-nu-latn');
     }
 
     if ($('master-cash-count')) {
-      $('master-cash-count').textContent = cashOrders.length.toLocaleString('ar-EG');
+      $('master-cash-count').textContent = cashOrders.length.toLocaleString('ar-EG-u-nu-latn');
     }
 
     if ($('master-bank-count')) {
-      $('master-bank-count').textContent = bankOrders.length.toLocaleString('ar-EG');
+      $('master-bank-count').textContent = bankOrders.length.toLocaleString('ar-EG-u-nu-latn');
     }
 
     if ($('master-total-cash')) {
@@ -3195,7 +3200,7 @@
     }
 
     if ($('master-delivered')) {
-      $('master-delivered').textContent = delivered.toLocaleString('ar-EG');
+      $('master-delivered').textContent = delivered.toLocaleString('ar-EG-u-nu-latn');
     }
   }
 
@@ -3238,13 +3243,13 @@
     const totalPendingAmount = orders.reduce((sum, order) => sum + masterMoney(order.total), 0) + pendingHistoricalTransfers.reduce((sum, transfer) => sum + masterMoney(transfer.total), 0);
     const totalPendingCount = orders.length + pendingHistoricalTransfers.length;
     const historicalOlderCount = pendingHistoricalTransfers.length;
-    const moneyText = (value) => `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+    const moneyText = (value) => `${value.toLocaleString('ar-EG-u-nu-latn', { maximumFractionDigits: 2 })} درهم`;
 
-    if (count) count.textContent = totalPendingCount.toLocaleString('ar-EG');
-    if ($('master-old-transfer-stat-count')) $('master-old-transfer-stat-count').textContent = totalPendingCount.toLocaleString('ar-EG');
+    if (count) count.textContent = totalPendingCount.toLocaleString('ar-EG-u-nu-latn');
+    if ($('master-old-transfer-stat-count')) $('master-old-transfer-stat-count').textContent = totalPendingCount.toLocaleString('ar-EG-u-nu-latn');
     if ($('master-old-transfer-stat-total')) $('master-old-transfer-stat-total').textContent = moneyText(totalPendingAmount);
-    if ($('master-old-transfer-stat-yesterday')) $('master-old-transfer-stat-yesterday').textContent = yesterdayOrders.length.toLocaleString('ar-EG');
-    if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = (olderOrders.length + historicalOlderCount).toLocaleString('ar-EG');
+    if ($('master-old-transfer-stat-yesterday')) $('master-old-transfer-stat-yesterday').textContent = yesterdayOrders.length.toLocaleString('ar-EG-u-nu-latn');
+    if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = (olderOrders.length + historicalOlderCount).toLocaleString('ar-EG-u-nu-latn');
 
     list.innerHTML = '';
 
@@ -3337,14 +3342,14 @@
     const pending = transfers.filter((order) => order.bank_transfer_received !== true);
     const received = transfers.filter((order) => order.bank_transfer_received === true);
     const sum = (rows) => rows.reduce((total, order) => total + masterMoney(order.total), 0);
-    const moneyText = (amount) => `${amount.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
+    const moneyText = (amount) => `${amount.toLocaleString('ar-EG-u-nu-latn', { maximumFractionDigits: 2 })} درهم`;
 
-    if ($('master-monthly-count')) $('master-monthly-count').textContent = transfers.length.toLocaleString('ar-EG');
+    if ($('master-monthly-count')) $('master-monthly-count').textContent = transfers.length.toLocaleString('ar-EG-u-nu-latn');
     if ($('master-monthly-total')) $('master-monthly-total').textContent = moneyText(sum(transfers));
     if ($('master-monthly-pending')) $('master-monthly-pending').textContent = moneyText(sum(pending));
     if ($('master-monthly-received')) $('master-monthly-received').textContent = moneyText(sum(received));
-    if ($('master-monthly-pending-count')) $('master-monthly-pending-count').textContent = `${pending.length.toLocaleString('ar-EG')} تحويل`;
-    if ($('master-monthly-all-count')) $('master-monthly-all-count').textContent = `${transfers.length.toLocaleString('ar-EG')} تحويل`;
+    if ($('master-monthly-pending-count')) $('master-monthly-pending-count').textContent = `${pending.length.toLocaleString('ar-EG-u-nu-latn')} تحويل`;
+    if ($('master-monthly-all-count')) $('master-monthly-all-count').textContent = `${transfers.length.toLocaleString('ar-EG-u-nu-latn')} تحويل`;
 
     const rowHtml = (order, index) => {
       const isReceived = order.bank_transfer_received === true;
@@ -3402,8 +3407,8 @@
     const bankReceived = bank.filter((order) => order.bank_transfer_received === true);
     const bankPending = bank.filter((order) => order.bank_transfer_received !== true);
     const sum = (items) => items.reduce((total, order) => total + masterMoney(order.total), 0);
-    const money = (value) => `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
-    const formatCount = (value) => value.toLocaleString('ar-EG');
+    const money = (value) => `${value.toLocaleString('ar-EG-u-nu-latn', { maximumFractionDigits: 2 })} درهم`;
+    const formatCount = (value) => value.toLocaleString('ar-EG-u-nu-latn');
     const customerCount = (items) => new Set(items.map((order) => String(order.customer_code || order.phone || order.customer_name || order.id || '').trim()).filter(Boolean)).size;
     const dateLabel = $('master-day-summary-date');
     if (dateLabel) dateLabel.textContent = `التاريخ: ${selectedDate.split('-').reverse().join('-')}`;
@@ -3445,8 +3450,8 @@
       return marked || method.includes('balance') || method.includes('رصيد') || method.includes('الرصيد');
     };
     const sum = (items) => items.reduce((total, order) => total + masterMoney(order.total), 0);
-    const money = (value) => `${value.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} درهم`;
-    const countText = (value) => value.toLocaleString('ar-EG');
+    const money = (value) => `${value.toLocaleString('ar-EG-u-nu-latn', { maximumFractionDigits: 2 })} درهم`;
+    const countText = (value) => value.toLocaleString('ar-EG-u-nu-latn');
     const customerCount = (items) => new Set(items.map((order) => String(order.customer_code || order.phone || order.customer_name || order.id || '').trim()).filter(Boolean)).size;
     const cash = todayOrders.filter((order) => !isPaidInAdvance(order) && !isBalanceOrder(order) && normalizePayment(order.payment_method) === 'cash');
     const bank = todayOrders.filter((order) => !isPaidInAdvance(order) && !isBalanceOrder(order) && normalizePayment(order.payment_method) === 'bank_transfer');
@@ -3501,12 +3506,12 @@
         date.setDate(date.getDate() - offset);
         const key = masterDateInput(date);
         const orders = allOrders.filter((order) => masterDateInput(order.created_at) === key);
-        days.push({ key, label: date.toLocaleDateString('ar-EG', { day: '2-digit', month: '2-digit' }), total: sum(orders), count: orders.length });
+        days.push({ key, label: date.toLocaleDateString('ar-EG-u-nu-latn', { day: '2-digit', month: '2-digit' }), total: sum(orders), count: orders.length });
       }
       const max = Math.max(1, ...days.map((day) => day.total));
       chart.innerHTML = days.map((day) => {
         const height = day.total > 0 ? Math.max(5, Math.round((day.total / max) * 100)) : 2;
-        return `<div class="master-home-chart-day" title="${day.key}: ${money(day.total)} — ${countText(day.count)} فاتورة"><div class="master-home-chart-value">${day.total.toLocaleString('ar-EG', { maximumFractionDigits: 0 })}</div><div class="master-home-chart-track"><div class="master-home-chart-bar" style="height:${height}%"></div></div><div class="master-home-chart-label">${day.label}</div></div>`;
+        return `<div class="master-home-chart-day" title="${day.key}: ${money(day.total)} — ${countText(day.count)} فاتورة"><div class="master-home-chart-value">${day.total.toLocaleString('ar-EG-u-nu-latn', { maximumFractionDigits: 0 })}</div><div class="master-home-chart-track"><div class="master-home-chart-bar" style="height:${height}%"></div></div><div class="master-home-chart-label">${day.label}</div></div>`;
       }).join('');
     }
   }
