@@ -2978,85 +2978,71 @@
   }
 
   function masterInvoiceFingerprint(order) {
+    // لا تربط هوية الفاتورة بالملاحظة أو الحالة أو طريقة الدفع أو تفاصيل الأصناف؛
+    // هذه حقول قابلة للتعديل ويجب ألا تنشئ بطاقة ثانية بعد تغييرها.
     const invoiceNumber = masterNormalizeDuplicateValue(
       order.order_number ?? order.invoice_number ?? order.invoice_no ?? ''
     );
+    const sheetName = masterNormalizeDuplicateValue(order.sheet_name || '');
+    const createdValue = String(order.created_at ?? order.createdAt ?? '').trim();
+    let dayKey = '';
+    if (createdValue) {
+      const parsedDate = new Date(createdValue);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        dayKey = `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`;
+      } else {
+        dayKey = createdValue.slice(0, 10);
+      }
+    }
 
-    const fields = [
-      invoiceNumber,
-      order.customer_name,
-      order.emirate,
-      order.area,
-      order.chicken_weights,
-      order.chicken_qtys,
-      order.plate_names,
-      order.plate_qtys,
-      order.order_details,
-      masterMoney(order.total),
-      order.appointment_coordinator,
-      order.note
-    ];
+    if (invoiceNumber && sheetName && dayKey) {
+      return `invoice|${sheetName}|${invoiceNumber}|${dayKey}`;
+    }
 
-    return fields.map(masterNormalizeDuplicateValue).join('|');
+    if (order.id !== null && order.id !== undefined && String(order.id).trim()) {
+      return `id|${String(order.id).trim()}`;
+    }
+
+    return [sheetName, invoiceNumber, dayKey, order.phone, order.customer_name]
+      .map(masterNormalizeDuplicateValue)
+      .join('|');
+  }
+
+  function masterOrderRecency(order) {
+    const updateFields = ['updated_at', 'updatedAt', 'modified_at', 'last_updated_at'];
+    for (const field of updateFields) {
+      const value = order?.[field];
+      if (!value) continue;
+      const timestamp = new Date(value).getTime();
+      if (Number.isFinite(timestamp)) return timestamp;
+    }
+
+    // بعض الجداول لا تحتوي updated_at؛ عند وجود نسخ مكررة نفضّل السجل ذي المعرّف الأعلى،
+    // بدل دمج حالة تسليم قديمة فوق الحالة التي اختارها المستخدم للتو.
+    const id = Number(order?.id);
+    return Number.isFinite(id) ? id : 0;
   }
 
   function getMasterUniqueOrders() {
     const unique = [];
-    const byFingerprint = new Map();
+    const indexByFingerprint = new Map();
 
     state.masterOrders.forEach((order) => {
       const fingerprint = masterInvoiceFingerprint(order);
-      const existing = byFingerprint.get(fingerprint);
+      const existingIndex = indexByFingerprint.get(fingerprint);
 
-      if (!existing) {
-        byFingerprint.set(fingerprint, order);
+      if (existingIndex === undefined) {
+        indexByFingerprint.set(fingerprint, unique.length);
         unique.push(order);
         return;
       }
 
-      const existingIsDriverOne = String(existing.sheet_name || '') === 'Mandoub';
-      const currentIsDriverOne = String(order.sheet_name || '') === 'Mandoub';
-      const existingIsDriverTwo = String(existing.sheet_name || '') === 'Mandoub2';
-      const currentIsDriverTwo = String(order.sheet_name || '') === 'Mandoub2';
-
-      let preferred = existing;
-      let secondary = order;
-
-      if (currentIsDriverOne && !existingIsDriverOne) {
-        preferred = order;
-        secondary = existing;
-        const index = unique.indexOf(existing);
-        if (index !== -1) unique[index] = order;
-        byFingerprint.set(fingerprint, order);
+      const existing = unique[existingIndex];
+      if (masterOrderRecency(order) > masterOrderRecency(existing)) {
+        unique[existingIndex] = order;
       }
-
-      if (!String(preferred.phone || '').trim()) {
-        const phoneSource = [preferred, secondary].find((item) =>
-          String(item.phone || '').trim()
-        );
-        if (phoneSource) preferred.phone = phoneSource.phone;
-      }
-
-      if (isDelivered(secondary.delivery_status)) {
-        preferred.delivery_status = secondary.delivery_status;
-      }
-
-      if (secondary.bank_transfer_received === true) {
-        preferred.bank_transfer_received = true;
-      }
-
-      // احتفظ بعلامة الدفع المقدم إذا كانت موجودة في أي نسخة مكررة للفاتورة.
-      if (isPaidInAdvance(secondary)) {
-        preferred.paid_in_advance = true;
-      }
-
-      if (!normalizePayment(preferred.payment_method) && normalizePayment(secondary.payment_method)) {
-        preferred.payment_method = secondary.payment_method;
-      }
-
-      if (!String(preferred.location_url || '').trim() && secondary.location_url) {
-        preferred.location_url = secondary.location_url;
-      }
+      // لا ندمج حقول الحالة أو الدفع أو الملاحظة من نسخة قديمة؛ دمجها كان يعيد
+      // «تم التسليم» بعد إرجاع الفاتورة إلى «قيد التوصيل»، وقد يعرض طريقة دفع قديمة.
     });
 
     return unique;
@@ -4306,12 +4292,11 @@
       const chicken = masterCollectChickenEditValues(order);
       const cuts = masterCollectCutEditValues(order);
       const enteredDetails = $('master-edit-details')?.value ?? order.order_details ?? '';
-      const productsChanged = chicken.changed || cuts.changed;
       const detailsUnchanged = String(enteredDetails).trim() === String(order.order_details ?? '').trim();
-      // Older Excel syncs may copy the same products into order_details as a plain-text summary.
-      // When structured products are edited, remove only that unchanged generated summary so it
-      // cannot appear as a second, stale copy below the structured products on the driver invoice.
-      const orderDetails = productsChanged && detailsUnchanged && masterLooksLikeGeneratedProductDetails(enteredDetails)
+      // بعض نسخ Excel القديمة تخزن ملخص المنتجات مرة أخرى داخل order_details.
+      // امسح الملخص الآلي غير المعدّل عند أي حفظ من الماستر، بما فيه الملاحظة أو الدفع أو الحالة،
+      // حتى لا يظهر كنسخة ثانية من الأصناف عند المندوب. إذا عدّل المستخدم هذا النص بنفسه نحتفظ به.
+      const orderDetails = detailsUnchanged && masterLooksLikeGeneratedProductDetails(enteredDetails)
         ? ''
         : enteredDetails;
 
