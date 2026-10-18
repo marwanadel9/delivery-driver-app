@@ -2380,6 +2380,19 @@
       .master-edit-form input,.master-edit-form textarea,.master-edit-form select{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:10px;font:inherit;background:#fff;color:#172024}
       .master-edit-form textarea{min-height:82px;resize:vertical}
       .master-edit-full{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+      /* Master invoice editor: keep each weight, cut, quantity and gift in its own field. */
+      .master-edit-products{display:grid;gap:10px;margin-top:12px}
+      .master-edit-product-panel{border:1px solid #dbe5ef;border-radius:12px;background:#fff;padding:10px 12px;min-width:0}
+      .master-edit-product-panel>summary{cursor:pointer;list-style:disclosure-closed;font-size:13px;font-weight:900;color:#173b68;padding:3px 0;outline-offset:4px}
+      .master-edit-product-panel[open]>summary{list-style:disclosure-open;padding-bottom:9px;border-bottom:1px solid #e8eef5}
+      .master-edit-product-hint{font-size:11px;line-height:1.7;color:#64748b;margin:7px 0}
+      .master-edit-product-rows{display:grid;gap:8px;margin-top:10px;min-width:0}
+      .master-edit-chicken-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.7fr) auto;gap:8px;align-items:end;padding:9px;border:1px solid #e8eef5;border-radius:10px;background:#f8fafc;min-width:0}
+      .master-edit-cut-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,.7fr) minmax(0,.7fr) auto;gap:8px;align-items:end;padding:9px;border:1px solid #e8eef5;border-radius:10px;background:#f8fafc;min-width:0}
+      .master-edit-product-rows label{display:flex;flex-direction:column;gap:5px;min-width:0;font-size:11px;font-weight:800;color:#475569}
+      .master-edit-product-rows input{min-width:0;width:100%;box-sizing:border-box;border:1px solid #d5dee8;border-radius:8px;padding:9px 8px;font:inherit;font-size:13px;background:#fff;color:#172024;direction:ltr;text-align:right}
+      .master-edit-remove-row{border:1px solid #fecaca;border-radius:8px;background:#fff1f2;color:#b42318;padding:8px 10px;min-height:36px;font:inherit;font-size:11px;font-weight:900;cursor:pointer;white-space:nowrap}
+      .master-edit-add-row{margin-top:9px;width:100%;min-height:38px;border:1px dashed #93c5fd;border-radius:9px;background:#eff6ff;color:#1d4ed8;font:inherit;font-size:12px;font-weight:900;cursor:pointer}
       .master-month-note{font-size:11px;color:#7b878c;margin-top:8px}
       .master-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:12px 20px;background:#fff;border-bottom:1px solid #e5ebf0;position:sticky;top:86px;z-index:9}
       .master-nav-btn{border:1px solid #dbe5ef;border-radius:13px;min-height:48px;padding:10px 12px;background:#f8fafc;color:#334155;font-weight:900;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .15s,box-shadow .15s,border-color .15s}
@@ -2480,7 +2493,7 @@
       .master-edit-btn:hover{background:#dbeafe}
       @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:270px minmax(0,1fr)}}
       @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr);gap:10px}.master-old-transfer-panel{order:0;padding:10px}.master-table-wrap{order:1}}
-      @media(max-width:650px){.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
+      @media(max-width:650px){.master-edit-chicken-row{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-chicken-row .master-edit-remove-row{grid-column:1/-1}.master-edit-cut-row{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-cut-row label:first-child{grid-column:1/-1}.master-edit-cut-row .master-edit-remove-row{grid-column:1/-1}.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
       @media(max-width:900px){.master-nav{grid-template-columns:repeat(2,minmax(0,1fr));top:78px;padding:10px;gap:7px}.master-nav-btn{min-height:44px;font-size:12px}.master-page[data-view="home"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-page[data-view="reports"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media(max-width:650px){.master-nav{position:sticky;top:0;z-index:20;grid-template-columns:repeat(2,minmax(0,1fr));padding:8px}.master-nav-btn{font-size:11px;padding:9px 5px;min-height:42px}.master-home-intro{padding:14px}.master-page[data-view="home"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-page[data-view="home"] .master-stats .master-stat{display:block}.master-page[data-view="home"] .master-stats .master-stat:nth-child(1),.master-page[data-view="home"] .master-stats .master-stat:nth-child(3),.master-page[data-view="home"] .master-stats .master-stat:nth-child(5),.master-page[data-view="home"] .master-stats .master-stat:nth-child(6),.master-page[data-view="home"] .master-stats .master-stat:nth-child(9){display:none}.master-page[data-view="reports"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-row{align-items:stretch;flex-direction:column}.master-edit-row button{width:100%}}
     `;
@@ -3939,393 +3952,419 @@
     lockMasterBackgroundScroll();
   }
 
-  function openMasterEdit(order) {
-    const body =
-      $('master-modal-body');
+  function masterParseEditCutQuantity(value) {
+    const text = normalizeArabicDigits(String(value ?? ''))
+      .replace(/هديّه|هديـة|هديه/g, 'هدية')
+      .trim();
+    const numbers = text.match(/\d+(?:[.,]\d+)?/g) || [];
+    const hasGift = /هدية/.test(text);
+    if (!numbers.length) return { base: '', gift: '' };
+    if (hasGift && numbers.length >= 2) {
+      return { base: numbers[0].replace(',', '.'), gift: numbers[1].replace(',', '.') };
+    }
+    if (hasGift) return { base: '', gift: numbers[0].replace(',', '.') };
+    return { base: numbers[0].replace(',', '.'), gift: '' };
+  }
 
-    const title =
-      $('master-modal-title');
+  function masterNormalizeCutName(value) {
+    return String(value ?? '')
+      .normalize('NFKC')
+      .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+      .replace(/[أإآٱ]/g, 'ا')
+      .replace(/ى/g, 'ي')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
 
-    if (!body) {
-      return;
+  function masterAppendChickenEditRow(container, weight = '', quantity = '') {
+    const row = document.createElement('div');
+    row.className = 'master-edit-chicken-row';
+    row.innerHTML = `
+      <label>الوزن (جرام)
+        <input type="text" inputmode="decimal" autocomplete="off" data-master-chicken-weight value="${masterEscape(weight)}" aria-label="وزن الدجاج الكامل بالجرام">
+      </label>
+      <label>الكمية
+        <input type="text" inputmode="decimal" autocomplete="off" data-master-chicken-qty value="${masterEscape(quantity)}" aria-label="كمية هذا الوزن">
+      </label>
+      <button type="button" class="master-edit-remove-row" data-master-remove-chicken>حذف السطر</button>
+    `;
+    container.appendChild(row);
+    return row;
+  }
+
+  function masterAppendCutEditRow(container, name = '', quantity = '') {
+    const parsed = masterParseEditCutQuantity(quantity);
+    const row = document.createElement('div');
+    row.className = 'master-edit-cut-row';
+    row.dataset.originalName = String(name ?? '');
+    row.dataset.originalQty = String(quantity ?? '');
+    row.dataset.nameDirty = 'false';
+    row.dataset.qtyDirty = 'false';
+    row.innerHTML = `
+      <label>الصنف
+        <input type="text" list="master-cut-options" autocomplete="off" data-master-cut-name value="${masterEscape(name)}" aria-label="اسم صنف المقطعات">
+      </label>
+      <label>الكمية الأساسية
+        <input type="text" inputmode="numeric" autocomplete="off" data-master-cut-qty value="${masterEscape(parsed.base)}" aria-label="الكمية الأساسية للصنف">
+      </label>
+      <label>كمية الهدية
+        <input type="text" inputmode="numeric" autocomplete="off" data-master-cut-gift value="${masterEscape(parsed.gift)}" aria-label="كمية الهدية للصنف">
+      </label>
+      <button type="button" class="master-edit-remove-row" data-master-remove-cut>حذف الصنف</button>
+    `;
+    container.appendChild(row);
+    return row;
+  }
+
+  function masterRenderEditProductRows(order) {
+    const chickenContainer = $('master-edit-chicken-rows');
+    const cutContainer = $('master-edit-cut-rows');
+    if (!chickenContainer || !cutContainer) return;
+
+    chickenContainer.dataset.dirty = 'false';
+    cutContainer.dataset.dirty = 'false';
+
+    const chickenWeights = extractNumbers(order.chicken_weights || '');
+    const chickenQtys = extractNumbers(order.chicken_qtys || '');
+    const chickenCount = Math.max(chickenWeights.length, chickenQtys.length);
+    for (let index = 0; index < chickenCount; index += 1) {
+      masterAppendChickenEditRow(chickenContainer, chickenWeights[index] || '', chickenQtys[index] || '');
+    }
+    if (!chickenCount) masterAppendChickenEditRow(chickenContainer);
+
+    const cutNames = extractPlateNames(order.plate_names || '');
+    const cutQtys = extractPlateQuantities(order.plate_qtys || '');
+    const cutCount = Math.max(cutNames.length, cutQtys.length);
+    for (let index = 0; index < cutCount; index += 1) {
+      masterAppendCutEditRow(cutContainer, cutNames[index] || '', cutQtys[index] || '');
+    }
+    if (!cutCount) masterAppendCutEditRow(cutContainer);
+
+    chickenContainer.addEventListener('input', (event) => {
+      const row = event.target.closest('.master-edit-chicken-row');
+      if (!row) return;
+      if (event.target.matches('[data-master-chicken-weight]')) row.dataset.weightDirty = 'true';
+      if (event.target.matches('[data-master-chicken-qty]')) row.dataset.qtyDirty = 'true';
+      chickenContainer.dataset.dirty = 'true';
+    });
+    chickenContainer.addEventListener('click', (event) => {
+      const removeButton = event.target.closest('[data-master-remove-chicken]');
+      if (!removeButton) return;
+      event.preventDefault();
+      removeButton.closest('.master-edit-chicken-row')?.remove();
+      chickenContainer.dataset.dirty = 'true';
+    });
+    $('master-add-chicken-row')?.addEventListener('click', () => {
+      masterAppendChickenEditRow(chickenContainer);
+      chickenContainer.dataset.dirty = 'true';
+    });
+
+    cutContainer.addEventListener('input', (event) => {
+      const row = event.target.closest('.master-edit-cut-row');
+      if (!row) return;
+      if (event.target.matches('[data-master-cut-name]')) row.dataset.nameDirty = 'true';
+      if (event.target.matches('[data-master-cut-qty], [data-master-cut-gift]')) row.dataset.qtyDirty = 'true';
+      cutContainer.dataset.dirty = 'true';
+    });
+    cutContainer.addEventListener('click', (event) => {
+      const removeButton = event.target.closest('[data-master-remove-cut]');
+      if (!removeButton) return;
+      event.preventDefault();
+      removeButton.closest('.master-edit-cut-row')?.remove();
+      cutContainer.dataset.dirty = 'true';
+    });
+    $('master-add-cut-row')?.addEventListener('click', () => {
+      masterAppendCutEditRow(cutContainer);
+      cutContainer.dataset.dirty = 'true';
+    });
+  }
+
+  function masterCollectChickenEditValues(order) {
+    const container = $('master-edit-chicken-rows');
+    if (!container || container.dataset.dirty !== 'true') {
+      return {
+        changed: false,
+        chicken_weights: order.chicken_weights ?? '',
+        chicken_qtys: order.chicken_qtys ?? ''
+      };
     }
 
+    const weights = [];
+    const quantities = [];
+    const seenWeights = new Set();
+    const rows = Array.from(container.querySelectorAll('.master-edit-chicken-row'));
+
+    rows.forEach((row, index) => {
+      const weight = normalizeArabicDigits(row.querySelector('[data-master-chicken-weight]')?.value ?? '').trim().replace(',', '.');
+      const quantity = normalizeArabicDigits(row.querySelector('[data-master-chicken-qty]')?.value ?? '').trim().replace(',', '.');
+      if (!weight && !quantity) return;
+      if (!weight || !quantity) {
+        throw new Error(`سطر الدجاج الكامل رقم ${index + 1}: أدخل الوزن والكمية معًا، أو احذف السطر.`);
+      }
+      if (!/^\d+(?:\.\d+)?$/.test(weight) || Number(weight) <= 0) {
+        throw new Error(`وزن الدجاج الكامل في السطر ${index + 1} غير صحيح.`);
+      }
+      if (!/^\d+(?:\.\d+)?$/.test(quantity) || Number(quantity) <= 0) {
+        throw new Error(`كمية الدجاج الكامل في السطر ${index + 1} غير صحيحة.`);
+      }
+      const weightKey = String(Number(weight));
+      if (seenWeights.has(weightKey)) {
+        throw new Error(`وزن ${weight} جرام مكرر. اجمع كمياته في سطر واحد قبل الحفظ.`);
+      }
+      seenWeights.add(weightKey);
+      weights.push(weight);
+      quantities.push(quantity);
+    });
+
+    return {
+      changed: true,
+      chicken_weights: weights.join('\n'),
+      chicken_qtys: quantities.join('\n')
+    };
+  }
+
+  function masterCollectCutEditValues(order) {
+    const container = $('master-edit-cut-rows');
+    if (!container || container.dataset.dirty !== 'true') {
+      return {
+        changed: false,
+        plate_names: order.plate_names ?? '',
+        plate_qtys: order.plate_qtys ?? ''
+      };
+    }
+
+    const names = [];
+    const quantities = [];
+    const seenNames = new Set();
+    const rows = Array.from(container.querySelectorAll('.master-edit-cut-row'));
+
+    rows.forEach((row, index) => {
+      const name = String(row.querySelector('[data-master-cut-name]')?.value ?? '').trim();
+      const baseText = normalizeArabicDigits(row.querySelector('[data-master-cut-qty]')?.value ?? '').trim();
+      const giftText = normalizeArabicDigits(row.querySelector('[data-master-cut-gift]')?.value ?? '').trim();
+      if (!name && !baseText && !giftText) return;
+      if (!name) throw new Error(`صنف المقطعات في السطر ${index + 1} بدون اسم. اكتب اسم الصنف أو احذف السطر.`);
+
+      const key = masterNormalizeCutName(name);
+      if (seenNames.has(key)) {
+        throw new Error(`الصنف «${name}» مكرر. احتفظ بسطر واحد له قبل الحفظ لمنع تكرار الكمية في الفاتورة.`);
+      }
+      seenNames.add(key);
+
+      let quantityText = '';
+      if (row.dataset.qtyDirty !== 'true') {
+        quantityText = String(row.dataset.originalQty ?? '').trim();
+        if (!quantityText) {
+          throw new Error(`أدخل الكمية الأساسية أو كمية الهدية للصنف «${name}».`);
+        }
+      } else {
+        const baseValue = baseText === '' ? 0 : Number(baseText);
+        const giftValue = giftText === '' ? 0 : Number(giftText);
+        if ((baseText !== '' && !/^\d+$/.test(baseText)) || (giftText !== '' && !/^\d+$/.test(giftText))) {
+          throw new Error(`كميات الصنف «${name}» يجب أن تكون أرقامًا صحيحة فقط.`);
+        }
+        if (!Number.isFinite(baseValue) || !Number.isFinite(giftValue) || baseValue < 0 || giftValue < 0) {
+          throw new Error(`كميات الصنف «${name}» غير صحيحة.`);
+        }
+        if (baseValue === 0 && giftValue === 0) {
+          throw new Error(`أدخل كمية للصنف «${name}» أو احذف السطر.`);
+        }
+        if (baseValue > 0 && giftValue > 0) quantityText = `${baseValue} + ${giftValue} هدية`;
+        else if (baseValue > 0) quantityText = String(baseValue);
+        else quantityText = `${giftValue} هدية`;
+      }
+
+      names.push(name);
+      quantities.push(quantityText);
+    });
+
+    return {
+      changed: true,
+      plate_names: names.join('\n'),
+      plate_qtys: quantities.join('\n')
+    };
+  }
+
+  function masterLooksLikeGeneratedProductDetails(value) {
+    const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+    if (!text || !text.includes('|')) return false;
+    const hasProductLabel = /(?:الدجاج الكامل|المقطعات)\s*[:：]/.test(text);
+    const hasQuantityLabel = /(?:الكمية|كمية المقطعات|كمية الدجاج الكامل)\s*[:：]/.test(text);
+    return hasProductLabel && hasQuantityLabel;
+  }
+
+  function openMasterEdit(order) {
+    const body = $('master-modal-body');
+    const title = $('master-modal-title');
+    if (!body) return;
+
     if (title) {
-      title.textContent =
-        `تعديل الفاتورة #${
-          order.order_number ??
-          order.id ??
-          ''
-        }`;
+      title.textContent = `تعديل الفاتورة #${order.order_number ?? order.id ?? ''}`;
     }
 
     body.innerHTML = `
       <div class="master-edit-form">
-
         <div class="master-edit-grid">
-
-          <label>
-            اسم العميل
-            <input
-              id="master-edit-customer"
-              type="text"
-              value="${masterEscape(
-                order.customer_name || ''
-              )}"
-            >
+          <label>اسم العميل
+            <input id="master-edit-customer" type="text" value="${masterEscape(order.customer_name || '')}">
           </label>
-
-          <label>
-            رقم الهاتف
-            <input
-              id="master-edit-phone"
-              type="text"
-              value="${masterEscape(
-                order.phone || ''
-              )}"
-            >
+          <label>رقم الهاتف
+            <input id="master-edit-phone" type="text" value="${masterEscape(order.phone || '')}">
           </label>
-
-          <label>
-            الإمارة
-            <input
-              id="master-edit-emirate"
-              type="text"
-              value="${masterEscape(
-                order.emirate || ''
-              )}"
-            >
+          <label>الإمارة
+            <input id="master-edit-emirate" type="text" value="${masterEscape(order.emirate || '')}">
           </label>
-
-          <label>
-            المنطقة
-            <input
-              id="master-edit-area"
-              type="text"
-              value="${masterEscape(
-                order.area || ''
-              )}"
-            >
+          <label>المنطقة
+            <input id="master-edit-area" type="text" value="${masterEscape(order.area || '')}">
           </label>
+        </div>
 
-          <label>
-            أوزان الدجاج الكامل
-            <input
-              id="master-edit-chicken-weights"
-              type="text"
-              value="${masterEscape(
-                order.chicken_weights || ''
-              )}"
-            >
+        <div class="master-edit-products">
+          <details class="master-edit-product-panel" open>
+            <summary>الدجاج الكامل — الأوزان والكميات</summary>
+            <div class="master-edit-product-hint">كل وزن في سطر مستقل، والكمية المقابلة له في نفس السطر. لن يتم دمج أوزان مختلفة.</div>
+            <div class="master-edit-product-rows" id="master-edit-chicken-rows"></div>
+            <button class="master-edit-add-row" type="button" id="master-add-chicken-row">＋ إضافة وزن جديد</button>
+          </details>
+
+          <details class="master-edit-product-panel">
+            <summary>المقطعات — اضغط السهم لعرض الأصناف وتعديل كل صنف منفصلًا</summary>
+            <div class="master-edit-product-hint">كل صنف له كمية أساسية وكمية هدية منفصلتان. تُحفظ الهدايا مع نفس الصنف من غير إنشاء صنف مكرر.</div>
+            <datalist id="master-cut-options">
+              <option value="أفخاذ"></option><option value="أرجل دبوس"></option><option value="صدور"></option>
+              <option value="كبدة"></option><option value="قوانص"></option><option value="قلوب"></option>
+              <option value="أجنحة"></option><option value="رقاب"></option><option value="ظهر"></option>
+            </datalist>
+            <div class="master-edit-product-rows" id="master-edit-cut-rows"></div>
+            <button class="master-edit-add-row" type="button" id="master-add-cut-row">＋ إضافة صنف مقطعات</button>
+          </details>
+        </div>
+
+        <div class="master-edit-grid" style="margin-top:12px">
+          <label>الإجمالي
+            <input id="master-edit-total" type="text" inputmode="decimal" value="${masterEscape(order.total ?? '')}">
           </label>
-
-          <label>
-            كميات الدجاج الكامل
-            <input
-              id="master-edit-chicken-qtys"
-              type="text"
-              value="${masterEscape(
-                order.chicken_qtys || ''
-              )}"
-            >
-          </label>
-
-          <label>
-            أصناف المقطعات
-            <input
-              id="master-edit-plate-names"
-              type="text"
-              value="${masterEscape(
-                order.plate_names || ''
-              )}"
-            >
-          </label>
-
-          <label>
-            كميات المقطعات
-            <input
-              id="master-edit-plate-qtys"
-              type="text"
-              value="${masterEscape(
-                order.plate_qtys || ''
-              )}"
-            >
-          </label>
-
-          <label>
-            الإجمالي
-            <input
-              id="master-edit-total"
-              type="text"
-              value="${masterEscape(
-                order.total || ''
-              )}"
-            >
-          </label>
-
-          <label>
-            طريقة الدفع
+          <label>طريقة الدفع
             <select id="master-edit-payment">
-              <option
-                value=""
-                ${
-                  !normalizePayment(
-                    order.payment_method
-                  )
-                    ? 'selected'
-                    : ''
-                }
-              >
-                غير محدد
-              </option>
-
-              <option
-                value="cash"
-                ${
-                  normalizePayment(
-                    order.payment_method
-                  ) === 'cash'
-                    ? 'selected'
-                    : ''
-                }
-              >
-                💵 دفع كاش
-              </option>
-
-              <option
-                value="bank_transfer"
-                ${
-                  normalizePayment(
-                    order.payment_method
-                  ) === 'bank_transfer'
-                    ? 'selected'
-                    : ''
-                }
-              >
-                🏦 تحويل بنكي
-              </option>
+              <option value="" ${!normalizePayment(order.payment_method) ? 'selected' : ''}>غير محدد</option>
+              <option value="cash" ${normalizePayment(order.payment_method) === 'cash' ? 'selected' : ''}>💵 دفع كاش</option>
+              <option value="bank_transfer" ${normalizePayment(order.payment_method) === 'bank_transfer' ? 'selected' : ''}>🏦 تحويل بنكي</option>
             </select>
           </label>
-
-          <label>
-            حالة التسليم
+          <label>حالة التسليم
             <select id="master-edit-status">
-              <option
-                value="pending"
-                ${
-                  !isDelivered(
-                    order.delivery_status
-                  )
-                    ? 'selected'
-                    : ''
-                }
-              >
-                قيد التوصيل
-              </option>
-
-              <option
-                value="delivered"
-                ${
-                  isDelivered(
-                    order.delivery_status
-                  )
-                    ? 'selected'
-                    : ''
-                }
-              >
-                تم التسليم
-              </option>
+              <option value="pending" ${!isDelivered(order.delivery_status) ? 'selected' : ''}>قيد التوصيل</option>
+              <option value="delivered" ${isDelivered(order.delivery_status) ? 'selected' : ''}>تم التسليم</option>
             </select>
           </label>
-
         </div>
 
         <div class="master-edit-full">
-          <label>
-            رابط موقع العميل
-            <input
-              id="master-edit-location"
-              type="text"
-              value="${masterEscape(
-                order.location_url || ''
-              )}"
-            >
+          <label>رابط موقع العميل
+            <input id="master-edit-location" type="text" value="${masterEscape(order.location_url || '')}">
           </label>
         </div>
-
         <div class="master-edit-full">
-          <label>
-            تفاصيل الطلب
-            <textarea id="master-edit-details">${masterEscape(
-              order.order_details || ''
-            )}</textarea>
+          <label>تفاصيل الطلب
+            <textarea id="master-edit-details">${masterEscape(order.order_details || '')}</textarea>
           </label>
         </div>
-
         <div class="master-edit-full">
-          <label>
-            الملاحظات
-            <textarea id="master-edit-note">${masterEscape(
-              order.note || ''
-            )}</textarea>
+          <label>الملاحظات
+            <textarea id="master-edit-note">${masterEscape(order.note || order.notes || '')}</textarea>
           </label>
         </div>
-
         <div class="master-actions-row">
-
-          <button
-            class="master-btn primary"
-            id="master-save-edit"
-          >
-            💾 حفظ التعديل
-          </button>
-
-          <button
-            class="master-btn secondary"
-            id="master-cancel-edit"
-          >
-            رجوع
-          </button>
-
+          <button class="master-btn primary" id="master-save-edit" type="button">💾 حفظ التعديل</button>
+          <button class="master-btn secondary" id="master-cancel-edit" type="button">رجوع</button>
         </div>
       </div>
     `;
 
-    $('master-save-edit')?.addEventListener(
-      'click',
-      () => saveMasterOrder(order)
-    );
+    masterRenderEditProductRows(order);
 
-    $('master-cancel-edit')?.addEventListener(
-      'click',
-      () => openMasterOrder(order)
-    );
-
-    // Ensure the same modal becomes visible when editing directly from the table.
+    $('master-save-edit')?.addEventListener('click', () => saveMasterOrder(order));
+    $('master-cancel-edit')?.addEventListener('click', () => openMasterOrder(order));
     $('master-modal')?.classList.add('open');
   }
 
   async function saveMasterOrder(order) {
-    const button =
-      $('master-save-edit');
-
+    const button = $('master-save-edit');
+    if (button?.dataset.saving === 'true') return;
     if (button) {
+      button.dataset.saving = 'true';
       button.disabled = true;
-      button.textContent =
-        'جارٍ الحفظ…';
+      button.textContent = 'جارٍ الحفظ…';
     }
 
-    // Keep the complete original record so fields not shown in the edit form
-    // (delivery fee, gate photo, prepaid flag, transfer state, coordinator,
-    // driver notes and other metadata) are not cleared by a partial edit.
-    const updatedOrder = {
-      ...order,
-      customer_name:
-        $('master-edit-customer')?.value ?? order.customer_name ?? '',
-
-      phone:
-        $('master-edit-phone')?.value ?? order.phone ?? '',
-
-      emirate:
-        $('master-edit-emirate')?.value ?? order.emirate ?? '',
-
-      area:
-        $('master-edit-area')?.value ?? order.area ?? '',
-
-      chicken_weights:
-        $('master-edit-chicken-weights')?.value ?? order.chicken_weights ?? '',
-
-      chicken_qtys:
-        $('master-edit-chicken-qtys')?.value ?? order.chicken_qtys ?? '',
-
-      plate_names:
-        $('master-edit-plate-names')?.value ?? order.plate_names ?? '',
-
-      plate_qtys:
-        $('master-edit-plate-qtys')?.value ?? order.plate_qtys ?? '',
-
-      total:
-        $('master-edit-total')?.value ?? order.total ?? '',
-
-      location_url:
-        $('master-edit-location')?.value ?? order.location_url ?? '',
-
-      order_details:
-        $('master-edit-details')?.value ?? order.order_details ?? '',
-
-      note:
-        $('master-edit-note')?.value ?? order.note ?? order.notes ?? '',
-
-      payment_method:
-        $('master-edit-payment')?.value ?? order.payment_method ?? '',
-
-      delivery_status:
-        $('master-edit-status')?.value ?? order.delivery_status ?? 'pending'
-    };
-
     try {
-      const data =
-        await masterFetch(
-          '/api/master/order/update',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              orderId: order.id,
-              order: updatedOrder
-            })
-          }
-        );
+      if (order?.id == null || String(order.id).trim() === '') {
+        throw new Error('لا يمكن حفظ التعديل لأن معرّف الفاتورة في قاعدة البيانات غير موجود. لم يتم إرسال أي طلب لمنع إنشاء فاتورة مكررة.');
+      }
 
-      const saved =
-        data?.order ||
-        data?.data ||
-        data;
+      const chicken = masterCollectChickenEditValues(order);
+      const cuts = masterCollectCutEditValues(order);
+      const enteredDetails = $('master-edit-details')?.value ?? order.order_details ?? '';
+      const productsChanged = chicken.changed || cuts.changed;
+      const detailsUnchanged = String(enteredDetails).trim() === String(order.order_details ?? '').trim();
+      // Older Excel syncs may copy the same products into order_details as a plain-text summary.
+      // When structured products are edited, remove only that unchanged generated summary so it
+      // cannot appear as a second, stale copy below the structured products on the driver invoice.
+      const orderDetails = productsChanged && detailsUnchanged && masterLooksLikeGeneratedProductDetails(enteredDetails)
+        ? ''
+        : enteredDetails;
 
-      const index =
-        state.masterOrders.findIndex(
-          (item) =>
-            String(item.id) ===
-            String(order.id)
-        );
+      const updatedOrder = {
+        ...order,
+        customer_name: $('master-edit-customer')?.value ?? order.customer_name ?? '',
+        phone: $('master-edit-phone')?.value ?? order.phone ?? '',
+        emirate: $('master-edit-emirate')?.value ?? order.emirate ?? '',
+        area: $('master-edit-area')?.value ?? order.area ?? '',
+        chicken_weights: chicken.chicken_weights,
+        chicken_qtys: chicken.chicken_qtys,
+        plate_names: cuts.plate_names,
+        plate_qtys: cuts.plate_qtys,
+        total: $('master-edit-total')?.value ?? order.total ?? '',
+        location_url: $('master-edit-location')?.value ?? order.location_url ?? '',
+        order_details: orderDetails,
+        note: $('master-edit-note')?.value ?? order.note ?? order.notes ?? '',
+        payment_method: $('master-edit-payment')?.value ?? order.payment_method ?? '',
+        delivery_status: $('master-edit-status')?.value ?? order.delivery_status ?? 'pending'
+      };
 
+      // Keep the existing endpoint and this exact order ID: editing must update this invoice,
+      // not create a new invoice or change any unrelated master/driver functions.
+      const data = await masterFetch('/api/master/order/update', {
+        method: 'POST',
+        body: JSON.stringify({
+          orderId: order.id,
+          order: updatedOrder
+        })
+      });
+
+      const saved = data?.order || data?.data || data;
+      const index = state.masterOrders.findIndex((item) => String(item.id) === String(order.id));
       if (index !== -1) {
         state.masterOrders[index] = {
           ...state.masterOrders[index],
           ...updatedOrder,
-          ...(saved &&
-          typeof saved === 'object'
-            ? saved
-            : {})
+          ...(saved && typeof saved === 'object' ? saved : {})
         };
       }
 
-      const current =
-        state.masterOrders[index] ||
-        order;
-
-      toast(
-        'تم تعديل الفاتورة بنجاح ✅'
-      );
-
+      const current = state.masterOrders[index] || order;
+      toast('تم تعديل الفاتورة بنجاح ✅');
       openMasterOrder(current);
       renderMasterOrders();
 
     } catch (error) {
-      if (
-        error.message === 'expired'
-      ) {
-        return;
-      }
-
-      toast(
-        error.message,
-        true
-      );
-
+      if (error.message === 'expired') return;
+      toast(error.message || 'تعذر حفظ التعديل', true);
       if (button) {
         button.disabled = false;
-        button.textContent =
-          '💾 حفظ التعديل';
+        button.dataset.saving = 'false';
+        button.textContent = '💾 حفظ التعديل';
       }
     }
   }
