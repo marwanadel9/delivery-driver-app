@@ -921,17 +921,33 @@
     const style = document.createElement('style');
     style.id = 'compact-driver-invoice-styles';
     style.textContent = `
+      /* العرض الخارجي مختصر؛ كل عناصر التحكم لا تظهر ولا تستجيب خارج الفاتورة المفتوحة. */
       .order-card.is-compact .products-section,
       .order-card.is-compact .order-details,
       .order-card.is-compact .payment-section,
+      .order-card.is-compact .gate-photo-box,
       .order-card.is-compact .gate-photo-btn,
       .order-card.is-compact .delivery-fee-row,
-      .order-card.is-compact .delivery-grand-total-row { display:none!important; }
-      .order-card.is-compact { padding:12px!important; gap:8px!important; cursor:pointer; }
-      .order-card.is-compact .customer-location-grid { margin-top:5px!important; }
-      .order-card.is-compact .order-total { margin-top:7px!important; padding:9px 11px!important; }
+      .order-card.is-compact .delivery-grand-total-row,
+      .order-card.is-compact .driver-departure-box,
+      .order-card.is-compact .order-actions,
+      .order-card.is-compact .invoice-expand-toggle,
+      .order-card.is-compact button,
+      .order-card.is-compact a,
+      .order-card.is-compact input,
+      .order-card.is-compact select,
+      .order-card.is-compact textarea,
+      .order-card.is-compact label,
+      .order-card.is-compact [role="button"],
+      .order-card.is-compact [onclick] { display:none!important; pointer-events:none!important; }
+      .order-card.is-compact { padding:9px!important; gap:5px!important; cursor:pointer!important; }
+      .order-card.is-compact .order-card-head { margin:0!important; gap:4px!important; }
+      .order-card.is-compact .customer-row { margin:0!important; padding:2px 0!important; gap:6px!important; }
+      .order-card.is-compact .customer-location-grid { margin-top:3px!important; gap:4px!important; }
+      .order-card.is-compact .info-item { padding:5px 7px!important; gap:2px!important; }
+      .order-card.is-compact .info-item strong { line-height:1.3!important; }
+      .order-card.is-compact .order-total { margin-top:4px!important; padding:7px 9px!important; }
       .order-card .invoice-expand-toggle { display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;margin:8px 0;padding:8px 10px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer; }
-      .order-card.is-compact .invoice-expand-toggle { margin:6px 0 0; }
       .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
       html.driver-invoice-open, body.driver-invoice-open { overflow:hidden!important; overscroll-behavior:none!important; }
       .order-card.is-fullscreen-invoice { position:fixed!important; top:env(safe-area-inset-top, 0px)!important; bottom:env(safe-area-inset-bottom, 0px)!important; left:6px!important; right:6px!important; z-index:2147483000!important; width:calc(100vw - 12px)!important; max-width:none!important; height:auto!important; min-height:0!important; max-height:none!important; margin:0 auto!important; padding:7px 8px 8px!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:1px solid #dcfce7!important; border-radius:12px!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
@@ -1773,11 +1789,14 @@
         }
       }
 
+      // البطاقة الخارجية كلها تفتح الفاتورة فقط؛ لا تعمل أي عناصر بداخلها قبل الفتح.
+      // عند فتح الفاتورة بالكامل، تبقى كل الأزرار الداخلية بوظائفها الأصلية.
       node.addEventListener('click', (event) => {
-        if (event.target.closest('button, a, input, select, textarea, label')) return;
         if (node.classList.contains('is-fullscreen-invoice')) return;
+        event.preventDefault();
+        event.stopPropagation();
         toggleInvoiceDetails();
-      });
+      }, true);
 
       list.appendChild(node);
     }
