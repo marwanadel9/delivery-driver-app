@@ -912,7 +912,7 @@ export default {
         // دعم مفتاح Supabase السري الجديد sb_secret_ ومفتاح service_role القديم.
         // المفتاح السري الجديد يُرسل في apikey فقط؛ المفتاح القديم JWT يُرسل في الاثنين.
         const paymentServiceKey = String(
-          env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || ""
+          env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || ""
         ).trim();
         if (!paymentServiceKey) {
           return json({ error: "إعداد مزامنة طريقة الدفع غير مكتمل: أضف SUPABASE_SECRET_KEY أو SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
