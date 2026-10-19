@@ -884,112 +884,167 @@ export default {
         path === "/api/payment" &&
         request.method === "POST"
       ) {
-        const auth =
-          await requireDriver(
-            request,
-            env
-          );
+        const auth = await requireDriver(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
 
-        if (auth.error) {
-          return json(
-            {
-              error:
-                auth.error
-            },
-            auth.status
-          );
+        const body = await request.json().catch(function () { return {}; });
+        const orderId = Number(body.orderId);
+        const paymentMethod = normalizePayment(body.payment_method);
+
+        if (!Number.isInteger(orderId) || orderId <= 0) {
+          return json({ error: "رقم الطلب غير صحيح" }, 400);
         }
-
-        const body =
-          await request.json().catch(function () {
-            return {};
-          });
-
-        const orderId =
-          Number(body.orderId);
-
-        const paymentMethod =
-          normalizePayment(
-            body.payment_method
-          );
-
-        if (
-          !Number.isInteger(orderId) ||
-          orderId <= 0
-        ) {
-          return json(
-            {
-              error:
-                "رقم الطلب غير صحيح"
-            },
-            400
-          );
-        }
-
         if (!paymentMethod) {
-          return json(
-            {
-              error:
-                "طريقة الدفع غير صحيحة"
-            },
-            400
-          );
+          return json({ error: "طريقة الدفع غير صحيحة" }, 400);
+        }
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+          return json({ error: "إعداد مزامنة طريقة الدفع بين المناديب غير مكتمل" }, 500);
         }
 
-        const rpcResponse =
-          await supabaseRequest(
-            "/rest/v1/rpc/set_order_payment_method",
-            {
-              method: "POST",
-              headers: {
-                apikey:
-                  env.SUPABASE_ANON_KEY,
-                Authorization:
-                  "Bearer " +
-                  auth.token,
-                "Content-Type":
-                  "application/json"
-              },
-              body:
-                JSON.stringify({
-                  p_order_id:
-                    orderId,
-                  p_payment_method:
-                    paymentMethod
-                })
-            }
-          );
+        const serviceHeaders = {
+          apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY
+        };
 
-        const rpcData =
-          await rpcResponse.json().catch(function () {
-            return null;
-          });
+        // تأكد أن الفاتورة المحددة تتبع المندوب الحالي قبل مزامنتها.
+        const sourceResponse = await supabaseRequest(
+          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) +
+            "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) +
+            "&select=id,order_number,customer_name,phone,emirate,area,created_at,sheet_name,payment_method&limit=1",
+          { headers: serviceHeaders }
+        );
+        const sourceRows = await sourceResponse.json().catch(function () { return null; });
+        if (!sourceResponse.ok) {
+          return json({ error: (sourceRows && (sourceRows.message || sourceRows.hint || sourceRows.error)) || "تعذر التحقق من الفاتورة" }, 502);
+        }
+        if (!Array.isArray(sourceRows) || !sourceRows.length) {
+          return json({ error: "الفاتورة غير موجودة ضمن طلبات حسابك" }, 404);
+        }
 
-        if (!rpcResponse.ok) {
-          return json(
-            {
-              error:
-                (rpcData &&
-                  rpcData.message) ||
-                (rpcData &&
-                  rpcData.hint) ||
-                (rpcData &&
-                  rpcData.error) ||
-                "تعذر حفظ طريقة الدفع"
+        const sourceOrder = sourceRows[0];
+        const invoiceNumber = String(sourceOrder.order_number || "").trim();
+        if (!invoiceNumber) {
+          return json({ error: "لا يمكن مزامنة طريقة الدفع لأن رقم الفاتورة غير موجود" }, 400);
+        }
+
+        // تطبيع رقم الهاتف والنصوص لتجاوز اختلاف تنسيق الأرقام وكتابة الاسم.
+        const normalizePhone = function (value) {
+          let digits = String(value || "")
+            .replace(/[٠-٩]/g, function (d) { return String("٠١٢٣٤٥٦٧٨٩".indexOf(d)); })
+            .replace(/[۰-۹]/g, function (d) { return String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)); })
+            .replace(/\D/g, "");
+          if (digits.length >= 9) digits = digits.slice(-9);
+          return digits;
+        };
+        const normalizeText = function (value) {
+          return String(value || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f\u064B-\u065F\u0670]/g, "")
+            .replace(/[أإآٱ]/g, "ا")
+            .replace(/ى/g, "ي")
+            .replace(/ة/g, "ه")
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}]/gu, "");
+        };
+        const dayKey = function (value) {
+          if (!value) return "";
+          const date = new Date(value);
+          if (!Number.isFinite(date.getTime())) return "";
+          const parts = new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Asia/Dubai",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+          }).formatToParts(date);
+          const part = function (type) {
+            return (parts.find(function (item) { return item.type === type; }) || {}).value || "";
+          };
+          return part("year") + "-" + part("month") + "-" + part("day");
+        };
+        const sameCustomerCopy = function (candidate) {
+          if (String(candidate.id) === String(sourceOrder.id)) return true;
+
+          const sourceDay = dayKey(sourceOrder.created_at);
+          const candidateDay = dayKey(candidate.created_at);
+          // رقم الفاتورة يتكرر عبر الأيام؛ لا نزامن نسخة إذا تعذر إثبات نفس يوم الفاتورة.
+          if (!sourceDay || !candidateDay || sourceDay !== candidateDay) return false;
+
+          const sourcePhone = normalizePhone(sourceOrder.phone);
+          const candidatePhone = normalizePhone(candidate.phone);
+          if (sourcePhone.length >= 7 && candidatePhone.length >= 7) {
+            return sourcePhone === candidatePhone;
+          }
+
+          const sourceName = normalizeText(sourceOrder.customer_name);
+          const candidateName = normalizeText(candidate.customer_name);
+          if (!sourceName || !candidateName || sourceName !== candidateName) return false;
+
+          const sourceEmirate = normalizeText(sourceOrder.emirate);
+          const candidateEmirate = normalizeText(candidate.emirate);
+          const sourceArea = normalizeText(sourceOrder.area);
+          const candidateArea = normalizeText(candidate.area);
+          if (sourceEmirate && candidateEmirate && sourceEmirate !== candidateEmirate) return false;
+          if (sourceArea && candidateArea && sourceArea !== candidateArea) return false;
+          return true;
+        };
+
+        const candidatesResponse = await supabaseRequest(
+          "/rest/v1/orders?order_number=eq." + encodeURIComponent(invoiceNumber) +
+            "&select=id,order_number,customer_name,phone,emirate,area,created_at,sheet_name,payment_method&order=id.asc",
+          { headers: serviceHeaders }
+        );
+        const candidates = await candidatesResponse.json().catch(function () { return null; });
+        if (!candidatesResponse.ok) {
+          return json({ error: (candidates && (candidates.message || candidates.hint || candidates.error)) || "تعذر البحث عن نسخ الفاتورة لدى المناديب" }, 502);
+        }
+        if (!Array.isArray(candidates)) {
+          return json({ error: "استجابة البحث عن نسخ الفاتورة غير صحيحة" }, 502);
+        }
+
+        const matchingOrders = candidates.filter(sameCustomerCopy);
+        if (!matchingOrders.some(function (item) { return String(item.id) === String(sourceOrder.id); })) {
+          return json({ error: "تعذر تأكيد هوية الفاتورة، لم يتم تغيير طريقة الدفع" }, 409);
+        }
+
+        const matchingIds = matchingOrders
+          .map(function (item) { return Number(item.id); })
+          .filter(function (id) { return Number.isInteger(id) && id > 0; });
+        if (!matchingIds.length) {
+          return json({ error: "لم يتم العثور على نسخ صالحة للفاتورة" }, 404);
+        }
+
+        // تحديث حقل طريقة الدفع فقط على النسخ المطابقة في جدول المناديب.
+        // لا يتم إرسال أي تغيير لحالة التسليم أو الوزن أو الكمية أو الملاحظات.
+        const updateResponse = await supabaseRequest(
+          "/rest/v1/orders?id=in.(" + matchingIds.join(",") + ")",
+          {
+            method: "PATCH",
+            headers: {
+              ...serviceHeaders,
+              "Content-Type": "application/json",
+              Prefer: "return=representation"
             },
-            400
-          );
+            body: JSON.stringify({ payment_method: paymentMethod })
+          }
+        );
+        const updatedRows = await updateResponse.json().catch(function () { return null; });
+        if (!updateResponse.ok) {
+          return json({ error: (updatedRows && (updatedRows.message || updatedRows.hint || updatedRows.error)) || "تعذر مزامنة طريقة الدفع مع كل نسخ الفاتورة" }, 502);
+        }
+        if (!Array.isArray(updatedRows) || updatedRows.length !== matchingIds.length) {
+          return json({
+            error: "لم يتم تأكيد تحديث كل نسخ الفاتورة؛ راجع عدد السجلات قبل إعادة المحاولة",
+            expected_updates: matchingIds.length,
+            confirmed_updates: Array.isArray(updatedRows) ? updatedRows.length : 0
+          }, 502);
         }
 
         return json({
-          success:
-            true,
-          payment_method:
-            paymentMethod,
-          payment_label:
-            paymentLabel(
-              paymentMethod
-            )
+          success: true,
+          payment_method: paymentMethod,
+          payment_label: paymentLabel(paymentMethod),
+          synced_orders: updatedRows.length,
+          synced_sheets: Array.from(new Set(updatedRows.map(function (item) { return item.sheet_name; }).filter(Boolean)))
         });
       }
 
@@ -1142,153 +1197,6 @@ export default {
           );
         }
 
-        // عند تعديل طريقة الدفع من الماستر، جهّز نسخ الفاتورة المطابقة
-        // قبل الحفظ حتى نحدّث كل مندوب مرتبط بنفس رقم الفاتورة والعميل فقط.
-        const shouldSyncPayment = Object.prototype.hasOwnProperty.call(
-          order,
-          "payment_method"
-        );
-        let paymentSync = null;
-
-        if (shouldSyncPayment) {
-          const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
-          if (!serviceKey) {
-            return json({
-              error: "مزامنة طريقة الدفع تحتاج إعداد SUPABASE_SERVICE_ROLE_KEY في Worker. لم يتم حفظ التعديل."
-            }, 500);
-          }
-
-          const serviceHeaders = {
-            apikey: serviceKey,
-            Authorization: "Bearer " + serviceKey
-          };
-
-          const identityResponse = await supabaseRequest(
-            "/rest/v1/master_orders_archive?id=eq." +
-              encodeURIComponent(orderId) +
-              "&select=id,order_number,customer_name,phone,sheet_name&limit=1",
-            { headers: serviceHeaders }
-          );
-          const identityRows = await identityResponse.json().catch(function () {
-            return null;
-          });
-
-          if (!identityResponse.ok) {
-            return json({
-              error: (identityRows && (identityRows.message || identityRows.hint || identityRows.error)) ||
-                "تعذر تحديد هوية الفاتورة لمزامنة طريقة الدفع. لم يتم حفظ التعديل."
-            }, 502);
-          }
-
-          const identity = Array.isArray(identityRows) && identityRows.length
-            ? identityRows[0]
-            : order;
-
-          function normalizeInvoiceForPaymentSync(value) {
-            return String(value ?? "")
-              .trim()
-              .toUpperCase()
-              .replace(/[٠-٩]/g, function (digit) { return String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)); })
-              .replace(/[۰-۹]/g, function (digit) { return String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)); })
-              .replace(/[^A-Z0-9]/g, "");
-          }
-
-          function normalizeNameForPaymentSync(value) {
-            return String(value ?? "")
-              .trim()
-              .toLowerCase()
-              .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
-              .replace(/[أإآٱ]/g, "ا")
-              .replace(/ى/g, "ي")
-              .replace(/ة/g, "ه")
-              .replace(/[^\p{L}\p{N}]/gu, "");
-          }
-
-          function normalizePhoneForPaymentSync(value) {
-            let digits = String(value ?? "")
-              .replace(/[٠-٩]/g, function (digit) { return String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)); })
-              .replace(/[۰-۹]/g, function (digit) { return String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)); })
-              .replace(/\D/g, "");
-            if (digits.length > 9) digits = digits.slice(-9);
-            return digits;
-          }
-
-          const targetInvoiceNumber = String(
-            identity.order_number ?? order.order_number ?? order.invoice_number ?? ""
-          ).trim();
-          const normalizedTargetInvoice = normalizeInvoiceForPaymentSync(targetInvoiceNumber);
-          const targetName = normalizeNameForPaymentSync(identity.customer_name ?? order.customer_name);
-          const targetPhone = normalizePhoneForPaymentSync(identity.phone ?? order.phone);
-
-          if (!normalizedTargetInvoice || (!targetName && !targetPhone)) {
-            return json({
-              error: "تعذر التأكد من رقم الفاتورة والعميل. لم يتم حفظ التعديل لتجنب تغيير طريقة دفع عميل آخر."
-            }, 400);
-          }
-
-          function matchesSameInvoiceAndCustomer(row) {
-            if (normalizeInvoiceForPaymentSync(row.order_number) !== normalizedTargetInvoice) {
-              return false;
-            }
-
-            const rowPhone = normalizePhoneForPaymentSync(row.phone);
-            const rowName = normalizeNameForPaymentSync(row.customer_name);
-
-            // رقم الهاتف هو المفتاح الأقوى إذا كان موجودًا في السجلين؛
-            // الاسم هو البديل فقط عند غياب الهاتف من أحدهما.
-            if (targetPhone && rowPhone) return targetPhone === rowPhone;
-            return Boolean(targetName && rowName && targetName === rowName);
-          }
-
-          async function loadInvoiceCandidates(tableName) {
-            const response = await supabaseRequest(
-              "/rest/v1/" + tableName +
-                "?order_number=eq." + encodeURIComponent(targetInvoiceNumber) +
-                "&select=id,order_number,customer_name,phone,sheet_name",
-              { headers: serviceHeaders }
-            );
-            const rows = await response.json().catch(function () {
-              return null;
-            });
-            if (!response.ok) {
-              throw new Error(
-                (rows && (rows.message || rows.hint || rows.error)) ||
-                "تعذر قراءة نسخ الفاتورة من " + tableName
-              );
-            }
-            return Array.isArray(rows) ? rows.filter(matchesSameInvoiceAndCustomer) : [];
-          }
-
-          let matchingDriverOrders;
-          let matchingArchiveOrders;
-          try {
-            matchingDriverOrders = await loadInvoiceCandidates("orders");
-            matchingArchiveOrders = await loadInvoiceCandidates("master_orders_archive");
-          } catch (syncLookupError) {
-            return json({
-              error: syncLookupError.message + ". لم يتم حفظ التعديل لتجنب عدم تطابق طريقة الدفع بين المناديب."
-            }, 502);
-          }
-
-          const uniqueIds = function (rows) {
-            return Array.from(new Set(rows
-              .map(function (row) { return Number(row.id); })
-              .filter(function (id) { return Number.isInteger(id) && id > 0; })));
-          };
-
-          const archiveIds = uniqueIds(matchingArchiveOrders);
-          if (Number.isInteger(orderId) && orderId > 0 && !archiveIds.includes(orderId)) {
-            archiveIds.push(orderId);
-          }
-
-          paymentSync = {
-            serviceKey: serviceKey,
-            paymentMethod: order.payment_method == null ? null : String(order.payment_method).trim(),
-            driverOrderIds: uniqueIds(matchingDriverOrders),
-            archiveOrderIds: archiveIds
-          };
-        }
-
         const rpcResponse =
           await supabaseRequest(
             "/rest/v1/rpc/master_update_order",
@@ -1332,78 +1240,6 @@ export default {
             },
             400
           );
-        }
-
-        if (paymentSync) {
-          const syncHeaders = {
-            apikey: paymentSync.serviceKey,
-            Authorization: "Bearer " + paymentSync.serviceKey,
-            "Content-Type": "application/json",
-            Prefer: "return=representation"
-          };
-          const paymentPatch = JSON.stringify({
-            payment_method: paymentSync.paymentMethod
-          });
-
-          // تحديث طريقة الدفع في جميع نسخ المندوبين فقط؛ لا نغيّر حالة التسليم
-          // أو الكميات أو الملاحظات أو أي بيانات أخرى في سجلاتهم.
-          if (paymentSync.driverOrderIds.length) {
-            const driverPatchResponse = await supabaseRequest(
-              "/rest/v1/orders?id=in.(" + paymentSync.driverOrderIds.join(",") + ")&select=id,order_number,customer_name,phone,sheet_name,payment_method",
-              {
-                method: "PATCH",
-                headers: syncHeaders,
-                body: paymentPatch
-              }
-            );
-            const driverPatchData = await driverPatchResponse.json().catch(function () {
-              return null;
-            });
-
-            if (!driverPatchResponse.ok) {
-              return json({
-                error: (driverPatchData && (driverPatchData.message || driverPatchData.hint || driverPatchData.error)) ||
-                  "تم حفظ الفاتورة في الماستر، لكن تعذرت مزامنة طريقة الدفع عند المناديب. أعد المحاولة.",
-                master_updated: true,
-                driver_payment_sync_failed: true
-              }, 502);
-            }
-          }
-
-          // حدّث نسخ الأرشيف المطابقة أيضًا، حتى يظهر خيار الدفع نفسه في الماستر
-          // بعد إعادة التحميل، دون تغيير حالة التسليم الخاصة بكل مندوب.
-          if (paymentSync.archiveOrderIds.length) {
-            const archivePatchResponse = await supabaseRequest(
-              "/rest/v1/master_orders_archive?id=in.(" + paymentSync.archiveOrderIds.join(",") + ")&select=id,order_number,customer_name,phone,sheet_name,payment_method",
-              {
-                method: "PATCH",
-                headers: syncHeaders,
-                body: paymentPatch
-              }
-            );
-            const archivePatchData = await archivePatchResponse.json().catch(function () {
-              return null;
-            });
-
-            if (!archivePatchResponse.ok) {
-              return json({
-                error: (archivePatchData && (archivePatchData.message || archivePatchData.hint || archivePatchData.error)) ||
-                  "تمت مزامنة طريقة الدفع عند المناديب، لكن تعذر تحديث بعض نسخ الأرشيف. أعد تحميل الماستر ثم راجع الفاتورة.",
-                master_updated: true,
-                driver_payment_sync_updated: paymentSync.driverOrderIds.length,
-                archive_payment_sync_failed: true
-              }, 502);
-            }
-          }
-
-          return json({
-            success: true,
-            order: rpcData && typeof rpcData === "object"
-              ? { ...rpcData, payment_method: paymentSync.paymentMethod }
-              : { id: orderId, payment_method: paymentSync.paymentMethod },
-            driver_payment_sync_updated: paymentSync.driverOrderIds.length,
-            archive_payment_sync_updated: paymentSync.archiveOrderIds.length
-          });
         }
 
         return json({
