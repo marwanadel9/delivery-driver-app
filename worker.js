@@ -709,6 +709,8 @@ export default {
         }
 
         const safeOrders = Array.isArray(orders) ? orders : [];
+        const canCall = auth.user.email === DRIVER_EMAILS.zain2;
+
         if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
           const ids = safeOrders.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
           if (ids.length) {
@@ -724,6 +726,17 @@ export default {
           }
         }
 
+        // إخفاء أرقام الهواتف من استجابة API للمندوب غير المصرح له فقط.
+        // لا نغيّر أرقام الهاتف في قاعدة البيانات، ولا نغيّر طريقة الدفع أو بقية بيانات الفاتورة هنا.
+        if (!canCall) {
+          const phoneFields = ["phone", "phone_number", "customer_phone", "contact_phone", "mobile", "mobile_number"];
+          safeOrders.forEach(function (row) {
+            phoneFields.forEach(function (field) {
+              if (Object.prototype.hasOwnProperty.call(row, field)) row[field] = "";
+            });
+          });
+        }
+
         return json({
           orders:
             safeOrders,
@@ -732,8 +745,7 @@ export default {
           mandoub_name:
             auth.driver.mandoub_name,
           can_call:
-            auth.user.email ===
-            DRIVER_EMAILS.zain2
+            canCall
         });
       }
 
