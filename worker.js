@@ -909,13 +909,30 @@ export default {
         if (!paymentMethod) {
           return json({ error: "طريقة الدفع غير صحيحة" }, 400);
         }
-        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
-          return json({ error: "إعداد مزامنة طريقة الدفع بين المناديب غير مكتمل" }, 500);
+        // دعم مفتاح Supabase السري الجديد sb_secret_ ومفتاح service_role القديم.
+        // المفتاح السري الجديد يُرسل في apikey فقط؛ المفتاح القديم JWT يُرسل في الاثنين.
+        const paymentServiceKey = String(
+          env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || ""
+        ).trim();
+        if (!paymentServiceKey) {
+          return json({ error: "إعداد مزامنة طريقة الدفع غير مكتمل: أضف SUPABASE_SECRET_KEY أو SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
         }
 
-        const serviceHeaders = {
-          apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-          Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY
+        const serviceHeaders = { apikey: paymentServiceKey };
+        if (!paymentServiceKey.startsWith("sb_secret_")) {
+          serviceHeaders.Authorization = "Bearer " + paymentServiceKey;
+        }
+
+        const paymentSyncError = function (payload, fallback) {
+          const message = String(payload && (payload.message || payload.error) || "");
+          const hint = String(payload && payload.hint || "");
+          if (
+            (payload && String(payload.code || "") === "42501") ||
+            /permission denied for table orders/i.test(message + " " + hint)
+          ) {
+            return "صلاحيات جدول public.orders ناقصة لمزامنة الدفع. افتح SQL Editor في Supabase ونفّذ: GRANT SELECT, UPDATE ON TABLE public.orders TO service_role;";
+          }
+          return message || hint || fallback;
         };
 
         // تأكد أن الفاتورة المحددة تتبع المندوب الحالي قبل مزامنتها.
@@ -927,7 +944,7 @@ export default {
         );
         const sourceRows = await sourceResponse.json().catch(function () { return null; });
         if (!sourceResponse.ok) {
-          return json({ error: (sourceRows && (sourceRows.message || sourceRows.hint || sourceRows.error)) || "تعذر التحقق من الفاتورة" }, 502);
+          return json({ error: paymentSyncError(sourceRows, "تعذر التحقق من الفاتورة") }, 502);
         }
         if (!Array.isArray(sourceRows) || !sourceRows.length) {
           return json({ error: "الفاتورة غير موجودة ضمن طلبات حسابك" }, 404);
@@ -1007,7 +1024,7 @@ export default {
         );
         const candidates = await candidatesResponse.json().catch(function () { return null; });
         if (!candidatesResponse.ok) {
-          return json({ error: (candidates && (candidates.message || candidates.hint || candidates.error)) || "تعذر البحث عن نسخ الفاتورة لدى المناديب" }, 502);
+          return json({ error: paymentSyncError(candidates, "تعذر البحث عن نسخ الفاتورة لدى المناديب") }, 502);
         }
         if (!Array.isArray(candidates)) {
           return json({ error: "استجابة البحث عن نسخ الفاتورة غير صحيحة" }, 502);
@@ -1041,7 +1058,7 @@ export default {
         );
         const updatedRows = await updateResponse.json().catch(function () { return null; });
         if (!updateResponse.ok) {
-          return json({ error: (updatedRows && (updatedRows.message || updatedRows.hint || updatedRows.error)) || "تعذر مزامنة طريقة الدفع مع كل نسخ الفاتورة" }, 502);
+          return json({ error: paymentSyncError(updatedRows, "تعذر مزامنة طريقة الدفع مع كل نسخ الفاتورة") }, 502);
         }
         if (!Array.isArray(updatedRows) || updatedRows.length !== matchingIds.length) {
           return json({
