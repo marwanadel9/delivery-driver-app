@@ -708,7 +708,12 @@ export default {
           );
         }
 
-        const safeOrders = Array.isArray(orders) ? orders : [];
+        // إظهار أرقام الهاتف للمندوب المصرح له فقط؛ لا نغيّر البيانات المخزنة في قاعدة البيانات.
+        const canCall = auth.user.email === DRIVER_EMAILS.zain2;
+        const safeOrders = (Array.isArray(orders) ? orders : []).map(function (row) {
+          if (canCall) return row;
+          return Object.assign({}, row, { phone: "" });
+        });
         if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
           const ids = safeOrders.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
           if (ids.length) {
@@ -732,8 +737,7 @@ export default {
           mandoub_name:
             auth.driver.mandoub_name,
           can_call:
-            auth.user.email ===
-            DRIVER_EMAILS.zain2
+            canCall
         });
       }
 
