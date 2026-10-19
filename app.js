@@ -2980,38 +2980,114 @@
       .replace(/\s+/g, ' ');
   }
 
-  function masterInvoiceFingerprint(order) {
-    // Copies of the same invoice may exist on more than one driver sheet.
-    // Ignore sheet_name; use invoice number + customer identity + invoice day.
-    // Editable fields (notes, status, payment, products) must never change this key.
-    const invoiceNumber = masterNormalizeDuplicateValue(
-      order.order_number ?? order.invoice_number ?? order.invoice_no ?? ''
+  function masterOrderInvoiceNumber(order) {
+    return masterNormalizeDuplicateValue(
+      order?.order_number ?? order?.invoice_number ?? order?.invoice_no ?? order?.invoiceNo ?? ''
     ).replace(/[\s#]/g, '');
-    const phoneDigits = toEnglishDigits(String(order.phone ?? order.customer_phone ?? order.customerPhone ?? ''))
-      .replace(/[^0-9]/g, '');
-    const customerName = masterNormalizeDuplicateValue(
-      order.customer_name ?? order.customerName ?? order.name ?? ''
-    ).replace(/[^a-z0-9\u0600-\u06FF]/g, '');
-    const customerIdentity = phoneDigits.length >= 5
-      ? `phone:${phoneDigits}`
-      : customerName.length >= 3
-        ? `name:${customerName}`
-        : '';
-    const createdValue = String(order.created_at ?? order.createdAt ?? '').trim();
-    const dayKey = createdValue ? masterDateInput(createdValue) : '';
+  }
 
-    if (invoiceNumber && customerIdentity) {
-      return `invoice|${invoiceNumber}|${customerIdentity}|${dayKey}`;
+  function masterOrderPhoneDigits(order) {
+    return toEnglishDigits(String(order?.phone ?? order?.customer_phone ?? order?.customerPhone ?? ''))
+      .replace(/[^0-9]/g, '');
+  }
+
+  function masterOrderCustomerName(order) {
+    return masterNormalizeDuplicateValue(
+      order?.customer_name ?? order?.customerName ?? order?.name ?? ''
+    ).replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+  }
+
+  function masterOrderAreaKey(order, field) {
+    return masterNormalizeDuplicateValue(order?.[field] ?? '')
+      .replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+  }
+
+  // Identity matcher for duplicate copies of one invoice across driver sheets.
+  // The sheet name and creation timestamp are intentionally ignored: the same
+  // invoice may be copied to several drivers, and each copy can have a different timestamp.
+  function masterSameInvoiceCopy(left, right) {
+    const leftNumber = masterOrderInvoiceNumber(left);
+    const rightNumber = masterOrderInvoiceNumber(right);
+    if (!leftNumber || leftNumber !== rightNumber) return false;
+
+    const leftPhone = masterOrderPhoneDigits(left);
+    const rightPhone = masterOrderPhoneDigits(right);
+    if (leftPhone.length >= 5 && rightPhone.length >= 5 && leftPhone === rightPhone) {
+      return true;
     }
 
-    // If the source lacks customer identity, do not merge unrelated invoices.
-    if (order.id !== null && order.id !== undefined && String(order.id).trim()) {
+    const leftName = masterOrderCustomerName(left);
+    const rightName = masterOrderCustomerName(right);
+    if (leftName.length < 3 || rightName.length < 3 || leftName !== rightName) {
+      return false;
+    }
+
+    // Use address fields as a safety check when both copies contain them.
+    // If one copy has a blank field, don't let that missing value block matching.
+    const leftEmirate = masterOrderAreaKey(left, 'emirate');
+    const rightEmirate = masterOrderAreaKey(right, 'emirate');
+    if (leftEmirate && rightEmirate && leftEmirate !== rightEmirate) return false;
+
+    const leftArea = masterOrderAreaKey(left, 'area');
+    const rightArea = masterOrderAreaKey(right, 'area');
+    if (leftArea && rightArea && leftArea !== rightArea) return false;
+
+    // If phone numbers differ, matching name + compatible location is still accepted
+    // because one copy may have an old/blank phone; the invoice number must match above.
+    return true;
+  }
+
+  function masterInvoiceFingerprint(order) {
+    const invoiceNumber = masterOrderInvoiceNumber(order);
+    const phoneDigits = masterOrderPhoneDigits(order);
+    const customerName = masterOrderCustomerName(order);
+    const emirate = masterOrderAreaKey(order, 'emirate');
+    const area = masterOrderAreaKey(order, 'area');
+    const identity = phoneDigits.length >= 5
+      ? `phone:${phoneDigits}`
+      : `name:${customerName}|${emirate}|${area}`;
+
+    if (invoiceNumber && (phoneDigits.length >= 5 || customerName.length >= 3)) {
+      // No sheet_name or date in the fingerprint; these differ between mirrored copies.
+      return `invoice|${invoiceNumber}|${identity}`;
+    }
+
+    if (order?.id !== null && order?.id !== undefined && String(order.id).trim()) {
       return `id|${String(order.id).trim()}`;
     }
 
-    return [invoiceNumber, customerIdentity, dayKey]
-      .map(masterNormalizeDuplicateValue)
-      .join('|');
+    return `invoice|${invoiceNumber}|${identity}`;
+  }
+
+  function masterGetInvoiceCopies(order) {
+    const sourceOrders = Array.isArray(state.masterOrders) ? state.masterOrders : [];
+    const copies = [];
+    const seenIds = new Set();
+    const initial = sourceOrders.find((item) => String(item?.id ?? '') === String(order?.id ?? '')) || order;
+
+    const addCopy = (item) => {
+      if (!item) return false;
+      const id = item.id === null || item.id === undefined ? '' : String(item.id).trim();
+      const key = id ? `id:${id}` : item;
+      if (seenIds.has(key)) return false;
+      seenIds.add(key);
+      copies.push(item);
+      return true;
+    };
+
+    addCopy(initial);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const candidate of sourceOrders) {
+        if (copies.some((existing) => String(existing?.id ?? '') === String(candidate?.id ?? ''))) continue;
+        if (copies.some((existing) => masterSameInvoiceCopy(existing, candidate))) {
+          if (addCopy(candidate)) changed = true;
+        }
+      }
+    }
+
+    return copies;
   }
 
   function masterOrderRecency(order) {
@@ -3030,28 +3106,27 @@
   }
 
   function getMasterUniqueOrders() {
-    const unique = [];
-    const indexByFingerprint = new Map();
+    const groups = [];
 
     state.masterOrders.forEach((order) => {
-      const fingerprint = masterInvoiceFingerprint(order);
-      const existingIndex = indexByFingerprint.get(fingerprint);
+      const group = groups.find((items) =>
+        items.some((existing) => masterSameInvoiceCopy(existing, order))
+      );
 
-      if (existingIndex === undefined) {
-        indexByFingerprint.set(fingerprint, unique.length);
-        unique.push(order);
-        return;
+      if (group) {
+        group.push(order);
+      } else {
+        groups.push([order]);
       }
-
-      const existing = unique[existingIndex];
-      if (masterOrderRecency(order) > masterOrderRecency(existing)) {
-        unique[existingIndex] = order;
-      }
-      // لا ندمج حقول الحالة أو الدفع أو الملاحظة من نسخة قديمة؛ دمجها كان يعيد
-      // «تم التسليم» بعد إرجاع الفاتورة إلى «قيد التوصيل»، وقد يعرض طريقة دفع قديمة.
     });
 
-    return unique;
+    // One display row per logical invoice. Keep the freshest original record as
+    // the representative; editing and transfer confirmation still target all copies.
+    return groups.map((items) => items.reduce((preferred, candidate) =>
+      masterOrderRecency(candidate) > masterOrderRecency(preferred)
+        ? candidate
+        : preferred
+    ));
   }
 
   function getMasterFilteredOrders() {
@@ -3107,7 +3182,9 @@
         return false;
       }
 
-      if (driver && String(order.sheet_name || '') !== driver) {
+      if (driver && !masterGetInvoiceCopies(order).some((item) =>
+        masterNormalizeDuplicateValue(item.sheet_name || '') === masterNormalizeDuplicateValue(driver)
+      )) {
         return false;
       }
 
@@ -3707,9 +3784,7 @@
       button.textContent = 'جارٍ الحفظ…';
     }
 
-    const fingerprint = masterInvoiceFingerprint(order);
-    const matchingOrders = state.masterOrders.filter((item) =>
-      masterInvoiceFingerprint(item) === fingerprint &&
+    const matchingOrders = masterGetInvoiceCopies(order).filter((item) =>
       !isPaidInAdvance(item) &&
       normalizePayment(item.payment_method) === 'bank_transfer'
     );
@@ -4402,9 +4477,7 @@
       // Match the complete duplicate group before changing editable identity fields.
       // Every target keeps its own database ID and sheet_name; this is update-only, never insert.
       const originalFingerprint = masterInvoiceFingerprint(order);
-      const matchingCopies = state.masterOrders.filter((item) =>
-        masterInvoiceFingerprint(item) === originalFingerprint
-      );
+      const matchingCopies = masterGetInvoiceCopies(order);
       const targets = matchingCopies.length ? matchingCopies : [order];
       const uniqueTargets = [];
       const seenTargetIds = new Set();
