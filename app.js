@@ -2970,40 +2970,46 @@
   }
 
   function masterNormalizeDuplicateValue(value) {
-    return String(value ?? '')
+    return toEnglishDigits(String(value ?? ''))
+      .normalize('NFKC')
       .trim()
       .toLowerCase()
-      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+      .replace(/[أإآٱ]/g, 'ا')
+      .replace(/ى/g, 'ي')
+      .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
       .replace(/\s+/g, ' ');
   }
 
   function masterInvoiceFingerprint(order) {
-    // لا تربط هوية الفاتورة بالملاحظة أو الحالة أو طريقة الدفع أو تفاصيل الأصناف؛
-    // هذه حقول قابلة للتعديل ويجب ألا تنشئ بطاقة ثانية بعد تغييرها.
+    // Copies of the same invoice may exist on more than one driver sheet.
+    // Ignore sheet_name; use invoice number + customer identity + invoice day.
+    // Editable fields (notes, status, payment, products) must never change this key.
     const invoiceNumber = masterNormalizeDuplicateValue(
       order.order_number ?? order.invoice_number ?? order.invoice_no ?? ''
-    );
-    const sheetName = masterNormalizeDuplicateValue(order.sheet_name || '');
+    ).replace(/[\s#]/g, '');
+    const phoneDigits = toEnglishDigits(String(order.phone ?? order.customer_phone ?? order.customerPhone ?? ''))
+      .replace(/[^0-9]/g, '');
+    const customerName = masterNormalizeDuplicateValue(
+      order.customer_name ?? order.customerName ?? order.name ?? ''
+    ).replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+    const customerIdentity = phoneDigits.length >= 5
+      ? `phone:${phoneDigits}`
+      : customerName.length >= 3
+        ? `name:${customerName}`
+        : '';
     const createdValue = String(order.created_at ?? order.createdAt ?? '').trim();
-    let dayKey = '';
-    if (createdValue) {
-      const parsedDate = new Date(createdValue);
-      if (!Number.isNaN(parsedDate.getTime())) {
-        dayKey = `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`;
-      } else {
-        dayKey = createdValue.slice(0, 10);
-      }
+    const dayKey = createdValue ? masterDateInput(createdValue) : '';
+
+    if (invoiceNumber && customerIdentity) {
+      return `invoice|${invoiceNumber}|${customerIdentity}|${dayKey}`;
     }
 
-    if (invoiceNumber && sheetName && dayKey) {
-      return `invoice|${sheetName}|${invoiceNumber}|${dayKey}`;
-    }
-
+    // If the source lacks customer identity, do not merge unrelated invoices.
     if (order.id !== null && order.id !== undefined && String(order.id).trim()) {
       return `id|${String(order.id).trim()}`;
     }
 
-    return [sheetName, invoiceNumber, dayKey, order.phone, order.customer_name]
+    return [invoiceNumber, customerIdentity, dayKey]
       .map(masterNormalizeDuplicateValue)
       .join('|');
   }
@@ -4180,6 +4186,68 @@
     return hasProductLabel && hasQuantityLabel;
   }
 
+  function masterExtractGatePhotoUrls(order) {
+    // Support both the multiple-photo field and the legacy single-photo field.
+    // Some older rows have gate_photo_urls=[] while gate_photo_url still contains the image.
+    const rawFields = [
+      order?.gate_photo_urls,
+      order?.gatePhotoUrls,
+      order?.gate_photos,
+      order?.gatePhotos,
+      order?.gate_photo_url,
+      order?.gatePhotoUrl
+    ];
+    const values = [];
+    for (const raw of rawFields) {
+      if (Array.isArray(raw)) {
+        values.push(...raw);
+      } else if (typeof raw === 'string' && raw.trim()) {
+        const text = raw.trim();
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) values.push(...parsed);
+          else values.push(text);
+        } catch {
+          values.push(...text.split(/\r?\n|[;]+/).map((item) => item.trim()).filter(Boolean));
+        }
+      }
+    }
+
+    const urls = [];
+    const seen = new Set();
+    for (const item of values) {
+      const candidate = item && typeof item === 'object'
+        ? (item.url || item.publicUrl || item.gate_photo_url || item.gatePhotoUrl || '')
+        : item;
+      const url = safeUrl(candidate);
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      urls.push(url);
+    }
+    return urls;
+  }
+
+  function masterReadGatePhotoUrlsFromEditor() {
+    const field = $('master-edit-gate-photos');
+    const lines = String(field?.value ?? '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const urls = [];
+    const seen = new Set();
+    for (const line of lines) {
+      const url = safeUrl(line);
+      if (!url) {
+        throw new Error('رابط صورة البوابة غير صحيح. استخدم رابط صورة يبدأ بـ https:// أو http://، رابطًا واحدًا في كل سطر.');
+      }
+      if (!seen.has(url)) {
+        seen.add(url);
+        urls.push(url);
+      }
+    }
+    return urls;
+  }
+
   function openMasterEdit(order) {
     const body = $('master-modal-body');
     const title = $('master-modal-title');
@@ -4188,6 +4256,8 @@
     if (title) {
       title.textContent = `تعديل الفاتورة #${order.order_number ?? order.id ?? ''}`;
     }
+
+    const masterEditGatePhotoUrls = masterExtractGatePhotoUrls(order);
 
     body.innerHTML = `
       <div class="master-edit-form">
@@ -4252,6 +4322,12 @@
           </label>
         </div>
         <div class="master-edit-full">
+          <label>صور بوابة الفيلا (رابط واحد في كل سطر)
+            <textarea id="master-edit-gate-photos" rows="3" placeholder="الصق رابط صورة البوابة هنا">${masterEscape(masterEditGatePhotoUrls.join('\n'))}</textarea>
+          </label>
+          <small style="display:block;color:#64748b;margin-top:5px">الروابط الموجودة محفوظة ومعروضة هنا. يمكنك الإبقاء عليها أو استبدالها أو إضافة رابط جديد في سطر مستقل.</small>
+        </div>
+        <div class="master-edit-full">
           <label>تفاصيل الطلب
             <textarea id="master-edit-details">${masterEscape(order.order_details || '')}</textarea>
           </label>
@@ -4300,6 +4376,9 @@
         ? ''
         : enteredDetails;
 
+      const gatePhotoUrls = masterReadGatePhotoUrlsFromEditor();
+      const nextPayment = normalizePayment($('master-edit-payment')?.value ?? order.payment_method ?? '');
+
       const updatedOrder = {
         ...order,
         customer_name: $('master-edit-customer')?.value ?? order.customer_name ?? '',
@@ -4312,34 +4391,89 @@
         plate_qtys: cuts.plate_qtys,
         total: $('master-edit-total')?.value ?? order.total ?? '',
         location_url: $('master-edit-location')?.value ?? order.location_url ?? '',
+        gate_photo_urls: gatePhotoUrls,
+        gate_photo_url: gatePhotoUrls[0] || '',
         order_details: orderDetails,
         note: $('master-edit-note')?.value ?? order.note ?? order.notes ?? '',
         payment_method: $('master-edit-payment')?.value ?? order.payment_method ?? '',
         delivery_status: $('master-edit-status')?.value ?? order.delivery_status ?? 'pending'
       };
 
-      // Keep the existing endpoint and this exact order ID: editing must update this invoice,
-      // not create a new invoice or change any unrelated master/driver functions.
-      const data = await masterFetch('/api/master/order/update', {
-        method: 'POST',
-        body: JSON.stringify({
-          orderId: order.id,
-          order: updatedOrder
-        })
-      });
-
-      const saved = data?.order || data?.data || data;
-      const index = state.masterOrders.findIndex((item) => String(item.id) === String(order.id));
-      if (index !== -1) {
-        state.masterOrders[index] = {
-          ...state.masterOrders[index],
-          ...updatedOrder,
-          ...(saved && typeof saved === 'object' ? saved : {})
-        };
+      // Match the complete duplicate group before changing editable identity fields.
+      // Every target keeps its own database ID and sheet_name; this is update-only, never insert.
+      const originalFingerprint = masterInvoiceFingerprint(order);
+      const matchingCopies = state.masterOrders.filter((item) =>
+        masterInvoiceFingerprint(item) === originalFingerprint
+      );
+      const targets = matchingCopies.length ? matchingCopies : [order];
+      const uniqueTargets = [];
+      const seenTargetIds = new Set();
+      for (const target of targets) {
+        const targetId = String(target?.id ?? '').trim();
+        if (!targetId || seenTargetIds.has(targetId)) continue;
+        seenTargetIds.add(targetId);
+        uniqueTargets.push(target);
+      }
+      if (!uniqueTargets.length) {
+        throw new Error('لم يتم العثور على معرّف قاعدة بيانات صالح لهذه الفاتورة. لم يتم إرسال أي تعديل.');
       }
 
-      const current = state.masterOrders[index] || order;
-      toast('تم تعديل الفاتورة بنجاح ✅');
+      const successfulIds = new Set();
+      const failedTargets = [];
+      for (const target of uniqueTargets) {
+        const targetId = String(target.id);
+        const paymentChanged = normalizePayment(target.payment_method) !== nextPayment;
+        const payloadForTarget = {
+          ...target,
+          ...updatedOrder,
+          id: target.id,
+          order_number: target.order_number ?? updatedOrder.order_number,
+          invoice_number: target.invoice_number ?? updatedOrder.invoice_number,
+          sheet_name: target.sheet_name,
+          created_at: target.created_at ?? updatedOrder.created_at,
+          // When payment method changes, an old transfer confirmation must not carry over.
+          bank_transfer_received: paymentChanged ? false : target.bank_transfer_received,
+          gate_photo_urls: gatePhotoUrls,
+          gate_photo_url: gatePhotoUrls[0] || ''
+        };
+
+        try {
+          const response = await masterFetch('/api/master/order/update', {
+            method: 'POST',
+            body: JSON.stringify({
+              orderId: target.id,
+              order: payloadForTarget
+            })
+          });
+          const saved = response?.order || response?.data || response;
+          const index = state.masterOrders.findIndex((item) => String(item.id) === targetId);
+          if (index !== -1) {
+            state.masterOrders[index] = {
+              ...state.masterOrders[index],
+              ...payloadForTarget,
+              ...(saved && typeof saved === 'object' ? saved : {})
+            };
+          }
+          successfulIds.add(targetId);
+        } catch (copyError) {
+          failedTargets.push({ sheet: target.sheet_name || 'غير محدد', id: targetId, error: copyError.message || 'تعذر الحفظ' });
+        }
+      }
+
+      if (failedTargets.length) {
+        await loadMasterOrders();
+        const failedLabels = failedTargets.map((item) => `${item.sheet} (#${item.id})`).join('، ');
+        throw new Error(`تم تحديث ${successfulIds.size} من ${uniqueTargets.length} نسخة. تعذر تحديث: ${failedLabels}. راجع اتصال قاعدة البيانات قبل إعادة المحاولة.`);
+      }
+
+      // Refresh from the source of truth after all updates so the master shows the newest state.
+      await loadMasterOrders();
+      const current = state.masterOrders.find((item) => String(item.id) === String(order.id)) ||
+        state.masterOrders.find((item) => masterInvoiceFingerprint(item) === originalFingerprint) ||
+        { ...order, ...updatedOrder };
+      toast(uniqueTargets.length > 1
+        ? `تم تعديل الفاتورة وتحديث ${uniqueTargets.length} نسخ مرتبطة بها ✅`
+        : 'تم تعديل الفاتورة بنجاح ✅');
       openMasterOrder(current);
       renderMasterOrders();
 
