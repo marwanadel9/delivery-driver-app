@@ -1414,6 +1414,144 @@ export default {
       }
 
       if (
+        path === "/api/gate-photo/delete" &&
+        request.method === "POST"
+      ) {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (secret !== env.EXCEL_SYNC_SECRET) {
+          return json({ error: "غير مصرح" }, 401);
+        }
+        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) {
+          return json({ error: "إعداد حذف الصور غير مكتمل: أضف SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
+        }
+
+        const body = await request.json().catch(function () { return {}; });
+        const invoiceNumber = String(body.invoice_number || "").trim();
+        if (!invoiceNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(invoiceNumber)) {
+          return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+        }
+        if (body.confirm_delete !== true) {
+          return json({ error: "يجب تأكيد حذف صورة البوابة بإرسال confirm_delete: true" }, 400);
+        }
+
+        const authHeaders = {
+          apikey: serviceKey,
+          Authorization: "Bearer " + serviceKey
+        };
+        const queryPath = "/rest/v1/orders?order_number=eq." +
+          encodeURIComponent(invoiceNumber) +
+          "&select=id,order_number,gate_photo_url,gate_photo_urls";
+        const ordersResponse = await supabaseRequest(queryPath, { headers: authHeaders });
+        const ordersData = await ordersResponse.json().catch(function () { return null; });
+        if (!ordersResponse.ok || !Array.isArray(ordersData)) {
+          return json({
+            error: (ordersData && (ordersData.message || ordersData.hint || ordersData.error)) || "تعذر قراءة صور الفاتورة من قاعدة البيانات"
+          }, 502);
+        }
+        if (ordersData.length === 0) {
+          return json({ error: "الفاتورة غير موجودة في جدول الطلبات؛ لم يتم حذف أي ملف" }, 404);
+        }
+
+        const bucketName = "gate-photos 3";
+        const bucketMarker = "/storage/v1/object/public/" + encodeURIComponent(bucketName) + "/";
+        const prefixes = [];
+        const addPhotoPath = function (photoUrl) {
+          const value = String(photoUrl || "").trim();
+          const markerIndex = value.indexOf(bucketMarker);
+          if (markerIndex < 0) return;
+          const pathPart = value.slice(markerIndex + bucketMarker.length).split("?")[0];
+          let decodedPath;
+          try {
+            decodedPath = pathPart.split("/").map(function (part) { return decodeURIComponent(part); }).join("/");
+          } catch (_) {
+            return;
+          }
+          if (decodedPath.startsWith("invoices/") && !decodedPath.includes("..")) {
+            if (!prefixes.includes(decodedPath)) prefixes.push(decodedPath);
+          }
+        };
+
+        for (const row of ordersData) {
+          addPhotoPath(row.gate_photo_url);
+          let photos = row.gate_photo_urls;
+          if (typeof photos === "string") {
+            try { photos = JSON.parse(photos); } catch (_) { photos = []; }
+          }
+          if (Array.isArray(photos)) {
+            for (const photo of photos) {
+              addPhotoPath(typeof photo === "string" ? photo : (photo && (photo.url || photo.gate_photo_url)) || "");
+            }
+          }
+        }
+
+        if (prefixes.length > 0) {
+          const encodedBucket = encodeURIComponent(bucketName);
+          const deleteResponse = await supabaseRequest(
+            "/storage/v1/object/" + encodedBucket,
+            {
+              method: "DELETE",
+              headers: Object.assign({}, authHeaders, {
+                "Content-Type": "application/json"
+              }),
+              body: JSON.stringify({ prefixes: prefixes })
+            }
+          );
+          const deleteData = await deleteResponse.json().catch(function () { return null; });
+          if (!deleteResponse.ok) {
+            return json({
+              error: (deleteData && (deleteData.message || deleteData.error)) || "تعذر حذف الصور من التخزين السحابي؛ لم يتم مسح روابطها من قاعدة البيانات",
+              photo_count: prefixes.length
+            }, 502);
+          }
+        }
+
+        const patchResponse = await supabaseRequest(
+          "/rest/v1/orders?order_number=eq." + encodeURIComponent(invoiceNumber),
+          {
+            method: "PATCH",
+            headers: Object.assign({}, authHeaders, {
+              "Content-Type": "application/json",
+              Prefer: "return=representation"
+            }),
+            body: JSON.stringify({ gate_photo_url: null, gate_photo_urls: [] })
+          }
+        );
+        const patchData = await patchResponse.json().catch(function () { return null; });
+        if (!patchResponse.ok) {
+          return json({
+            error: (patchData && (patchData.message || patchData.hint || patchData.error)) || "تم طلب حذف الصور من التخزين، لكن تعذر مسح روابطها من جدول الطلبات",
+            photos_deleted: prefixes.length
+          }, 502);
+        }
+
+        const archiveResponse = await supabaseRequest(
+          "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(invoiceNumber),
+          {
+            method: "PATCH",
+            headers: Object.assign({}, authHeaders, {
+              "Content-Type": "application/json",
+              Prefer: "return=minimal"
+            }),
+            body: JSON.stringify({ gate_photo_url: null })
+          }
+        );
+        if (!archiveResponse.ok && archiveResponse.status !== 404) {
+          return json({
+            error: "تم تحديث الطلبات، لكن تعذر مسح رابط الصورة من أرشيف الماستر",
+            photos_deleted: prefixes.length
+          }, 502);
+        }
+
+        return json({
+          success: true,
+          invoice_number: invoiceNumber,
+          photos_deleted: prefixes.length,
+          message: "تم حذف روابط صور البوابة من الطلبات والأرشيف"
+        });
+      }
+
+      if (
         path === "/api/gate-photo" &&
         request.method === "POST"
       ) {
