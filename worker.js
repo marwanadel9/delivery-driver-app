@@ -249,6 +249,90 @@ function paymentLabel(value) {
   return "";
 }
 
+
+async function clearGatePhotosForInvoice(invoiceNumber, env) {
+  const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (!serviceKey) {
+    throw new Error("إعداد حذف الصور غير مكتمل: SUPABASE_SERVICE_ROLE_KEY");
+  }
+
+  const headers = {
+    apikey: serviceKey,
+    Authorization: "Bearer " + serviceKey
+  };
+  const encodedInvoice = encodeURIComponent(invoiceNumber);
+  const rowsResponse = await supabaseRequest(
+    "/rest/v1/orders?order_number=eq." + encodedInvoice +
+      "&select=id,order_number,gate_photo_url,gate_photo_urls",
+    { headers: headers }
+  );
+  const rows = await rowsResponse.json().catch(function () { return null; });
+  if (!rowsResponse.ok || !Array.isArray(rows)) {
+    throw new Error((rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة صور الفاتورة");
+  }
+
+  const bucketName = "gate-photos 3";
+  const bucketMarker = "/storage/v1/object/public/" + encodeURIComponent(bucketName) + "/";
+  const paths = [];
+  const addPath = function (value) {
+    const photoUrl = String(value || "").trim();
+    const at = photoUrl.indexOf(bucketMarker);
+    if (at < 0) return;
+    const rawPath = photoUrl.slice(at + bucketMarker.length).split("?")[0];
+    let decoded;
+    try {
+      decoded = rawPath.split("/").map(function (part) { return decodeURIComponent(part); }).join("/");
+    } catch (_) { return; }
+    if (decoded.startsWith("invoices/") && !decoded.includes("..") && !paths.includes(decoded)) {
+      paths.push(decoded);
+    }
+  };
+
+  for (const row of rows) {
+    addPath(row.gate_photo_url);
+    let photos = row.gate_photo_urls;
+    if (typeof photos === "string") {
+      try { photos = JSON.parse(photos); } catch (_) { photos = []; }
+    }
+    if (Array.isArray(photos)) {
+      for (const photo of photos) {
+        addPath(typeof photo === "string" ? photo : (photo && (photo.url || photo.gate_photo_url)) || "");
+      }
+    }
+  }
+
+  if (paths.length) {
+    const storageResponse = await supabaseRequest(
+      "/storage/v1/object/" + encodeURIComponent(bucketName),
+      {
+        method: "DELETE",
+        headers: Object.assign({}, headers, { "Content-Type": "application/json" }),
+        body: JSON.stringify({ prefixes: paths })
+      }
+    );
+    const storageData = await storageResponse.json().catch(function () { return null; });
+    if (!storageResponse.ok) {
+      throw new Error((storageData && (storageData.message || storageData.error)) || "تعذر حذف الصور من التخزين السحابي");
+    }
+  }
+
+  const clearBody = JSON.stringify({ gate_photo_url: null, gate_photo_urls: [] });
+  const ordersPatch = await supabaseRequest(
+    "/rest/v1/orders?order_number=eq." + encodedInvoice,
+    { method: "PATCH", headers: Object.assign({}, headers, { "Content-Type": "application/json", Prefer: "return=minimal" }), body: clearBody }
+  );
+  if (!ordersPatch.ok) throw new Error("تم حذف الصور من التخزين لكن تعذر مسح روابط الطلبات");
+
+  const archivePatch = await supabaseRequest(
+    "/rest/v1/master_orders_archive?order_number=eq." + encodedInvoice,
+    { method: "PATCH", headers: Object.assign({}, headers, { "Content-Type": "application/json", Prefer: "return=minimal" }), body: clearBody }
+  );
+  if (!archivePatch.ok && archivePatch.status !== 404) {
+    throw new Error("تم تحديث الطلبات لكن تعذر مسح روابط صور أرشيف الماستر");
+  }
+  return paths.length;
+}
+
 export default {
   async fetch(request, env) {
     const missingSecret = checkSecrets(env);
@@ -1789,6 +1873,22 @@ export default {
               ? body.orders
               : [];
 
+        // عند إرسال clear_gate_photos=true، احذف الملفات والروابط قبل حفظ المزامنة.
+        const clearInvoices = Array.from(new Set(
+          orders
+            .filter(function (order) { return order && (order.clear_gate_photos === true || order.clear_gate_photos === 1 || String(order.clear_gate_photos).toLowerCase() === "true"); })
+            .map(function (order) { return String(order.order_number || "").trim(); })
+            .filter(function (number) { return /^[a-zA-Z0-9_-]{1,80}$/.test(number); })
+        ));
+        const deletedPhotoCounts = {};
+        try {
+          for (const invoiceNumber of clearInvoices) {
+            deletedPhotoCounts[invoiceNumber] = await clearGatePhotosForInvoice(invoiceNumber, env);
+          }
+        } catch (photoError) {
+          return json({ error: photoError.message || "فشل حذف صور البوابة؛ لم تكتمل المزامنة" }, 502);
+        }
+
         const rpcResponse =
           await supabaseRequest(
             "/rest/v1/rpc/sync_orders_from_excel",
@@ -1833,10 +1933,10 @@ export default {
         }
 
         return json({
-          success:
-            true,
-          data:
-            rpcData
+          success: true,
+          data: rpcData,
+          gate_photos_cleared: clearInvoices.length,
+          gate_photo_files_deleted: deletedPhotoCounts
         });
       }
 
