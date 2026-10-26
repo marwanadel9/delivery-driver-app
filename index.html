@@ -800,6 +800,46 @@
   </template>
 
 
+  <script>
+    // توحيد روابط موقع العميل لتعمل على متصفحات الهواتف.
+    // يدعم روابط Google Maps وروابط الإحداثيات أو العناوين، ويمنع فتح href="#" عند غياب الرابط.
+    document.addEventListener("click", function (event) {
+      const link = event.target.closest("a[data-f=\"location_url\"]");
+      if (!link) return;
+
+      const raw = (link.href && link.href !== window.location.href + "#")
+        ? link.href
+        : (link.getAttribute("data-location-url") || "");
+
+      const value = String(raw || "").trim();
+      if (!value || value === "#" || value === window.location.href + "#") {
+        event.preventDefault();
+        alert("رابط موقع العميل غير متوفر لهذه الفاتورة.");
+        return;
+      }
+
+      let url;
+      try {
+        url = new URL(value, window.location.href);
+      } catch (_) {
+        event.preventDefault();
+        alert("رابط موقع العميل غير صالح.");
+        return;
+      }
+
+      if (url.protocol !== "http:" && url.protocol !== "https:" && url.protocol !== "geo:") {
+        event.preventDefault();
+        alert("رابط موقع العميل غير صالح.");
+        return;
+      }
+
+      // على الهاتف افتح رابط HTTPS مباشرة في نفس التبويب لتجنب حظر النوافذ المنبثقة.
+      if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        event.preventDefault();
+        window.location.href = url.href;
+      }
+    }, true);
+  </script>
   <script src="/app.js"></script>
 
 </body>
