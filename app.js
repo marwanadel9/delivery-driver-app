@@ -5084,16 +5084,3 @@
       session?.access_token
     ) {
       saveSession(session);
-
-      state.role =
-        'driver';
-
-      showOrders();
-
-    } else {
-      showLogin();
-    }
-  }
-
-  boot();
-})();
