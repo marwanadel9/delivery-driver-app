@@ -116,48 +116,46 @@
 
   const safeUrl = (value) => {
     let url = String(value ?? '').trim();
+    if (!url) return '';
 
-    if (!url) {
-      return '';
-    }
-
-    // بعض روابط خرائط Google تأتي بصيغة Android intent://.
-    // نفضّل رابط المتصفح الموجود في browser_fallback_url إن وُجد.
+    // Convert Android Google Maps intent links into ordinary HTTPS links.
+    // Android WebView cannot navigate directly to intent:// and shows ERR_UNKNOWN_URL_SCHEME.
+    url = url.replace(/&amp;/gi, '&').trim();
     if (/^intent:\/\//i.test(url)) {
-      const fallbackMatch = url.match(/S\.browser_fallback_url=([^;]+)(?:;end|;|$)/i);
+      const marker = url.indexOf('#Intent;');
+      const intentParts = marker >= 0 ? url.slice(marker + 8) : '';
+      const fallbackMatch = intentParts.match(/(?:^|;)S\.browser_fallback_url=([^;]+)/i);
 
       if (fallbackMatch && fallbackMatch[1]) {
-        try {
-          url = decodeURIComponent(fallbackMatch[1]);
-        } catch {
-          url = fallbackMatch[1];
+        let fallback = fallbackMatch[1];
+        // Decode repeatedly because some links arrive double-encoded.
+        for (let i = 0; i < 3; i += 1) {
+          try {
+            const decoded = decodeURIComponent(fallback);
+            if (decoded === fallback) break;
+            fallback = decoded;
+          } catch {
+            break;
+          }
         }
+        url = fallback.replace(/&amp;/gi, '&').trim();
       } else {
-        // إذا لم يوجد رابط بديل، نحول عنوان intent نفسه إلى HTTPS.
-        const intentMarker = url.indexOf('#Intent;');
-        const address = intentMarker >= 0
-          ? url.slice('intent://'.length, intentMarker)
-          : url.slice('intent://'.length);
+        // Keep only the URL before Android's #Intent metadata.
+        const address = marker >= 0 ? url.slice('intent://'.length, marker) : url.slice('intent://'.length);
         url = `https://${address}`;
       }
     }
 
-    // إزالة علامات HTML التي قد تصل عند تخزين الرابط كنص.
+    // A second pass handles fallback URLs that were HTML-escaped in the database.
     url = url.replace(/&amp;/gi, '&').trim();
-
     try {
       const parsed = new URL(url);
-
-      if (
-        parsed.protocol === 'https:' ||
-        parsed.protocol === 'http:'
-      ) {
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
         return parsed.href;
       }
     } catch {
       return '';
     }
-
     return '';
   };
 
