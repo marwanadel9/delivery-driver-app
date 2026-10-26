@@ -472,6 +472,13 @@
   }
 
   async function loadOrders() {
+    // Keep the exact currently-open invoice DOM and scroll position intact.
+    // A refresh while the invoice is open used to call render(), replacing the card
+    // and causing the user to return to the list/first invoice or see a blank screen.
+    if (document.body.classList.contains('driver-invoice-open')) {
+      return;
+    }
+
     const list =
       $('orders-list');
 
@@ -1709,20 +1716,28 @@
           safeUrl(locationValue);
 
         if (locationUrl) {
-          // Open maps outside the current invoice page. Returning from Maps then leaves
-          // this invoice loaded underneath instead of navigating the WebView away from it.
-          let mapOpenUrl = locationUrl;
-          try {
-            const parsedMapUrl = new URL(locationUrl);
-            const mapHostPath = `${parsedMapUrl.host}${parsedMapUrl.pathname}${parsedMapUrl.search}${parsedMapUrl.hash}`;
-            mapOpenUrl = `intent://${mapHostPath}#Intent;scheme=https;package=com.google.android.apps.maps;S.browser_fallback_url=${encodeURIComponent(locationUrl)};end`;
-          } catch {
-            mapOpenUrl = locationUrl;
-          }
+          const userAgent = navigator.userAgent || '';
+          const isAndroid = /Android/i.test(userAgent);
 
-          locationButton.href = mapOpenUrl;
-          locationButton.target = '_self';
-          locationButton.removeAttribute('rel');
+          if (isAndroid) {
+            // Existing Android MainActivity handles intent:// URLs and launches Maps
+            // externally, leaving this invoice page loaded underneath.
+            try {
+              const parsedMapUrl = new URL(locationUrl);
+              const mapHostPath = `${parsedMapUrl.host}${parsedMapUrl.pathname}${parsedMapUrl.search}${parsedMapUrl.hash}`;
+              locationButton.href =
+                `intent://${mapHostPath}#Intent;scheme=https;package=com.google.android.apps.maps;S.browser_fallback_url=${encodeURIComponent(locationUrl)};end`;
+            } catch {
+              locationButton.href = locationUrl;
+            }
+            locationButton.target = '_self';
+            locationButton.removeAttribute('rel');
+          } else {
+            // On desktop, open Maps in a separate tab so the invoice page is never replaced.
+            locationButton.href = locationUrl;
+            locationButton.target = '_blank';
+            locationButton.rel = 'noopener noreferrer';
+          }
 
           locationButton.hidden =
             false;
@@ -5062,8 +5077,6 @@
           !document.hidden &&
           state.session?.access_token &&
           !$('orders-view')?.hidden &&
-          // لا نعيد رسم قائمة الطلبات عند الرجوع من الخرائط إذا كانت الفاتورة مفتوحة؛
-          // إعادة الرسم كانت تغلق الفاتورة وتعيد ترتيب/موضع القائمة.
           !document.body.classList.contains('driver-invoice-open')
         ) {
           loadOrders();
