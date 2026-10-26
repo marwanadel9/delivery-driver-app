@@ -1148,9 +1148,10 @@
         expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
         expandButton.setAttribute('aria-expanded', 'false');
         window.scrollTo({ top: savedScrollY, behavior: 'auto' });
-        // لا ننفذ history.back() بعد إغلاق الفاتورة يدويًا؛
-        // ذلك قد ينقل المستخدم إلى سجل سابق ويعيد بناء الصفحة أو يعرض شاشة بيضاء.
-        // زر الهاتف يتعامل مع سجل الرجوع عبر popstate فقط.
+        // عند الرجوع بزر الهاتف نغلق الفاتورة فقط؛ لا نطلب رجوعًا ثانيًا للخلف.
+        if (shouldReturnHistory && !fromPopState) {
+          window.history.back();
+        }
       };
       const toggleInvoiceDetails = () => {
         if (node.classList.contains('is-fullscreen-invoice')) {
@@ -1192,13 +1193,7 @@
         closeButton.textContent = '✕ إغلاق الفاتورة';
         closeButton.addEventListener('click', (event) => {
           event.stopPropagation();
-          // استخدم خطوة سجل الفاتورة المؤقتة لإغلاق العرض فقط، من دون الرجوع
-          // إلى صفحة/فاتورة سابقة. إذا لم تُنشأ خطوة تاريخ، أغلق العرض مباشرة.
-          if (driverInvoiceHistoryEntryActive) {
-            window.history.back();
-          } else {
-            closeInvoiceFullscreen();
-          }
+          closeInvoiceFullscreen();
         });
         fullscreenHead.append(heading, closeButton);
         node.insertBefore(fullscreenHead, node.firstChild);
@@ -1714,20 +1709,18 @@
           safeUrl(locationValue);
 
         if (locationUrl) {
-          // Open Maps through an Android intent URL. MainActivity intercepts intent://
-          // and launches the external Maps/browser handler, so the invoice page stays
-          // loaded underneath and the driver returns to this exact invoice.
-          const mapsUri = (() => {
-            try {
-              const parsed = new URL(locationUrl);
-              const mapsPath = `${parsed.host}${parsed.pathname}${parsed.search}`;
-              return `intent://${mapsPath}#Intent;scheme=https;package=com.google.android.apps.maps;S.browser_fallback_url=${encodeURIComponent(locationUrl)};end`;
-            } catch {
-              return locationUrl;
-            }
-          })();
+          // Open maps outside the current invoice page. Returning from Maps then leaves
+          // this invoice loaded underneath instead of navigating the WebView away from it.
+          let mapOpenUrl = locationUrl;
+          try {
+            const parsedMapUrl = new URL(locationUrl);
+            const mapHostPath = `${parsedMapUrl.host}${parsedMapUrl.pathname}${parsedMapUrl.search}${parsedMapUrl.hash}`;
+            mapOpenUrl = `intent://${mapHostPath}#Intent;scheme=https;package=com.google.android.apps.maps;S.browser_fallback_url=${encodeURIComponent(locationUrl)};end`;
+          } catch {
+            mapOpenUrl = locationUrl;
+          }
 
-          locationButton.href = mapsUri;
+          locationButton.href = mapOpenUrl;
           locationButton.target = '_self';
           locationButton.removeAttribute('rel');
 
@@ -5068,7 +5061,10 @@
         if (
           !document.hidden &&
           state.session?.access_token &&
-          !$('orders-view')?.hidden
+          !$('orders-view')?.hidden &&
+          // لا نعيد رسم قائمة الطلبات عند الرجوع من الخرائط إذا كانت الفاتورة مفتوحة؛
+          // إعادة الرسم كانت تغلق الفاتورة وتعيد ترتيب/موضع القائمة.
+          !document.body.classList.contains('driver-invoice-open')
         ) {
           loadOrders();
         }
