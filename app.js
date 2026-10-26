@@ -684,62 +684,37 @@
     );
   }
 
-  // ترتيب فواتير قيد التوصيل محفوظ على هاتف المندوب نفسه.
-  function driverOrderKey(order) {
-    return String(firstValue(order, ['id', 'order_number', 'orderNumber', 'invoice_no', 'invoice_number']) || '');
+  // عند الضغط على اسم المنطقة، نعرض كل فواتير هذه المنطقة أولاً.
+  function driverAreaKey(order) {
+    const emirate = String(firstValue(order, ['emirate', 'emirate_name', 'emirateName']) || '').trim().toLowerCase();
+    const area = String(firstValue(order, ['area', 'area_name', 'areaName']) || '').trim().toLowerCase();
+    return area ? `${emirate}::${area}` : '';
   }
 
-  function driverOrderSortStorageKey() {
-    return `driver_pending_order_sort_${String(state.sheet || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  function driverAreaSortStorageKey() {
+    return `driver_selected_area_${String(state.sheet || state.session?.sheet_name || state.session?.username || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
   }
 
-  function getSavedPendingOrderIds() {
+  function getSelectedDriverArea() {
+    try { return localStorage.getItem(driverAreaSortStorageKey()) || ''; } catch { return ''; }
+  }
+
+  function setSelectedDriverArea(areaKey) {
     try {
-      const value = JSON.parse(localStorage.getItem(driverOrderSortStorageKey()) || '[]');
-      return Array.isArray(value) ? value.map(String) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  function savePendingOrderIds() {
-    try {
-      const ids = state.orders.filter(order => !isDelivered(order.delivery_status)).map(driverOrderKey);
-      localStorage.setItem(driverOrderSortStorageKey(), JSON.stringify(ids));
-    } catch {}
-  }
-
-  function movePendingOrderToPosition(order, requestedPosition) {
-    if (!order || isDelivered(order.delivery_status)) return;
-    const pending = sortPendingOrdersForDisplay(
-      state.orders.filter(item => !isDelivered(item.delivery_status))
-    );
-    const currentIndex = pending.findIndex(item => driverOrderKey(item) === driverOrderKey(order));
-    if (currentIndex < 0) return;
-    const position = Number(requestedPosition);
-    if (!Number.isFinite(position)) return;
-    const targetIndex = Math.max(0, Math.min(pending.length - 1, Math.trunc(position) - 1));
-    const [moved] = pending.splice(currentIndex, 1);
-    pending.splice(targetIndex, 0, moved);
-    const pendingIds = pending.map(driverOrderKey);
-    try {
-      localStorage.setItem(driverOrderSortStorageKey(), JSON.stringify(pendingIds));
+      if (areaKey) localStorage.setItem(driverAreaSortStorageKey(), areaKey);
+      else localStorage.removeItem(driverAreaSortStorageKey());
     } catch {}
     render();
   }
+
   function sortPendingOrdersForDisplay(orders) {
-    if (state.filter === 'done') return orders;
-    const saved = getSavedPendingOrderIds();
-    if (!saved.length) return orders;
-    const rank = new Map(saved.map((id, index) => [id, index]));
+    const selectedArea = getSelectedDriverArea();
+    if (!selectedArea) return orders;
     return [...orders].sort((a, b) => {
-      const aPending = !isDelivered(a.delivery_status);
-      const bPending = !isDelivered(b.delivery_status);
-      if (aPending !== bPending) return aPending ? -1 : 1;
-      if (!aPending) return 0;
-      const ar = rank.has(driverOrderKey(a)) ? rank.get(driverOrderKey(a)) : Number.MAX_SAFE_INTEGER;
-      const br = rank.has(driverOrderKey(b)) ? rank.get(driverOrderKey(b)) : Number.MAX_SAFE_INTEGER;
-      return ar - br;
+      const aMatch = driverAreaKey(a) === selectedArea;
+      const bMatch = driverAreaKey(b) === selectedArea;
+      if (aMatch !== bMatch) return aMatch ? -1 : 1;
+      return 0;
     });
   }
 
@@ -1272,40 +1247,34 @@
       });
       node.appendChild(expandButton);
 
-      // إدخال رقم ترتيب الفاتورة يدويًا، مع حفظ الترتيب على جهاز المندوب.
-      if (!isDelivered(order.delivery_status) && state.filter !== 'done') {
-        const pendingShown = shown.filter(item => !isDelivered(item.delivery_status));
-        const currentPosition = pendingShown.findIndex(item => driverOrderKey(item) === driverOrderKey(order)) + 1;
-        const reorderBox = document.createElement('div');
-        reorderBox.className = 'order-reorder-controls';
-        reorderBox.style.cssText = 'display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;box-sizing:border-box;margin:0 0 8px;padding:0;';
-        const reorderLabel = document.createElement('label');
-        reorderLabel.textContent = 'ترتيب خط السير';
-        reorderLabel.style.cssText = 'font-family:inherit;font-size:12px;font-weight:800;color:#166534;';
-        const reorderInput = document.createElement('input');
-        reorderInput.type = 'number';
-        reorderInput.min = '1';
-        reorderInput.max = String(Math.max(1, pendingShown.length));
-        reorderInput.step = '1';
-        reorderInput.inputMode = 'numeric';
-        reorderInput.value = String(currentPosition || 1);
-        reorderInput.setAttribute('aria-label', 'رقم ترتيب الفاتورة في خط السير');
-        reorderInput.style.cssText = 'width:66px;min-height:36px;box-sizing:border-box;padding:5px 8px;border:1px solid #86efac;border-radius:9px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:15px;font-weight:900;text-align:center;';
-        reorderInput.addEventListener('click', event => event.stopPropagation());
-        reorderInput.addEventListener('change', event => {
+      // الضغط على اسم المنطقة يجمع فواتير المنطقة نفسها في أعلى القائمة.
+      const areaElement = node.querySelector('[data-f="area"]');
+      if (areaElement) {
+        const areaKey = driverAreaKey(order);
+        const selectedArea = getSelectedDriverArea();
+        areaElement.classList.add('driver-area-sort-trigger');
+        areaElement.setAttribute('role', 'button');
+        areaElement.setAttribute('tabindex', '0');
+        areaElement.setAttribute('title', 'اضغط لعرض كل فواتير هذه المنطقة أولاً');
+        areaElement.setAttribute('aria-pressed', String(Boolean(areaKey && selectedArea === areaKey)));
+        areaElement.style.cssText += ';cursor:pointer;display:inline-block;border-radius:6px;padding:2px 5px;touch-action:manipulation;';
+        if (areaKey && selectedArea === areaKey) {
+          areaElement.style.cssText += ';background:#dcfce7;color:#166534;font-weight:900;outline:1px solid #86efac;';
+        }
+        const chooseArea = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          const value = Number(reorderInput.value);
-          if (!Number.isInteger(value) || value < 1 || value > pendingShown.length) {
-            toast(`اكتب رقمًا من 1 إلى ${pendingShown.length}`, true);
-            reorderInput.value = String(currentPosition || 1);
+          if (!areaKey) {
+            toast('لا توجد منطقة مسجلة لهذه الفاتورة', true);
             return;
           }
-          movePendingOrderToPosition(order, value);
-          toast('تم حفظ ترتيب خط السير');
+          setSelectedDriverArea(selectedArea === areaKey ? '' : areaKey);
+          toast(selectedArea === areaKey ? 'تم إلغاء ترتيب المنطقة' : 'تم تجميع فواتير المنطقة في الأعلى');
+        };
+        areaElement.addEventListener('click', chooseArea);
+        areaElement.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') chooseArea(event);
         });
-        reorderBox.append(reorderLabel, reorderInput);
-        node.insertBefore(reorderBox, node.firstChild);
       }
 
       const departureBox = document.createElement('div');
@@ -1983,7 +1952,7 @@
       // البطاقة الخارجية كلها تفتح الفاتورة فقط؛ لا تعمل أي عناصر بداخلها قبل الفتح.
       // عند فتح الفاتورة بالكامل، تبقى كل الأزرار الداخلية بوظائفها الأصلية.
       node.addEventListener('click', (event) => {
-        if (event.target.closest('.order-reorder-controls')) return;
+        if (event.target.closest('.driver-area-sort-trigger')) return;
         if (node.classList.contains('is-fullscreen-invoice')) return;
         event.preventDefault();
         event.stopPropagation();
