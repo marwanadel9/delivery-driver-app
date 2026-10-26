@@ -1036,8 +1036,10 @@
       .order-card.is-compact select,
       .order-card.is-compact textarea,
       .order-card.is-compact label,
-      .order-card.is-compact [role="button"],
+      .order-card.is-compact [role="button"]:not(.driver-route-order-badge),
       .order-card.is-compact [onclick] { display:none!important; pointer-events:none!important; }
+      /* رقم خط السير يجب أن يظل ظاهرًا وقابلًا للضغط على كارت الفاتورة الخارجي. */
+      .order-card.is-compact .driver-route-order-badge { display:inline-flex!important; pointer-events:auto!important; position:relative!important; z-index:2!important; }
       .order-card.is-compact { padding:9px!important; gap:5px!important; cursor:pointer!important; }
       .order-card.is-compact .order-card-head { margin:0!important; gap:4px!important; }
       .order-card.is-compact .customer-row { margin:0!important; padding:2px 0!important; gap:6px!important; }
