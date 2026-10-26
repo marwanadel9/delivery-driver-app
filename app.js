@@ -115,10 +115,28 @@
   };
 
   const safeUrl = (value) => {
-    const url = String(value ?? '').trim();
+    let url = String(value ?? '').trim();
 
     if (!url) {
       return '';
+    }
+
+    // تحويل روابط Google Maps من نوع intent:// إلى رابط HTTPS عادي
+    // حتى تعمل داخل متصفح الهاتف وAndroid WebView.
+    if (url.toLowerCase().startsWith('intent://')) {
+      const intentMarker = url.indexOf('#Intent;');
+      const intentAddress = intentMarker >= 0
+        ? url.slice('intent://'.length, intentMarker)
+        : url.slice('intent://'.length);
+
+      const schemeMatch = url.match(/[;#]scheme=([a-z][a-z0-9+.-]*);/i);
+      const scheme = schemeMatch ? schemeMatch[1].toLowerCase() : 'https';
+
+      if (scheme !== 'https' && scheme !== 'http') {
+        return '';
+      }
+
+      url = `${scheme}://${intentAddress}`;
     }
 
     try {
