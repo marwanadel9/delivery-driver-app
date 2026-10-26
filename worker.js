@@ -2024,14 +2024,5 @@ export default {
         }
       );
 
-    } catch (error) {
-      return json(
-        {
-          error:
-            "حدث خطأ غير متوقع"
-        },
-        500
-      );
-    }
-  }
+    } catch (error)   }
 };
