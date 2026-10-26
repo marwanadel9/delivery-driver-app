@@ -684,36 +684,40 @@
     );
   }
 
-  // عند الضغط على اسم المنطقة، نعرض كل فواتير هذه المنطقة أولاً.
-  function driverAreaKey(order) {
-    const emirate = String(firstValue(order, ['emirate', 'emirate_name', 'emirateName']) || '').trim().toLowerCase();
-    const area = String(firstValue(order, ['area', 'area_name', 'areaName']) || '').trim().toLowerCase();
-    return area ? `${emirate}::${area}` : '';
+  // ترتيب خط السير يدويًا من بطاقة الفاتورة الخارجية.
+  function driverRouteOrderKey(order) {
+    const id = firstValue(order, ['order_number', 'orderNumber', 'invoice_no', 'invoice_number', 'id']);
+    return String(state.sheet || state.session?.sheet_name || state.session?.username || 'default')
+      .replace(/[^a-zA-Z0-9_-]/g, '_') + '::' + String(id || '');
   }
 
-  function driverAreaSortStorageKey() {
-    return `driver_selected_area_${String(state.sheet || state.session?.sheet_name || state.session?.username || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-  }
-
-  function getSelectedDriverArea() {
-    try { return localStorage.getItem(driverAreaSortStorageKey()) || ''; } catch { return ''; }
-  }
-
-  function setSelectedDriverArea(areaKey) {
+  function getDriverRouteOrders() {
     try {
-      if (areaKey) localStorage.setItem(driverAreaSortStorageKey(), areaKey);
-      else localStorage.removeItem(driverAreaSortStorageKey());
-    } catch {}
+      const value = localStorage.getItem('driver_route_orders');
+      return value ? JSON.parse(value) : {};
+    } catch { return {}; }
+  }
+
+  function setDriverRouteOrder(order, value) {
+    const key = driverRouteOrderKey(order);
+    if (!key.endsWith('::')) {
+      const orders = getDriverRouteOrders();
+      if (value === null) delete orders[key];
+      else orders[key] = value;
+      try { localStorage.setItem('driver_route_orders', JSON.stringify(orders)); } catch {}
+    }
     render();
   }
 
-  function sortPendingOrdersForDisplay(orders) {
-    const selectedArea = getSelectedDriverArea();
-    if (!selectedArea) return orders;
+  function sortOrdersByDriverRoute(orders) {
+    const routeOrders = getDriverRouteOrders();
     return [...orders].sort((a, b) => {
-      const aMatch = driverAreaKey(a) === selectedArea;
-      const bMatch = driverAreaKey(b) === selectedArea;
-      if (aMatch !== bMatch) return aMatch ? -1 : 1;
+      const aValue = Number(routeOrders[driverRouteOrderKey(a)]);
+      const bValue = Number(routeOrders[driverRouteOrderKey(b)]);
+      const aSet = Number.isFinite(aValue) && aValue > 0;
+      const bSet = Number.isFinite(bValue) && bValue > 0;
+      if (aSet && bSet && aValue !== bValue) return aValue - bValue;
+      if (aSet !== bSet) return aSet ? -1 : 1;
       return 0;
     });
   }
@@ -1127,7 +1131,7 @@
     updateStats();
 
     const shown =
-      sortPendingOrdersForDisplay(getFilteredOrders());
+      sortOrdersByDriverRoute(getFilteredOrders());
 
     // الاحتفاظ بمكان القائمة الحالي عند إعادة رسم الفواتير حتى لا يعود المستخدم لأول القائمة.
     const preservedScrollY = window.scrollY || window.pageYOffset || 0;
@@ -1247,35 +1251,41 @@
       });
       node.appendChild(expandButton);
 
-      // الضغط على اسم المنطقة يجمع فواتير المنطقة نفسها في أعلى القائمة.
-      const areaElement = node.querySelector('[data-f="area"]');
-      if (areaElement) {
-        const areaKey = driverAreaKey(order);
-        const selectedArea = getSelectedDriverArea();
-        areaElement.classList.add('driver-area-sort-trigger');
-        areaElement.setAttribute('role', 'button');
-        areaElement.setAttribute('tabindex', '0');
-        areaElement.setAttribute('title', 'اضغط لعرض كل فواتير هذه المنطقة أولاً');
-        areaElement.setAttribute('aria-pressed', String(Boolean(areaKey && selectedArea === areaKey)));
-        areaElement.style.cssText += ';cursor:pointer;display:inline-block;border-radius:6px;padding:2px 5px;touch-action:manipulation;';
-        if (areaKey && selectedArea === areaKey) {
-          areaElement.style.cssText += ';background:#dcfce7;color:#166534;font-weight:900;outline:1px solid #86efac;';
+      // رقم خط السير ظاهر على بطاقة الفاتورة من الخارج، ويمكن تغييره بالضغط عليه.
+      const routeBadge = document.createElement('span');
+      routeBadge.className = 'driver-route-order-badge';
+      const routeOrders = getDriverRouteOrders();
+      const routeKey = driverRouteOrderKey(order);
+      const currentRouteOrder = routeOrders[routeKey];
+      routeBadge.textContent = currentRouteOrder ? `خط السير ${currentRouteOrder} ✎` : '＋ رقم خط السير';
+      routeBadge.title = 'اضغط لتحديد رقم ترتيب هذه الفاتورة في خط السير';
+      routeBadge.setAttribute('role', 'button');
+      routeBadge.setAttribute('tabindex', '0');
+      routeBadge.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;align-self:flex-start;margin:0 0 7px auto;padding:7px 11px;border:1px solid #93c5fd;border-radius:10px;background:#eff6ff;color:#1d4ed8;font-size:13px;font-weight:900;cursor:pointer;touch-action:manipulation;';
+      const editRouteOrder = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const answer = window.prompt('اكتب رقم ترتيب الفاتورة في خط السير (مثلاً 1 أو 2 أو 3). اتركه فارغًا لإلغاء الترتيب:', currentRouteOrder || '');
+        if (answer === null) return;
+        const clean = answer.trim();
+        if (!clean) {
+          setDriverRouteOrder(order, null);
+          toast('تم إلغاء رقم خط السير');
+          return;
         }
-        const chooseArea = (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (!areaKey) {
-            toast('لا توجد منطقة مسجلة لهذه الفاتورة', true);
-            return;
-          }
-          setSelectedDriverArea(selectedArea === areaKey ? '' : areaKey);
-          toast(selectedArea === areaKey ? 'تم إلغاء ترتيب المنطقة' : 'تم تجميع فواتير المنطقة في الأعلى');
-        };
-        areaElement.addEventListener('click', chooseArea);
-        areaElement.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' || event.key === ' ') chooseArea(event);
-        });
-      }
+        const number = Number(toEnglishDigits(clean));
+        if (!Number.isInteger(number) || number < 1) {
+          toast('اكتب رقمًا صحيحًا يبدأ من 1', true);
+          return;
+        }
+        setDriverRouteOrder(order, number);
+        toast(`تم تحديد خط السير رقم ${number}`);
+      };
+      routeBadge.addEventListener('click', editRouteOrder);
+      routeBadge.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') editRouteOrder(event);
+      });
+      node.insertBefore(routeBadge, node.firstChild);
 
       const departureBox = document.createElement('div');
       departureBox.className = 'driver-departure-box';
