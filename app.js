@@ -10,16 +10,6 @@
     sheet: ''
   };
 
-  // التحكم في الرجوع من الفاتورة المفتوحة على الهاتف دون مغادرة التطبيق.
-  let activeDriverInvoiceClose = null;
-  let driverInvoiceHistoryEntryActive = false;
-
-  window.addEventListener('popstate', () => {
-    if (typeof activeDriverInvoiceClose === 'function') {
-      activeDriverInvoiceClose(true);
-    }
-  });
-
   const $ = (id) => document.getElementById(id);
 
   const toEnglishDigits = (value) => String(value ?? '').replace(/[\u0660-\u0669\u06F0-\u06F9]/g, (digit) => {
@@ -115,47 +105,25 @@
   };
 
   const safeUrl = (value) => {
-    let url = String(value ?? '').trim();
-    if (!url) return '';
+    const url = String(value ?? '').trim();
 
-    // Convert Android Google Maps intent links into ordinary HTTPS links.
-    // Android WebView cannot navigate directly to intent:// and shows ERR_UNKNOWN_URL_SCHEME.
-    url = url.replace(/&amp;/gi, '&').trim();
-    if (/^intent:\/\//i.test(url)) {
-      const marker = url.indexOf('#Intent;');
-      const intentParts = marker >= 0 ? url.slice(marker + 8) : '';
-      const fallbackMatch = intentParts.match(/(?:^|;)S\.browser_fallback_url=([^;]+)/i);
-
-      if (fallbackMatch && fallbackMatch[1]) {
-        let fallback = fallbackMatch[1];
-        // Decode repeatedly because some links arrive double-encoded.
-        for (let i = 0; i < 3; i += 1) {
-          try {
-            const decoded = decodeURIComponent(fallback);
-            if (decoded === fallback) break;
-            fallback = decoded;
-          } catch {
-            break;
-          }
-        }
-        url = fallback.replace(/&amp;/gi, '&').trim();
-      } else {
-        // Keep only the URL before Android's #Intent metadata.
-        const address = marker >= 0 ? url.slice('intent://'.length, marker) : url.slice('intent://'.length);
-        url = `https://${address}`;
-      }
+    if (!url) {
+      return '';
     }
 
-    // A second pass handles fallback URLs that were HTML-escaped in the database.
-    url = url.replace(/&amp;/gi, '&').trim();
     try {
       const parsed = new URL(url);
-      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+
+      if (
+        parsed.protocol === 'https:' ||
+        parsed.protocol === 'http:'
+      ) {
         return parsed.href;
       }
     } catch {
       return '';
     }
+
     return '';
   };
 
@@ -1041,13 +1009,8 @@
   }
 
   function render() {
-    // إغلاق الفاتورة المفتوحة بأمان قبل إعادة بناء القائمة، مع تنظيف سجل الرجوع.
-    if (
-      typeof activeDriverInvoiceClose === 'function' &&
-      document.body.classList.contains('driver-invoice-open')
-    ) {
-      activeDriverInvoiceClose(false);
-    } else if (document.body.classList.contains('driver-invoice-open')) {
+    // تحرير قفل الشاشة إذا أعاد زر التسليم بناء قائمة الفواتير.
+    if (document.body.classList.contains('driver-invoice-open')) {
       document.body.classList.remove('driver-invoice-open');
       document.documentElement.classList.remove('driver-invoice-open');
       document.body.style.overflow = '';
@@ -1072,8 +1035,6 @@
     const shown =
       getFilteredOrders();
 
-    // الاحتفاظ بمكان القائمة الحالي عند إعادة رسم الفواتير حتى لا يعود المستخدم لأول القائمة.
-    const preservedScrollY = window.scrollY || window.pageYOffset || 0;
     list.replaceChildren();
 
     if (!shown.length) {
@@ -1091,7 +1052,6 @@
         </p>`;
 
       updateStats();
-      window.scrollTo({ top: preservedScrollY, behavior: 'auto' });
 
       return;
     }
@@ -1115,12 +1075,7 @@
       let previousBodyOverflow = '';
       let previousHtmlOverflow = '';
       let fullscreenHead = null;
-      const closeInvoiceFullscreen = (fromPopState = false) => {
-        const shouldReturnHistory = driverInvoiceHistoryEntryActive;
-        driverInvoiceHistoryEntryActive = false;
-        if (activeDriverInvoiceClose === closeInvoiceFullscreen) {
-          activeDriverInvoiceClose = null;
-        }
+      const closeInvoiceFullscreen = () => {
         node.classList.remove('is-fullscreen-invoice');
         node.classList.add('is-compact');
         document.body.classList.remove('driver-invoice-open');
@@ -1131,11 +1086,7 @@
         fullscreenHead = null;
         expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
         expandButton.setAttribute('aria-expanded', 'false');
-        window.scrollTo({ top: savedScrollY, behavior: 'auto' });
-        // عند الرجوع بزر الهاتف نغلق الفاتورة فقط؛ لا نطلب رجوعًا ثانيًا للخلف.
-        if (shouldReturnHistory && !fromPopState) {
-          window.history.back();
-        }
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' });
       };
       const toggleInvoiceDetails = () => {
         if (node.classList.contains('is-fullscreen-invoice')) {
@@ -1145,21 +1096,6 @@
         savedScrollY = window.scrollY || window.pageYOffset || 0;
         previousBodyOverflow = document.body.style.overflow || '';
         previousHtmlOverflow = document.documentElement.style.overflow || '';
-        // إضافة خطوة مؤقتة إلى سجل المتصفح لكي يغلق زر الرجوع الفاتورة بدل إغلاق التطبيق.
-        try {
-          const currentHistoryState = window.history.state && typeof window.history.state === 'object'
-            ? window.history.state
-            : {};
-          window.history.pushState(
-            { ...currentHistoryState, driverInvoiceFullscreen: true },
-            '',
-            window.location.href
-          );
-          driverInvoiceHistoryEntryActive = true;
-        } catch {
-          driverInvoiceHistoryEntryActive = false;
-        }
-        activeDriverInvoiceClose = closeInvoiceFullscreen;
         document.body.classList.add('driver-invoice-open');
         document.documentElement.classList.add('driver-invoice-open');
         document.body.style.overflow = 'hidden';
@@ -1696,12 +1632,11 @@
           locationButton.href =
             locationUrl;
 
-          // Open the map in the current page for Android WebView compatibility.
-          // target=_blank can produce a blank page when the app does not handle new windows.
           locationButton.target =
-            '_self';
+            '_blank';
 
-          locationButton.removeAttribute('rel');
+          locationButton.rel =
+            'noopener noreferrer';
 
           locationButton.hidden =
             false;
@@ -1863,7 +1798,6 @@
     }
 
     updateStats();
-    window.scrollTo({ top: preservedScrollY, behavior: 'auto' });
   }
 
   async function markHeadingToCustomer(order, button) {
@@ -4051,7 +3985,7 @@
       ${safeUrl(order.location_url) ? `
       <div class="master-section">
         <div class="master-section-title">📍 الموقع</div>
-        <div class="master-section-content"><a href="${masterEscape(safeUrl(order.location_url))}" target="_self">فتح موقع العميل</a></div>
+        <div class="master-section-content"><a href="${masterEscape(safeUrl(order.location_url))}" target="_blank" rel="noopener noreferrer">فتح موقع العميل</a></div>
       </div>` : ''}
 
       <div class="master-actions-row">
