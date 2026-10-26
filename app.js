@@ -121,23 +121,29 @@
       return '';
     }
 
-    // تحويل روابط Google Maps من نوع intent:// إلى رابط HTTPS عادي
-    // حتى تعمل داخل متصفح الهاتف وAndroid WebView.
-    if (url.toLowerCase().startsWith('intent://')) {
-      const intentMarker = url.indexOf('#Intent;');
-      const intentAddress = intentMarker >= 0
-        ? url.slice('intent://'.length, intentMarker)
-        : url.slice('intent://'.length);
+    // بعض روابط خرائط Google تأتي بصيغة Android intent://.
+    // نفضّل رابط المتصفح الموجود في browser_fallback_url إن وُجد.
+    if (/^intent:\/\//i.test(url)) {
+      const fallbackMatch = url.match(/S\.browser_fallback_url=([^;]+)(?:;end|;|$)/i);
 
-      const schemeMatch = url.match(/[;#]scheme=([a-z][a-z0-9+.-]*);/i);
-      const scheme = schemeMatch ? schemeMatch[1].toLowerCase() : 'https';
-
-      if (scheme !== 'https' && scheme !== 'http') {
-        return '';
+      if (fallbackMatch && fallbackMatch[1]) {
+        try {
+          url = decodeURIComponent(fallbackMatch[1]);
+        } catch {
+          url = fallbackMatch[1];
+        }
+      } else {
+        // إذا لم يوجد رابط بديل، نحول عنوان intent نفسه إلى HTTPS.
+        const intentMarker = url.indexOf('#Intent;');
+        const address = intentMarker >= 0
+          ? url.slice('intent://'.length, intentMarker)
+          : url.slice('intent://'.length);
+        url = `https://${address}`;
       }
-
-      url = `${scheme}://${intentAddress}`;
     }
+
+    // إزالة علامات HTML التي قد تصل عند تخزين الرابط كنص.
+    url = url.replace(/&amp;/gi, '&').trim();
 
     try {
       const parsed = new URL(url);
