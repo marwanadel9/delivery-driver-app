@@ -1674,11 +1674,12 @@
           locationButton.href =
             locationUrl;
 
+          // Open the map in the current page for Android WebView compatibility.
+          // target=_blank can produce a blank page when the app does not handle new windows.
           locationButton.target =
-            '_blank';
+            '_self';
 
-          locationButton.rel =
-            'noopener noreferrer';
+          locationButton.removeAttribute('rel');
 
           locationButton.hidden =
             false;
@@ -4028,7 +4029,7 @@
       ${safeUrl(order.location_url) ? `
       <div class="master-section">
         <div class="master-section-title">📍 الموقع</div>
-        <div class="master-section-content"><a href="${masterEscape(safeUrl(order.location_url))}" target="_blank" rel="noopener noreferrer">فتح موقع العميل</a></div>
+        <div class="master-section-content"><a href="${masterEscape(safeUrl(order.location_url))}" target="_self">فتح موقع العميل</a></div>
       </div>` : ''}
 
       <div class="master-actions-row">
