@@ -709,22 +709,24 @@
     } catch {}
   }
 
-  function movePendingOrder(order, direction) {
+  function movePendingOrderToPosition(order, requestedPosition) {
     if (!order || isDelivered(order.delivery_status)) return;
-    const pending = state.orders.filter(item => !isDelivered(item.delivery_status));
+    const pending = sortPendingOrdersForDisplay(
+      state.orders.filter(item => !isDelivered(item.delivery_status))
+    );
     const currentIndex = pending.findIndex(item => driverOrderKey(item) === driverOrderKey(order));
-    const targetIndex = currentIndex + direction;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= pending.length) return;
+    if (currentIndex < 0) return;
+    const position = Number(requestedPosition);
+    if (!Number.isFinite(position)) return;
+    const targetIndex = Math.max(0, Math.min(pending.length - 1, Math.trunc(position) - 1));
     const [moved] = pending.splice(currentIndex, 1);
     pending.splice(targetIndex, 0, moved);
     const pendingIds = pending.map(driverOrderKey);
-    const idSet = new Set(pendingIds);
-    const savedIds = getSavedPendingOrderIds().filter(id => idSet.has(id));
-    // استخدم الترتيب الظاهر الحالي ثم احفظه، دون تغيير حالة التسليم أو بيانات الفاتورة.
-    try { localStorage.setItem(driverOrderSortStorageKey(), JSON.stringify(pendingIds)); } catch {}
+    try {
+      localStorage.setItem(driverOrderSortStorageKey(), JSON.stringify(pendingIds));
+    } catch {}
     render();
   }
-
   function sortPendingOrdersForDisplay(orders) {
     if (state.filter === 'done') return orders;
     const saved = getSavedPendingOrderIds();
@@ -1270,26 +1272,39 @@
       });
       node.appendChild(expandButton);
 
-      // Button is injected into the existing card, so no HTML template change is required.
+      // إدخال رقم ترتيب الفاتورة يدويًا، مع حفظ الترتيب على جهاز المندوب.
       if (!isDelivered(order.delivery_status) && state.filter !== 'done') {
+        const pendingShown = shown.filter(item => !isDelivered(item.delivery_status));
+        const currentPosition = pendingShown.findIndex(item => driverOrderKey(item) === driverOrderKey(order)) + 1;
         const reorderBox = document.createElement('div');
         reorderBox.className = 'order-reorder-controls';
-        reorderBox.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;margin:0 0 8px;padding:0;';
-        const upButton = document.createElement('button');
-        upButton.type = 'button';
-        upButton.className = 'order-reorder-up';
-        upButton.textContent = '⬆️ رفع الفاتورة';
-        upButton.title = 'نقل الفاتورة للأعلى';
-        upButton.style.cssText = 'flex:1;min-height:36px;padding:7px 9px;border:1px solid #bfdbfe;border-radius:10px;background:#eff6ff;color:#1d4ed8;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;';
-        const downButton = document.createElement('button');
-        downButton.type = 'button';
-        downButton.className = 'order-reorder-down';
-        downButton.textContent = '⬇️ تنزيل الفاتورة';
-        downButton.title = 'نقل الفاتورة للأسفل';
-        downButton.style.cssText = 'flex:1;min-height:36px;padding:7px 9px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;';
-        upButton.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); movePendingOrder(order, -1); });
-        downButton.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); movePendingOrder(order, 1); });
-        reorderBox.append(upButton, downButton);
+        reorderBox.style.cssText = 'display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;box-sizing:border-box;margin:0 0 8px;padding:0;';
+        const reorderLabel = document.createElement('label');
+        reorderLabel.textContent = 'ترتيب خط السير';
+        reorderLabel.style.cssText = 'font-family:inherit;font-size:12px;font-weight:800;color:#166534;';
+        const reorderInput = document.createElement('input');
+        reorderInput.type = 'number';
+        reorderInput.min = '1';
+        reorderInput.max = String(Math.max(1, pendingShown.length));
+        reorderInput.step = '1';
+        reorderInput.inputMode = 'numeric';
+        reorderInput.value = String(currentPosition || 1);
+        reorderInput.setAttribute('aria-label', 'رقم ترتيب الفاتورة في خط السير');
+        reorderInput.style.cssText = 'width:66px;min-height:36px;box-sizing:border-box;padding:5px 8px;border:1px solid #86efac;border-radius:9px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:15px;font-weight:900;text-align:center;';
+        reorderInput.addEventListener('click', event => event.stopPropagation());
+        reorderInput.addEventListener('change', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          const value = Number(reorderInput.value);
+          if (!Number.isInteger(value) || value < 1 || value > pendingShown.length) {
+            toast(`اكتب رقمًا من 1 إلى ${pendingShown.length}`, true);
+            reorderInput.value = String(currentPosition || 1);
+            return;
+          }
+          movePendingOrderToPosition(order, value);
+          toast('تم حفظ ترتيب خط السير');
+        });
+        reorderBox.append(reorderLabel, reorderInput);
         node.insertBefore(reorderBox, node.firstChild);
       }
 
