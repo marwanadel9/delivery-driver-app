@@ -1267,11 +1267,72 @@ export default {
           );
         }
 
+        // حدّث نسخة أرشيف الماستر أيضًا؛ واجهة MASTER تقرأ الفواتير من هذا الأرشيف.
+        // بدون هذه الخطوة قد تظهر القيم القديمة مرة أخرى بعد إعادة فتح الفاتورة.
+        const invoiceNumber = String(
+          (rpcData && (rpcData.order_number || rpcData.invoice_number)) ||
+          order.order_number ||
+          order.invoice_number ||
+          ""
+        ).trim();
+
+        if (invoiceNumber) {
+          const archivePatchBody = {};
+          const archiveFields = [
+            "customer_name",
+            "phone",
+            "emirate",
+            "area",
+            "chicken_weights",
+            "chicken_qtys",
+            "plate_names",
+            "plate_qtys",
+            "total",
+            "location_url",
+            "note",
+            "appointment_coordinator",
+            "payment_method",
+            "delivery_status",
+            "gate_photo_url",
+            "gate_photo_urls",
+            "driver_notes",
+            "delivery_fee",
+            "paid_in_advance",
+            "bank_transfer_received"
+          ];
+
+          for (const field of archiveFields) {
+            if (rpcData && Object.prototype.hasOwnProperty.call(rpcData, field)) {
+              archivePatchBody[field] = rpcData[field];
+            }
+          }
+
+          const archivePatchResponse = await supabaseRequest(
+            "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(invoiceNumber),
+            {
+              method: "PATCH",
+              headers: {
+                apikey: env.SUPABASE_ANON_KEY,
+                Authorization: "Bearer " + auth.token,
+                "Content-Type": "application/json",
+                Prefer: "return=minimal"
+              },
+              body: JSON.stringify(archivePatchBody)
+            }
+          );
+
+          if (!archivePatchResponse.ok) {
+            const archiveError = await archivePatchResponse.json().catch(function () { return null; });
+            return json({
+              error: (archiveError && (archiveError.message || archiveError.hint || archiveError.error)) ||
+                "تم تعديل الطلب، لكن تعذر تحديث نسخة أرشيف الماستر"
+            }, 502);
+          }
+        }
+
         return json({
-          success:
-            true,
-          order:
-            rpcData
+          success: true,
+          order: rpcData
         });
       }
 
@@ -1617,7 +1678,7 @@ export default {
               "Content-Type": "application/json",
               Prefer: "return=minimal"
             }),
-            body: JSON.stringify({ gate_photo_url: null })
+            body: JSON.stringify({ gate_photo_url: null, gate_photo_urls: [] })
           }
         );
         if (!archiveResponse.ok && archiveResponse.status !== 404) {
