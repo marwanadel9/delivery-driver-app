@@ -1716,25 +1716,17 @@
           safeUrl(locationValue);
 
         if (locationUrl) {
-          const userAgent = navigator.userAgent || '';
-          const isAndroid = /Android/i.test(userAgent);
+          // Keep the location link as a normal HTTPS URL on every device.
+          // Android MainActivity already detects Google Maps HTTPS links and opens them
+          // externally, avoiding malformed intent:// URLs and preserving the invoice WebView.
+          locationButton.href = locationUrl;
 
+          const isAndroid = /Android/i.test(navigator.userAgent || '');
           if (isAndroid) {
-            // Existing Android MainActivity handles intent:// URLs and launches Maps
-            // externally, leaving this invoice page loaded underneath.
-            try {
-              const parsedMapUrl = new URL(locationUrl);
-              const mapHostPath = `${parsedMapUrl.host}${parsedMapUrl.pathname}${parsedMapUrl.search}${parsedMapUrl.hash}`;
-              locationButton.href =
-                `intent://${mapHostPath}#Intent;scheme=https;package=com.google.android.apps.maps;S.browser_fallback_url=${encodeURIComponent(locationUrl)};end`;
-            } catch {
-              locationButton.href = locationUrl;
-            }
             locationButton.target = '_self';
             locationButton.removeAttribute('rel');
           } else {
             // On desktop, open Maps in a separate tab so the invoice page is never replaced.
-            locationButton.href = locationUrl;
             locationButton.target = '_blank';
             locationButton.rel = 'noopener noreferrer';
           }
