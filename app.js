@@ -684,6 +684,63 @@
     );
   }
 
+  // ترتيب فواتير قيد التوصيل محفوظ على هاتف المندوب نفسه.
+  function driverOrderKey(order) {
+    return String(firstValue(order, ['id', 'order_number', 'orderNumber', 'invoice_no', 'invoice_number']) || '');
+  }
+
+  function driverOrderSortStorageKey() {
+    return `driver_pending_order_sort_${String(state.sheet || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  }
+
+  function getSavedPendingOrderIds() {
+    try {
+      const value = JSON.parse(localStorage.getItem(driverOrderSortStorageKey()) || '[]');
+      return Array.isArray(value) ? value.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function savePendingOrderIds() {
+    try {
+      const ids = state.orders.filter(order => !isDelivered(order.delivery_status)).map(driverOrderKey);
+      localStorage.setItem(driverOrderSortStorageKey(), JSON.stringify(ids));
+    } catch {}
+  }
+
+  function movePendingOrder(order, direction) {
+    if (!order || isDelivered(order.delivery_status)) return;
+    const pending = state.orders.filter(item => !isDelivered(item.delivery_status));
+    const currentIndex = pending.findIndex(item => driverOrderKey(item) === driverOrderKey(order));
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= pending.length) return;
+    const [moved] = pending.splice(currentIndex, 1);
+    pending.splice(targetIndex, 0, moved);
+    const pendingIds = pending.map(driverOrderKey);
+    const idSet = new Set(pendingIds);
+    const savedIds = getSavedPendingOrderIds().filter(id => idSet.has(id));
+    // استخدم الترتيب الظاهر الحالي ثم احفظه، دون تغيير حالة التسليم أو بيانات الفاتورة.
+    try { localStorage.setItem(driverOrderSortStorageKey(), JSON.stringify(pendingIds)); } catch {}
+    render();
+  }
+
+  function sortPendingOrdersForDisplay(orders) {
+    if (state.filter === 'done') return orders;
+    const saved = getSavedPendingOrderIds();
+    if (!saved.length) return orders;
+    const rank = new Map(saved.map((id, index) => [id, index]));
+    return [...orders].sort((a, b) => {
+      const aPending = !isDelivered(a.delivery_status);
+      const bPending = !isDelivered(b.delivery_status);
+      if (aPending !== bPending) return aPending ? -1 : 1;
+      if (!aPending) return 0;
+      const ar = rank.has(driverOrderKey(a)) ? rank.get(driverOrderKey(a)) : Number.MAX_SAFE_INTEGER;
+      const br = rank.has(driverOrderKey(b)) ? rank.get(driverOrderKey(b)) : Number.MAX_SAFE_INTEGER;
+      return ar - br;
+    });
+  }
+
   function setText(
     node,
     field,
@@ -1093,7 +1150,7 @@
     updateStats();
 
     const shown =
-      getFilteredOrders();
+      sortPendingOrdersForDisplay(getFilteredOrders());
 
     // الاحتفاظ بمكان القائمة الحالي عند إعادة رسم الفواتير حتى لا يعود المستخدم لأول القائمة.
     const preservedScrollY = window.scrollY || window.pageYOffset || 0;
@@ -1214,6 +1271,28 @@
       node.appendChild(expandButton);
 
       // Button is injected into the existing card, so no HTML template change is required.
+      if (!isDelivered(order.delivery_status) && state.filter !== 'done') {
+        const reorderBox = document.createElement('div');
+        reorderBox.className = 'order-reorder-controls';
+        reorderBox.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;margin:0 0 8px;padding:0;';
+        const upButton = document.createElement('button');
+        upButton.type = 'button';
+        upButton.className = 'order-reorder-up';
+        upButton.textContent = '⬆️ رفع الفاتورة';
+        upButton.title = 'نقل الفاتورة للأعلى';
+        upButton.style.cssText = 'flex:1;min-height:36px;padding:7px 9px;border:1px solid #bfdbfe;border-radius:10px;background:#eff6ff;color:#1d4ed8;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;';
+        const downButton = document.createElement('button');
+        downButton.type = 'button';
+        downButton.className = 'order-reorder-down';
+        downButton.textContent = '⬇️ تنزيل الفاتورة';
+        downButton.title = 'نقل الفاتورة للأسفل';
+        downButton.style.cssText = 'flex:1;min-height:36px;padding:7px 9px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;';
+        upButton.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); movePendingOrder(order, -1); });
+        downButton.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); movePendingOrder(order, 1); });
+        reorderBox.append(upButton, downButton);
+        node.insertBefore(reorderBox, node.firstChild);
+      }
+
       const departureBox = document.createElement('div');
       departureBox.className = 'driver-departure-box';
       departureBox.style.cssText = 'display:flex;width:100%;justify-content:flex-start;box-sizing:border-box;margin:0 0 8px;padding:0;';
@@ -1716,17 +1795,25 @@
           safeUrl(locationValue);
 
         if (locationUrl) {
-          // Keep the location link as a normal HTTPS URL on every device.
-          // Android MainActivity already detects Google Maps HTTPS links and opens them
-          // externally, avoiding malformed intent:// URLs and preserving the invoice WebView.
-          locationButton.href = locationUrl;
+          const userAgent = navigator.userAgent || '';
+          const isAndroid = /Android/i.test(userAgent);
 
-          const isAndroid = /Android/i.test(navigator.userAgent || '');
           if (isAndroid) {
+            // Existing Android MainActivity handles intent:// URLs and launches Maps
+            // externally, leaving this invoice page loaded underneath.
+            try {
+              const parsedMapUrl = new URL(locationUrl);
+              const mapHostPath = `${parsedMapUrl.host}${parsedMapUrl.pathname}${parsedMapUrl.search}${parsedMapUrl.hash}`;
+              locationButton.href =
+                `intent://${mapHostPath}#Intent;scheme=https;package=com.google.android.apps.maps;S.browser_fallback_url=${encodeURIComponent(locationUrl)};end`;
+            } catch {
+              locationButton.href = locationUrl;
+            }
             locationButton.target = '_self';
             locationButton.removeAttribute('rel');
           } else {
             // On desktop, open Maps in a separate tab so the invoice page is never replaced.
+            locationButton.href = locationUrl;
             locationButton.target = '_blank';
             locationButton.rel = 'noopener noreferrer';
           }
@@ -1881,6 +1968,7 @@
       // البطاقة الخارجية كلها تفتح الفاتورة فقط؛ لا تعمل أي عناصر بداخلها قبل الفتح.
       // عند فتح الفاتورة بالكامل، تبقى كل الأزرار الداخلية بوظائفها الأصلية.
       node.addEventListener('click', (event) => {
+        if (event.target.closest('.order-reorder-controls')) return;
         if (node.classList.contains('is-fullscreen-invoice')) return;
         event.preventDefault();
         event.stopPropagation();
