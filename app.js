@@ -10,6 +10,16 @@
     sheet: ''
   };
 
+  // التحكم في الرجوع من الفاتورة المفتوحة على الهاتف دون مغادرة التطبيق.
+  let activeDriverInvoiceClose = null;
+  let driverInvoiceHistoryEntryActive = false;
+
+  window.addEventListener('popstate', () => {
+    if (typeof activeDriverInvoiceClose === 'function') {
+      activeDriverInvoiceClose(true);
+    }
+  });
+
   const $ = (id) => document.getElementById(id);
 
   const toEnglishDigits = (value) => String(value ?? '').replace(/[\u0660-\u0669\u06F0-\u06F9]/g, (digit) => {
@@ -105,26 +115,64 @@
   };
 
   const safeUrl = (value) => {
-    const url = String(value ?? '').trim();
+    let url = String(value ?? '').trim();
+    if (!url) return '';
 
-    if (!url) {
-      return '';
+    url = url.replace(/&amp;/gi, '&').trim();
+
+    // Convert Google Maps Android intent links to a plain HTTPS Maps URL.
+    // Some Android WebViews reject intent:// links with ERR_UNKNOWN_URL_SCHEME.
+    if (/^intent:\/\//i.test(url)) {
+      const coordinateMatch =
+        url.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i) ||
+        url.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i);
+
+      if (coordinateMatch) {
+        const latitude = coordinateMatch[1];
+        const longitude = coordinateMatch[2];
+        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
+      }
+
+      // Otherwise extract and repeatedly decode the official browser fallback URL.
+      const marker = url.indexOf('#Intent;');
+      const intentParts = marker >= 0 ? url.slice(marker + 8) : '';
+      const fallbackMatch = intentParts.match(/(?:^|;)S\.browser_fallback_url=([^;]+)/i);
+      if (fallbackMatch && fallbackMatch[1]) {
+        let fallback = fallbackMatch[1];
+        for (let i = 0; i < 5; i += 1) {
+          try {
+            const decoded = decodeURIComponent(fallback);
+            if (decoded === fallback) break;
+            fallback = decoded;
+          } catch {
+            break;
+          }
+        }
+        url = fallback.replace(/&amp;/gi, '&').trim();
+      } else {
+        const address = marker >= 0 ? url.slice('intent://'.length, marker) : url.slice('intent://'.length);
+        url = `https://${address}`;
+      }
     }
 
+    // Some saved links are encoded or HTML-escaped more than once.
+    url = url.replace(/&amp;/gi, '&').trim();
     try {
-      const parsed = new URL(url);
-
-      if (
-        parsed.protocol === 'https:' ||
-        parsed.protocol === 'http:'
-      ) {
-        return parsed.href;
+      let parsed = new URL(url);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+      // If a normal Google Maps URL contains coordinates, use the stable Maps search endpoint.
+      if (/^(?:www\.)?google\.com$/i.test(parsed.hostname) && /\/maps\//i.test(parsed.pathname)) {
+        const coordinateMatch =
+          parsed.href.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i) ||
+          parsed.href.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i);
+        if (coordinateMatch) {
+          return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${coordinateMatch[1]},${coordinateMatch[2]}`)}`;
+        }
       }
+      return parsed.href;
     } catch {
       return '';
     }
-
-    return '';
   };
 
   const telHref = (value) => {
@@ -1009,8 +1057,13 @@
   }
 
   function render() {
-    // تحرير قفل الشاشة إذا أعاد زر التسليم بناء قائمة الفواتير.
-    if (document.body.classList.contains('driver-invoice-open')) {
+    // إغلاق الفاتورة المفتوحة بأمان قبل إعادة بناء القائمة، مع تنظيف سجل الرجوع.
+    if (
+      typeof activeDriverInvoiceClose === 'function' &&
+      document.body.classList.contains('driver-invoice-open')
+    ) {
+      activeDriverInvoiceClose(false);
+    } else if (document.body.classList.contains('driver-invoice-open')) {
       document.body.classList.remove('driver-invoice-open');
       document.documentElement.classList.remove('driver-invoice-open');
       document.body.style.overflow = '';
@@ -1035,6 +1088,8 @@
     const shown =
       getFilteredOrders();
 
+    // الاحتفاظ بمكان القائمة الحالي عند إعادة رسم الفواتير حتى لا يعود المستخدم لأول القائمة.
+    const preservedScrollY = window.scrollY || window.pageYOffset || 0;
     list.replaceChildren();
 
     if (!shown.length) {
@@ -1052,6 +1107,7 @@
         </p>`;
 
       updateStats();
+      window.scrollTo({ top: preservedScrollY, behavior: 'auto' });
 
       return;
     }
@@ -1075,7 +1131,12 @@
       let previousBodyOverflow = '';
       let previousHtmlOverflow = '';
       let fullscreenHead = null;
-      const closeInvoiceFullscreen = () => {
+      const closeInvoiceFullscreen = (fromPopState = false) => {
+        const shouldReturnHistory = driverInvoiceHistoryEntryActive;
+        driverInvoiceHistoryEntryActive = false;
+        if (activeDriverInvoiceClose === closeInvoiceFullscreen) {
+          activeDriverInvoiceClose = null;
+        }
         node.classList.remove('is-fullscreen-invoice');
         node.classList.add('is-compact');
         document.body.classList.remove('driver-invoice-open');
@@ -1086,7 +1147,11 @@
         fullscreenHead = null;
         expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
         expandButton.setAttribute('aria-expanded', 'false');
-        window.scrollTo({ top: savedScrollY, behavior: 'instant' });
+        window.scrollTo({ top: savedScrollY, behavior: 'auto' });
+        // عند الرجوع بزر الهاتف نغلق الفاتورة فقط؛ لا نطلب رجوعًا ثانيًا للخلف.
+        if (shouldReturnHistory && !fromPopState) {
+          window.history.back();
+        }
       };
       const toggleInvoiceDetails = () => {
         if (node.classList.contains('is-fullscreen-invoice')) {
@@ -1096,6 +1161,21 @@
         savedScrollY = window.scrollY || window.pageYOffset || 0;
         previousBodyOverflow = document.body.style.overflow || '';
         previousHtmlOverflow = document.documentElement.style.overflow || '';
+        // إضافة خطوة مؤقتة إلى سجل المتصفح لكي يغلق زر الرجوع الفاتورة بدل إغلاق التطبيق.
+        try {
+          const currentHistoryState = window.history.state && typeof window.history.state === 'object'
+            ? window.history.state
+            : {};
+          window.history.pushState(
+            { ...currentHistoryState, driverInvoiceFullscreen: true },
+            '',
+            window.location.href
+          );
+          driverInvoiceHistoryEntryActive = true;
+        } catch {
+          driverInvoiceHistoryEntryActive = false;
+        }
+        activeDriverInvoiceClose = closeInvoiceFullscreen;
         document.body.classList.add('driver-invoice-open');
         document.documentElement.classList.add('driver-invoice-open');
         document.body.style.overflow = 'hidden';
@@ -1632,11 +1712,12 @@
           locationButton.href =
             locationUrl;
 
+          // Open the map in the current page for Android WebView compatibility.
+          // target=_blank can produce a blank page when the app does not handle new windows.
           locationButton.target =
-            '_blank';
+            '_self';
 
-          locationButton.rel =
-            'noopener noreferrer';
+          locationButton.removeAttribute('rel');
 
           locationButton.hidden =
             false;
@@ -1798,6 +1879,7 @@
     }
 
     updateStats();
+    window.scrollTo({ top: preservedScrollY, behavior: 'auto' });
   }
 
   async function markHeadingToCustomer(order, button) {
@@ -3985,7 +4067,7 @@
       ${safeUrl(order.location_url) ? `
       <div class="master-section">
         <div class="master-section-title">📍 الموقع</div>
-        <div class="master-section-content"><a href="${masterEscape(safeUrl(order.location_url))}" target="_blank" rel="noopener noreferrer">فتح موقع العميل</a></div>
+        <div class="master-section-content"><a href="${masterEscape(safeUrl(order.location_url))}" target="_self">فتح موقع العميل</a></div>
       </div>` : ''}
 
       <div class="master-actions-row">
