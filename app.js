@@ -1148,10 +1148,9 @@
         expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
         expandButton.setAttribute('aria-expanded', 'false');
         window.scrollTo({ top: savedScrollY, behavior: 'auto' });
-        // عند الرجوع بزر الهاتف نغلق الفاتورة فقط؛ لا نطلب رجوعًا ثانيًا للخلف.
-        if (shouldReturnHistory && !fromPopState) {
-          window.history.back();
-        }
+        // لا ننفذ history.back() بعد إغلاق الفاتورة يدويًا؛
+        // ذلك قد ينقل المستخدم إلى سجل سابق ويعيد بناء الصفحة أو يعرض شاشة بيضاء.
+        // زر الهاتف يتعامل مع سجل الرجوع عبر popstate فقط.
       };
       const toggleInvoiceDetails = () => {
         if (node.classList.contains('is-fullscreen-invoice')) {
@@ -1193,7 +1192,13 @@
         closeButton.textContent = '✕ إغلاق الفاتورة';
         closeButton.addEventListener('click', (event) => {
           event.stopPropagation();
-          closeInvoiceFullscreen();
+          // استخدم خطوة سجل الفاتورة المؤقتة لإغلاق العرض فقط، من دون الرجوع
+          // إلى صفحة/فاتورة سابقة. إذا لم تُنشأ خطوة تاريخ، أغلق العرض مباشرة.
+          if (driverInvoiceHistoryEntryActive) {
+            window.history.back();
+          } else {
+            closeInvoiceFullscreen();
+          }
         });
         fullscreenHead.append(heading, closeButton);
         node.insertBefore(fullscreenHead, node.firstChild);
@@ -1709,14 +1714,21 @@
           safeUrl(locationValue);
 
         if (locationUrl) {
-          locationButton.href =
-            locationUrl;
+          // Open Maps through an Android intent URL. MainActivity intercepts intent://
+          // and launches the external Maps/browser handler, so the invoice page stays
+          // loaded underneath and the driver returns to this exact invoice.
+          const mapsUri = (() => {
+            try {
+              const parsed = new URL(locationUrl);
+              const mapsPath = `${parsed.host}${parsed.pathname}${parsed.search}`;
+              return `intent://${mapsPath}#Intent;scheme=https;package=com.google.android.apps.maps;S.browser_fallback_url=${encodeURIComponent(locationUrl)};end`;
+            } catch {
+              return locationUrl;
+            }
+          })();
 
-          // Open the map in the current page for Android WebView compatibility.
-          // target=_blank can produce a blank page when the app does not handle new windows.
-          locationButton.target =
-            '_self';
-
+          locationButton.href = mapsUri;
+          locationButton.target = '_self';
           locationButton.removeAttribute('rel');
 
           locationButton.hidden =
