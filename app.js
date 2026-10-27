@@ -1953,17 +1953,15 @@
       // البطاقة الخارجية كلها تفتح الفاتورة فقط؛ لا تعمل أي عناصر بداخلها قبل الفتح.
       // عند فتح الفاتورة بالكامل، تبقى كل الأزرار الداخلية بوظائفها الأصلية.
       node.addEventListener('click', (event) => {
-        // عناصر التحكم الخارجية يجب أن تعمل دون تشغيل فتح الفاتورة على الكارت.
-        if (event.target.closest('.driver-route-number-control')) {
-          event.stopPropagation();
-          return;
-        }
+        // مستمع الكارت يعمل في مرحلة bubbling؛ زر الترتيب ينفذ أمره أولاً عند الضغط عليه.
+        // لا نستخدم capture هنا حتى لا نوقف الحدث قبل وصوله إلى زر رقم المسار.
+        if (event.target.closest('.driver-route-number-control')) return;
         if (event.target.closest('.driver-area-sort-trigger')) return;
         if (node.classList.contains('is-fullscreen-invoice')) return;
         event.preventDefault();
         event.stopPropagation();
         toggleInvoiceDetails();
-      }, true);
+      });
 
       list.appendChild(node);
     }
