@@ -684,33 +684,8 @@
     );
   }
 
-  // ترتيب خط السير بالأرقام ويظهر التحكم على كارت الفاتورة الخارجي.
-  function driverRouteStorageKey() {
-    return `driver_route_numbers_${String(state.sheet || state.session?.sheet_name || state.session?.username || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-  }
-
-  function getDriverRouteNumbers() {
-    try {
-      const value = JSON.parse(localStorage.getItem(driverRouteStorageKey()) || '{}');
-      return value && typeof value === 'object' ? value : {};
-    } catch { return {}; }
-  }
-
-  function driverRouteOrderId(order) {
-    return String(firstValue(order, ['id', 'order_number', 'orderNumber', 'invoice_no', 'invoice_number']) || '').trim();
-  }
-
   function sortPendingOrdersForDisplay(orders) {
-    const routeNumbers = getDriverRouteNumbers();
-    return [...orders].sort((a, b) => {
-      const aValue = Number(routeNumbers[driverRouteOrderId(a)]);
-      const bValue = Number(routeNumbers[driverRouteOrderId(b)]);
-      const aSet = Number.isFinite(aValue) && aValue > 0;
-      const bSet = Number.isFinite(bValue) && bValue > 0;
-      if (aSet && bSet && aValue !== bValue) return aValue - bValue;
-      if (aSet !== bSet) return aSet ? -1 : 1;
-      return 0;
-    });
+    return orders;
   }
 
   function setText(
@@ -1029,7 +1004,6 @@
       .order-card.is-compact label,
       .order-card.is-compact [role="button"],
       .order-card.is-compact [onclick] { display:none!important; pointer-events:none!important; }
-      .order-card.is-compact button.driver-route-number-control { display:inline-flex!important; pointer-events:auto!important; visibility:visible!important; position:relative!important; z-index:8!important; }
       .order-card.is-compact { padding:9px!important; gap:5px!important; cursor:pointer!important; }
       .order-card.is-compact .order-card-head { margin:0!important; gap:4px!important; }
       .order-card.is-compact .customer-row { margin:0!important; padding:2px 0!important; gap:6px!important; }
@@ -1266,40 +1240,6 @@
           ]
         ) || '—';
 
-      // يظهر رقم مسار الرحلة على البطاقة الخارجية دون فتح تفاصيل الفاتورة.
-      const routeId = driverRouteOrderId(order);
-      const routeNumbers = getDriverRouteNumbers();
-      const routeButton = document.createElement('button');
-      routeButton.type = 'button';
-      routeButton.className = 'driver-route-number-control';
-      routeButton.style.cssText = 'display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;min-width:58px!important;min-height:34px!important;padding:5px 9px!important;margin:0 0 6px auto!important;border:2px solid #93c5fd!important;border-radius:10px!important;background:#eff6ff!important;color:#1d4ed8!important;font-family:inherit!important;font-size:15px!important;font-weight:900!important;cursor:pointer!important;position:relative!important;z-index:8!important;pointer-events:auto!important;';
-      const routeValue = Number(routeNumbers[routeId]);
-      routeButton.textContent = Number.isFinite(routeValue) && routeValue > 0 ? `🚗 ${routeValue}` : '＋ رقم المسار';
-      routeButton.title = 'اضغط لتحديد رقم ترتيب خط السير';
-      routeButton.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const current = getDriverRouteNumbers();
-        const existing = Number(current[routeId]);
-        const answer = window.prompt('اكتب رقم ترتيب هذه الفاتورة في خط السير. اتركه فارغًا لإلغاء الترتيب:', Number.isFinite(existing) && existing > 0 ? String(existing) : '');
-        if (answer === null) return;
-        const cleaned = String(answer).trim();
-        if (!cleaned) {
-          delete current[routeId];
-        } else {
-          const number = Number(toEnglishDigits(cleaned));
-          if (!Number.isInteger(number) || number < 1) {
-            toast('اكتب رقمًا صحيحًا يبدأ من 1', true);
-            return;
-          }
-          current[routeId] = number;
-        }
-        try { localStorage.setItem(driverRouteStorageKey(), JSON.stringify(current)); }
-        catch { toast('تعذر حفظ رقم خط السير على هذا الجهاز', true); return; }
-        render();
-        toast(cleaned ? 'تم حفظ رقم خط السير' : 'تم إلغاء رقم خط السير');
-      });
-      node.insertBefore(routeButton, node.firstChild);
 
       const delivered =
         isDelivered(
@@ -1953,15 +1893,12 @@
       // البطاقة الخارجية كلها تفتح الفاتورة فقط؛ لا تعمل أي عناصر بداخلها قبل الفتح.
       // عند فتح الفاتورة بالكامل، تبقى كل الأزرار الداخلية بوظائفها الأصلية.
       node.addEventListener('click', (event) => {
-        // مستمع الكارت يعمل في مرحلة bubbling؛ زر الترتيب ينفذ أمره أولاً عند الضغط عليه.
-        // لا نستخدم capture هنا حتى لا نوقف الحدث قبل وصوله إلى زر رقم المسار.
-        if (event.target.closest('.driver-route-number-control')) return;
         if (event.target.closest('.driver-area-sort-trigger')) return;
         if (node.classList.contains('is-fullscreen-invoice')) return;
         event.preventDefault();
         event.stopPropagation();
         toggleInvoiceDetails();
-      });
+      }, true);
 
       list.appendChild(node);
     }
