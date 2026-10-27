@@ -35,16 +35,35 @@
     closeButton.textContent = '✕ رجوع إلى الفاتورة';
     closeButton.style.cssText = 'align-self:flex-start;min-height:44px;padding:10px 16px;border:0;border-radius:12px;background:#dcfce7;color:#166534;font:inherit;font-size:16px;font-weight:900;';
 
+    const imageArea = document.createElement('div');
+    imageArea.style.cssText = 'display:flex;flex:1 1 auto;min-height:0;width:100%;align-items:center;justify-content:center;overflow:auto;';
     const image = document.createElement('img');
-    image.src = imageUrl;
     image.alt = 'صورة بوابة الفيلا';
-    image.style.cssText = 'display:block;max-width:100%;max-height:calc(100dvh - 90px);width:auto;height:auto;object-fit:contain;border-radius:8px;';
+    image.loading = 'eager';
+    image.decoding = 'async';
+    image.style.cssText = 'display:block;flex:0 1 auto;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:8px;background:#fff;';
+    const imageMessage = document.createElement('div');
+    imageMessage.textContent = 'جارٍ تحميل صورة الفيلا…';
+    imageMessage.style.cssText = 'color:#fff;font:700 16px/1.8 sans-serif;text-align:center;padding:16px;';
+    imageArea.append(imageMessage, image);
+    image.style.display = 'none';
+    image.addEventListener('load', () => {
+      imageMessage.remove();
+      image.style.display = 'block';
+    }, { once: true });
     image.addEventListener('error', () => {
-      image.alt = 'تعذر تحميل الصورة';
-      closeButton.textContent = '✕ رجوع إلى الفاتورة';
-    });
+      imageMessage.textContent = 'تعذر تحميل الصورة داخل التطبيق. اضغط لفتح الصورة مباشرة.';
+      const directLink = document.createElement('a');
+      directLink.href = imageUrl;
+      directLink.target = '_blank';
+      directLink.rel = 'noopener noreferrer';
+      directLink.textContent = 'فتح الصورة مباشرة';
+      directLink.style.cssText = 'display:block;margin-top:12px;color:#bfdbfe;text-decoration:underline;font-weight:900;';
+      imageMessage.appendChild(directLink);
+    }, { once: true });
+    image.src = imageUrl;
 
-    overlay.append(closeButton, image);
+    overlay.append(closeButton, imageArea);
     document.body.appendChild(overlay);
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
