@@ -13,8 +13,73 @@
   // التحكم في الرجوع من الفاتورة المفتوحة على الهاتف دون مغادرة التطبيق.
   let activeDriverInvoiceClose = null;
   let driverInvoiceHistoryEntryActive = false;
+  let activeGatePhotoClose = null;
+  let gatePhotoHistoryEntryActive = false;
+
+  // فتح صورة بوابة الفيلا داخل التطبيق حتى يغلقها زر الرجوع دون مغادرة الفاتورة.
+  function openGatePhotoViewer(imageUrl) {
+    if (!imageUrl) return;
+    if (typeof activeGatePhotoClose === 'function') activeGatePhotoClose(false);
+
+    const previousBodyOverflow = document.body.style.overflow || '';
+    const previousHtmlOverflow = document.documentElement.style.overflow || '';
+    const overlay = document.createElement('div');
+    overlay.className = 'gate-photo-viewer-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'صورة بوابة الفيلا');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px;box-sizing:border-box;background:rgba(0,0,0,.94);';
+
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.textContent = '✕ رجوع إلى الفاتورة';
+    closeButton.style.cssText = 'align-self:flex-start;min-height:44px;padding:10px 16px;border:0;border-radius:12px;background:#dcfce7;color:#166534;font:inherit;font-size:16px;font-weight:900;';
+
+    const image = document.createElement('img');
+    image.src = imageUrl;
+    image.alt = 'صورة بوابة الفيلا';
+    image.style.cssText = 'display:block;max-width:100%;max-height:calc(100dvh - 90px);width:auto;height:auto;object-fit:contain;border-radius:8px;';
+    image.addEventListener('error', () => {
+      image.alt = 'تعذر تحميل الصورة';
+      closeButton.textContent = '✕ رجوع إلى الفاتورة';
+    });
+
+    overlay.append(closeButton, image);
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    try {
+      const currentState = window.history.state && typeof window.history.state === 'object' ? window.history.state : {};
+      window.history.pushState({ ...currentState, driverGatePhotoViewer: true }, '', window.location.href);
+      gatePhotoHistoryEntryActive = true;
+    } catch {
+      gatePhotoHistoryEntryActive = false;
+    }
+
+    const closeViewer = (fromPopState = false) => {
+      if (activeGatePhotoClose !== closeViewer) return;
+      activeGatePhotoClose = null;
+      overlay.remove();
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      const shouldReturnHistory = gatePhotoHistoryEntryActive;
+      gatePhotoHistoryEntryActive = false;
+      if (shouldReturnHistory && !fromPopState) window.history.back();
+    };
+    activeGatePhotoClose = closeViewer;
+    closeButton.addEventListener('click', () => closeViewer(false));
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) closeViewer(false);
+    });
+  }
 
   window.addEventListener('popstate', () => {
+    // أولوية الرجوع لإغلاق الصورة فقط؛ تبقى الفاتورة المفتوحة خلفها كما هي.
+    if (typeof activeGatePhotoClose === 'function') {
+      activeGatePhotoClose(true);
+      return;
+    }
     if (typeof activeDriverInvoiceClose === 'function') {
       activeDriverInvoiceClose(true);
     }
@@ -1021,30 +1086,6 @@
       .order-card.is-fullscreen-invoice .customer-location-grid { gap:5px!important; margin:0!important; }
       .order-card.is-fullscreen-invoice .info-item { padding:5px 7px!important; gap:2px!important; }
       .order-card.is-fullscreen-invoice .info-item strong { font-size:12px!important; line-height:1.25!important; }
-      /* تكبير اسم الإمارة والعنوان بشكل واضح داخل الفاتورة المفتوحة فقط. */
-      .order-card.is-fullscreen-invoice .info-item:has([data-f="emirate"]),
-      .order-card.is-fullscreen-invoice .info-item:has([data-f="area"]) {
-        padding:10px 12px!important;
-        gap:5px!important;
-        min-height:70px!important;
-        box-sizing:border-box!important;
-      }
-      .order-card.is-fullscreen-invoice .info-item:has([data-f="emirate"]) strong,
-      .order-card.is-fullscreen-invoice .info-item:has([data-f="area"]) strong {
-        font-size:20px!important;
-        line-height:1.55!important;
-        font-weight:1000!important;
-        color:#172b4d!important;
-        overflow-wrap:anywhere!important;
-      }
-      .order-card.is-fullscreen-invoice .info-item:has([data-f="emirate"]) [data-f="emirate"],
-      .order-card.is-fullscreen-invoice .info-item:has([data-f="area"]) [data-f="area"] {
-        font-size:23px!important;
-        line-height:1.55!important;
-        font-weight:1000!important;
-        color:#102a56!important;
-        overflow-wrap:anywhere!important;
-      }
       .order-card.is-fullscreen-invoice .products-section { margin:0!important; padding:6px 8px!important; gap:4px!important; }
       .order-card.is-fullscreen-invoice .products-section { min-width:0!important; }
       .order-card.is-fullscreen-invoice .driver-product-table { width:100%!important; }
@@ -1808,8 +1849,12 @@
           const gatePhotoButton = document.createElement('a');
           gatePhotoButton.className = 'gate-photo-btn';
           gatePhotoButton.href = gatePhotoUrl;
-          gatePhotoButton.target = '_blank';
-          gatePhotoButton.rel = 'noopener noreferrer';
+          gatePhotoButton.removeAttribute('target');
+          gatePhotoButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openGatePhotoViewer(gatePhotoUrl);
+          });
           gatePhotoButton.textContent = gatePhotoUrls.length > 1
             ? `📷 عرض صورة بوابة الفيلا (${index + 1} من ${gatePhotoUrls.length})`
             : '📷 عرض صورة بوابة الفيلا';
