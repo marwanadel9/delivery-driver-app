@@ -1953,6 +1953,11 @@
       // البطاقة الخارجية كلها تفتح الفاتورة فقط؛ لا تعمل أي عناصر بداخلها قبل الفتح.
       // عند فتح الفاتورة بالكامل، تبقى كل الأزرار الداخلية بوظائفها الأصلية.
       node.addEventListener('click', (event) => {
+        // عناصر التحكم الخارجية يجب أن تعمل دون تشغيل فتح الفاتورة على الكارت.
+        if (event.target.closest('.driver-route-number-control')) {
+          event.stopPropagation();
+          return;
+        }
         if (event.target.closest('.driver-area-sort-trigger')) return;
         if (node.classList.contains('is-fullscreen-invoice')) return;
         event.preventDefault();
