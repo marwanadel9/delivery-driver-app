@@ -1021,6 +1021,30 @@
       .order-card.is-fullscreen-invoice .customer-location-grid { gap:5px!important; margin:0!important; }
       .order-card.is-fullscreen-invoice .info-item { padding:5px 7px!important; gap:2px!important; }
       .order-card.is-fullscreen-invoice .info-item strong { font-size:12px!important; line-height:1.25!important; }
+      /* تكبير اسم الإمارة والعنوان بشكل واضح داخل الفاتورة المفتوحة فقط. */
+      .order-card.is-fullscreen-invoice .info-item:has([data-f="emirate"]),
+      .order-card.is-fullscreen-invoice .info-item:has([data-f="area"]) {
+        padding:10px 12px!important;
+        gap:5px!important;
+        min-height:70px!important;
+        box-sizing:border-box!important;
+      }
+      .order-card.is-fullscreen-invoice .info-item:has([data-f="emirate"]) strong,
+      .order-card.is-fullscreen-invoice .info-item:has([data-f="area"]) strong {
+        font-size:20px!important;
+        line-height:1.55!important;
+        font-weight:1000!important;
+        color:#172b4d!important;
+        overflow-wrap:anywhere!important;
+      }
+      .order-card.is-fullscreen-invoice .info-item:has([data-f="emirate"]) [data-f="emirate"],
+      .order-card.is-fullscreen-invoice .info-item:has([data-f="area"]) [data-f="area"] {
+        font-size:23px!important;
+        line-height:1.55!important;
+        font-weight:1000!important;
+        color:#102a56!important;
+        overflow-wrap:anywhere!important;
+      }
       .order-card.is-fullscreen-invoice .products-section { margin:0!important; padding:6px 8px!important; gap:4px!important; }
       .order-card.is-fullscreen-invoice .products-section { min-width:0!important; }
       .order-card.is-fullscreen-invoice .driver-product-table { width:100%!important; }
