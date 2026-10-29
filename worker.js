@@ -209,6 +209,14 @@ async function requireMaster(request, env) {
   };
 }
 
+// إزالة الإيموجي من نصوص الأصناف قبل إرسالها للمندوب
+function stripEmojiText(value) {
+  return String(value == null ? "" : value)
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE0F}]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function normalizePayment(value) {
   const v = String(value || "")
     .trim()
@@ -795,8 +803,15 @@ export default {
         // إظهار أرقام الهاتف للمندوب المصرح له فقط؛ لا نغيّر البيانات المخزنة في قاعدة البيانات.
         const canCall = auth.user.email === DRIVER_EMAILS.zain2;
         const safeOrders = (Array.isArray(orders) ? orders : []).map(function (row) {
-          if (canCall) return row;
-          return Object.assign({}, row, { phone: "" });
+          const cleaned = Object.assign({}, row, {
+            plate_names: stripEmojiText(row.plate_names),
+            plate_qtys: stripEmojiText(row.plate_qtys),
+            chicken_weights: stripEmojiText(row.chicken_weights),
+            chicken_qtys: stripEmojiText(row.chicken_qtys),
+            customer_name: stripEmojiText(row.customer_name)
+          });
+          if (canCall) return cleaned;
+          return Object.assign({}, cleaned, { phone: "" });
         });
         if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
           const ids = safeOrders.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
