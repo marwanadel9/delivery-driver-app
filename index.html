@@ -853,7 +853,7 @@
   var V = window.FAVoice = {
     cfg: null, sb: null, ch: null, rec: null, stream: null,
     seq: 0, q: [], playing: false, peers: {}, timer: null,
-    talking: false, blocked: false, _maxT: null, _meter: null, _silentChunks: 0,
+    talking: false, blocked: false, _maxT: null, _sendChain: Promise.resolve(), _incoming: {}, _starting: false, _stopRequested: false, _meter: null, _silentChunks: 0,
 
     init: function (cfg) {
       this.cfg = cfg || {};
@@ -868,6 +868,8 @@
         this.sb = window.supabase.createClient(cfg.url, cfg.key);
         this.ch = this.sb.channel(cfg.room, { config: { broadcast: { ack: false } } });
         this.ch.on('broadcast', { event: 'ptt' }, function (m) { self._chunk(m.payload || {}); });
+        this.ch.on('broadcast', { event: 'ptt-start' }, function (m) { var p = m.payload || {}; p.event = 'start'; self._chunk(p); });
+        this.ch.on('broadcast', { event: 'ptt-end' }, function (m) { var p = m.payload || {}; p.event = 'end'; self._chunk(p); });
         this.ch.on('broadcast', { event: 'ptt-hi' }, function (m) { self._hi(m.payload || {}); });
         this.ch.subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
@@ -934,69 +936,139 @@
     },
 
     start: function () {
-      if (this.talking || this.rec) return;
+      if (this.talking || this.rec || this._starting) return;
       var self = this;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+        this._status('⚠️ المتصفح لا يدعم المايك أو يلزم فتح الموقع عبر HTTPS');
+        return;
+      }
+      this._starting = true;
+      this._stopRequested = false;
       navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       }).then(function (st) {
+        self._starting = false;
         self.stream = st;
         self._startMeter(st);
         self._silentChunks = 0;
+        self._sendChain = Promise.resolve();
         var mime = 'audio/webm;codecs=opus';
-        if (!window.MediaRecorder || !MediaRecorder.isTypeSupported(mime)) mime = 'audio/webm';
-        if (window.MediaRecorder && !MediaRecorder.isTypeSupported(mime)) mime = '';
+        if (!MediaRecorder.isTypeSupported(mime)) mime = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported(mime)) mime = '';
         try { self.rec = new MediaRecorder(st, mime ? { mimeType: mime } : undefined); }
-        catch (e) { self.rec = new MediaRecorder(st); }
-        var mtype = self.rec.mimeType || 'audio/webm';
+        catch (e) {
+          try { self.rec = new MediaRecorder(st); }
+          catch (err) { self._status('⚠️ تعذر بدء تسجيل الصوت: ' + (err.message || err)); self._cleanupStream(); return; }
+        }
+        var mtype = self.rec.mimeType || mime || 'audio/webm';
+        self._sendChain = self._sendChain.then(function () { return self._sendVoiceEvent('ptt-start', { from: self.cfg.id, name: self.cfg.name, mime: mtype }); });
         self.rec.ondataavailable = function (ev) {
-          if (ev.data && ev.data.size > 0 && self.talking && ev.data.size < 150) {
+          if (!ev.data || !ev.data.size) return;
+          if (self.talking && ev.data.size < 150) {
             self._silentChunks++;
-            if (self._silentChunks === 5) self._status('⚠️ المايك بيسجل سكون — افحص المايك في ويندوز');
-          } else if (ev.data && ev.data.size >= 150) self._silentChunks = 0;
-          if (ev.data && ev.data.size > 0 && self.ch) {
-            var r = new FileReader();
-            r.onload = function () {
-              var b64 = String(r.result).split(',')[1] || '';
-              self.ch && self.ch.send({
-                type: 'broadcast', event: 'ptt',
-                payload: { d: b64, mime: mtype, from: self.cfg.id, name: self.cfg.name, seq: self.seq++ }
-              });
-            };
-            r.readAsDataURL(ev.data);
-          }
+            if (self._silentChunks === 5) self._status('⚠️ المايك بيسجل سكون — افحص المايك في إعدادات ويندوز');
+          } else if (ev.data.size >= 150) self._silentChunks = 0;
+          self._sendChain = self._sendChain.then(function () {
+            return new Promise(function (resolve, reject) {
+              var reader = new FileReader();
+              reader.onload = function () {
+                var b64 = String(reader.result).split(',')[1] || '';
+                if (!b64 || !self.ch) { resolve(); return; }
+                Promise.resolve(self.ch.send({
+                  type: 'broadcast', event: 'ptt',
+                  payload: { d: b64, mime: mtype, from: self.cfg.id, name: self.cfg.name, seq: self.seq++ }
+                })).then(resolve, function (e) { self._status('⚠️ تعذر إرسال الصوت'); resolve(); });
+              };
+              reader.onerror = function () { self._status('⚠️ تعذر تجهيز مقطع الصوت'); resolve(); };
+              reader.readAsDataURL(ev.data);
+            });
+          });
         };
-        self.rec.start(200);
+        self.rec.onstop = function () {
+          self._sendChain = self._sendChain.then(function () {
+            return self._sendVoiceEvent('ptt-end', { from: self.cfg.id, name: self.cfg.name });
+          }).catch(function () {});
+          self._cleanupStream();
+        };
+        self.rec.onerror = function (ev) { self._status('⚠️ خطأ في تسجيل الصوت'); };
+        try { self.rec.start(350); }
+        catch (e) { self._status('⚠️ فشل تشغيل التسجيل: ' + (e.message || e)); self.rec = null; self._cleanupStream(); return; }
         self.talking = true;
         self._btnState(true);
         clearTimeout(self._maxT);
         self._maxT = setTimeout(function () { if (self.talking) self.stop(); }, 60000);
-      }).catch(function (e) { self._status('⚠️ المايك: ' + (e.message || 'مرفوض')); });
+        if (self._stopRequested) self.stop();
+      }).catch(function (e) {
+        self._starting = false;
+        self._status('⚠️ المايك: ' + (e.message || 'تم رفض الإذن'));
+      });
+    },
+
+    _sendVoiceEvent: function (eventName, payload) {
+      if (!this.ch) return Promise.resolve();
+      return Promise.resolve(this.ch.send({ type: 'broadcast', event: eventName, payload: payload || {} }))
+        .catch(function () {});
+    },
+
+    _cleanupStream: function () {
+      clearInterval(this._meter);
+      if (this.stream) {
+        this.stream.getTracks().forEach(function (t) { t.stop(); });
+        this.stream = null;
+      }
+      this.rec = null;
+      this._starting = false;
     },
 
     stop: function () {
       clearTimeout(this._maxT);
-      clearInterval(this._meter);
       this.talking = false;
       this._btnState(false);
-      try { if (this.rec && this.rec.state !== 'inactive') this.rec.stop(); } catch (e) {}
-      this.rec = null;
-      if (this.stream) { this.stream.getTracks().forEach(function (t) { t.stop(); }); this.stream = null; }
+      if (this._starting && !this.rec) { this._stopRequested = true; return; }
+      var rec = this.rec;
+      if (rec && rec.state !== 'inactive') {
+        try { rec.stop(); } catch (e) { this._cleanupStream(); }
+      } else {
+        this._cleanupStream();
+      }
     },
 
     _chunk: function (p) {
-      if (!p || !p.d || p.from === this.cfg.id) return;
-      this._speaker(p.name);
-      try {
-        var bin = atob(p.d), arr = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        this.q.push(new Blob([arr], { type: p.mime || 'audio/webm' }));
-        if (this.q.length > 80) this.q.shift();
+      if (!p || !p.from || p.from === this.cfg.id) return;
+      if (p.d) {
+        try {
+          var bin = atob(p.d), arr = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          var incoming = this._incoming[p.from];
+          if (!incoming) incoming = this._incoming[p.from] = { chunks: [], mime: p.mime || 'audio/webm', name: p.name || p.from, lastSeq: -1 };
+          if (typeof p.seq === 'number' && p.seq <= incoming.lastSeq) return;
+          if (typeof p.seq === 'number') incoming.lastSeq = p.seq;
+          incoming.mime = p.mime || incoming.mime;
+          incoming.name = p.name || incoming.name;
+          incoming.chunks.push(new Uint8Array(arr));
+          if (incoming.chunks.length > 300) incoming.chunks.shift();
+        } catch (e) { this._status('⚠️ وصل مقطع صوت غير صالح'); }
+        return;
+      }
+      if (p.event === 'start') {
+        this._incoming[p.from] = { chunks: [], mime: p.mime || 'audio/webm', name: p.name || p.from, lastSeq: -1 };
+        this._speaker(p.name);
+        return;
+      }
+      if (p.event === 'end') {
+        var stream = this._incoming[p.from];
+        if (!stream || !stream.chunks.length) { delete this._incoming[p.from]; return; }
+        var blob = new Blob(stream.chunks, { type: stream.mime || 'audio/webm' });
+        this._lastSpeaker = stream.name;
+        this.q.push(blob);
+        if (this.q.length > 12) this.q.shift();
+        delete this._incoming[p.from];
         if (this.blocked) {
-          this._status('🔊 وصل صوت (' + this.q.length + ' قطعة مخزنة) — دوس على الشاشة يشتغل');
+          this._status('🔊 وصل تسجيل صوت — اضغط على الصفحة لتشغيله');
           return;
         }
         this._play();
-      } catch (e) {}
+      }
     },
 
     _play: function () {
@@ -1015,7 +1087,7 @@
         self.q.unshift(blob);
         self.playing = false;
         self.blocked = true;
-        self._status('🔊 وصل صوت (' + self.q.length + ' قطعة مخزنة) — دوس على الشاشة يشتغل');
+        self._status('🔊 وصل تسجيل صوت — اضغط على الصفحة لتشغيله');
       });
     },
 
@@ -1055,7 +1127,7 @@
       };
       var stop = function (e) {
         e.preventDefault();
-        if (!self.talking || toggleMode) return;
+        if ((!self.talking && !self._starting) || toggleMode) return;
         if (Date.now() - downAt < 300) {
           toggleMode = true;
           self._status('🔴 المايك مفتوح — دوسة تانية تقفل');
