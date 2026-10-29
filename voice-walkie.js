@@ -1,17 +1,19 @@
 /* ============================================================
    FAVoice — ووكي توكي عبر Supabase Realtime Broadcast
+   ضغطة سريعة = مايك مفتوح | ضغطة مطولة = ووكي توكي عادي
    ============================================================ */
 (function () {
   var V = window.FAVoice = {
     cfg: null, sb: null, ch: null, rec: null, stream: null,
-    seq: 0, q: [], playing: false, peers: {}, timer: null, talking: false, blocked: false,
+    seq: 0, q: [], playing: false, peers: {}, timer: null,
+    talking: false, blocked: false, _maxT: null,
 
     init: function (cfg) {
       this.cfg = cfg || {};
       this._ui();
       this._unlockAudio();
       var self = this;
-      if (!window.supabase || !cfg.key || cfg.key.indexOf('sb_publishable') !== 0) {
+      if (!window.supabase || !cfg.key || String(cfg.key).length < 50) {
         this._status('⚠️ مفتاح Supabase غير مكتمل');
         return;
       }
@@ -34,7 +36,6 @@
       } catch (e) { this._status('⚠️ ' + e.message); }
     },
 
-    /* أول دوسة على الشاشة: تفك حظر الصوت + تشغل اللي اتخزن */
     _unlockAudio: function () {
       var self = this;
       var unlock = function () {
@@ -46,7 +47,7 @@
         document.removeEventListener('touchstart', unlock);
         if (self.blocked) {
           self.blocked = false;
-          self._status('🔊 جاري تشغيل الرسائل المخزنة...');
+          self._status('🔊 جاري تشغيل الرسائل...');
           self._play();
         }
       };
@@ -82,10 +83,13 @@
         self.rec.start(200);
         self.talking = true;
         self._btnState(true);
+        clearTimeout(self._maxT);
+        self._maxT = setTimeout(function () { if (self.talking) self.stop(); }, 60000);
       }).catch(function (e) { self._status('⚠️ المايك: ' + (e.message || 'مرفوض')); });
     },
 
     stop: function () {
+      clearTimeout(this._maxT);
       this.talking = false;
       this._btnState(false);
       try { if (this.rec && this.rec.state !== 'inactive') this.rec.stop(); } catch (e) {}
@@ -116,7 +120,6 @@
       a.play().then(function () {
         self._status('🔊 بيسمع: ' + (self._lastSpeaker || ''));
       }).catch(function () {
-        /* الصوت محظور لسه: نرجع القطعة ونستنى أول دوسة */
         self.q.unshift(blob);
         self.playing = false;
         if (!self.blocked) {
@@ -150,22 +153,37 @@
         'box-shadow:0 8px 24px rgba(185,46,46,.4);direction:rtl;}</style>' +
         '<div id="faPttSts">🎙️ جاري الاتصال...</div>' +
         '<div id="faPttSpk"></div>' +
-        '<div id="faPttBtn" title="اضغط مطولاً واتكلم">🎙️</div>';
+        '<div id="faPttBtn" title="دوسة سريعة=مفتوح | مطولة=ووكي توكي">🎙️</div>';
       document.body.appendChild(wrap);
       var btn = document.getElementById('faPttBtn');
-      var start = function (e) { e.preventDefault(); self.start(); };
-      var stop = function (e) { e.preventDefault(); self.stop(); };
+      var downAt = 0, toggleMode = false;
+      var start = function (e) {
+        e.preventDefault();
+        if (toggleMode) { toggleMode = false; self.stop(); return; }
+        downAt = Date.now();
+        self.start();
+      };
+      var stop = function (e) {
+        e.preventDefault();
+        if (!self.talking || toggleMode) return;
+        if (Date.now() - downAt < 300) {
+          toggleMode = true;
+          self._status('🔴 المايك مفتوح — دوسة تانية تقفل');
+        } else {
+          self.stop();
+        }
+      };
       btn.addEventListener('pointerdown', start);
       btn.addEventListener('pointerup', stop);
-      btn.addEventListener('pointerleave', stop);
-      btn.addEventListener('pointercancel', stop);
+      btn.addEventListener('pointerleave', function (e) { if (!toggleMode) stop(e); });
+      btn.addEventListener('pointercancel', function (e) { if (!toggleMode) stop(e); });
       btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     },
 
     _btnState: function (on) {
       var b = document.getElementById('faPttBtn');
       if (b) { b.classList.toggle('on', on); b.textContent = on ? '📢' : '🎙️'; }
-      this._status(on ? '🔴 بتتكلم...' : '🎙️ جاهز');
+      if (on) this._status('🔴 بتتكلم...');
     },
     _status: function (t) {
       var s = document.getElementById('faPttSts');
