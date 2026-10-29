@@ -860,7 +860,7 @@
       this._ui();
       this._unlockAudio();
       var self = this;
-      if (!window.supabase || !cfg.key || String(cfg.key).length < 50) {
+      if (!window.supabase || !cfg.key || String(cfg.key).length < 20) {
         this._status('⚠️ مفتاح Supabase غير مكتمل');
         return;
       }
@@ -1138,7 +1138,7 @@
   /* 🎙️ قناة الصوت — اسم المندوب بيتقرأ من جلسته تلقائيًا */
   (function(){
     var cfg = { url: 'https://wnfibznjxihilgfedfij.supabase.co',
-                key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InduZmliem5qeGloaWxnZmVkZmlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwOTIxODMsImV4cCI6MjEwNjY4MTgzfQ.RQUJ8eUObDFZArBb1aiXSXm7_suyL3UH4zan_t41Y54',
+                key: 'sb_publishable_adbAl6HXUFEBXxjG5nsg_A_lg1s1trz',
                 room: 'fa-dispatch-voice', name: 'مندوب', id: 'mandoub' };
     try {
       var s = JSON.parse(localStorage.getItem('driver_session') || '{}');
