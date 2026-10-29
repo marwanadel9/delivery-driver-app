@@ -2080,6 +2080,100 @@ export default {
       }
 
       if (
+        path === "/api/master/order/delete-by-number" &&
+        request.method === "POST"
+      ) {
+        const auth = await requireMaster(request, env);
+
+        if (auth.error) {
+          return json({ error: auth.error }, auth.status);
+        }
+
+        const body = await request.json().catch(function () {
+          return {};
+        });
+
+        const orderNumber = String(body.order_number || "").trim();
+
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber)) {
+          return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+        }
+
+        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+
+        if (!serviceKey) {
+          return json({ error: "إعداد الحذف غير مكتمل: أضف SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
+        }
+
+        const svcHeaders = {
+          apikey: serviceKey,
+          Authorization: "Bearer " + serviceKey
+        };
+
+        // 1) البحث عن الفاتورة برقمها في جدول الطلبات
+        const findResp = await supabaseRequest(
+          "/rest/v1/orders?order_number=eq." +
+            encodeURIComponent(orderNumber) +
+            "&select=id,order_number",
+          { headers: svcHeaders }
+        );
+
+        const found = await findResp.json().catch(function () {
+          return null;
+        });
+
+        if (!findResp.ok || !Array.isArray(found)) {
+          return json({ error: "تعذر البحث عن الفاتورة" }, 502);
+        }
+
+        if (!found.length) {
+          return json({ error: "not_found" }, 404);
+        }
+
+        const orderIds = found
+          .map(function (row) { return row.id; })
+          .filter(function (id) { return Number.isInteger(id) && id > 0; });
+
+        // 2) حذف سجلات التحرك المرتبطة بالأوردر (لو الجدول موجود)
+        if (orderIds.length) {
+          await supabaseRequest(
+            "/rest/v1/driver_departures?order_id=in.(" + orderIds.join(",") + ")",
+            { method: "DELETE", headers: svcHeaders }
+          );
+        }
+
+        // 3) حذف الفاتورة من جدول الطلبات — يعمل حتى لو كانت قيد التوصيل
+        const delResp = await supabaseRequest(
+          "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber),
+          {
+            method: "DELETE",
+            headers: Object.assign({}, svcHeaders, { Prefer: "return=representation" })
+          }
+        );
+
+        if (!delResp.ok) {
+          const delErr = await delResp.json().catch(function () { return null; });
+          return json({
+            error:
+              (delErr && (delErr.message || delErr.hint || delErr.error)) ||
+              "تعذر حذف الفاتورة من الطلبات"
+          }, 502);
+        }
+
+        // 4) حذف نسخة الأرشيف أيضًا (لو وُجدت)
+        await supabaseRequest(
+          "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber),
+          { method: "DELETE", headers: svcHeaders }
+        );
+
+        return json({
+          success: true,
+          deleted: orderNumber,
+          orders_deleted: found.length
+        });
+      }
+
+      if (
         env.ASSETS &&
         typeof env.ASSETS.fetch ===
           "function"
