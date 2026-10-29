@@ -885,21 +885,30 @@
 
     /* أول دوسة: تفك حظر الصوت + تشغل المخزن */
     _unlockAudio: function () {
-      var self = this;
+      var self = this, tried = false;
       var unlock = function () {
+        if (tried) return;
+        tried = true;
+        var ok = function () {
+          document.removeEventListener('pointerdown', unlock);
+          document.removeEventListener('click', unlock);
+          document.removeEventListener('touchstart', unlock);
+          if (self.blocked) {
+            self.blocked = false;
+            self._status('🔊 جاري تشغيل ' + self.q.length + ' رسالة...');
+            self._play();
+          }
+        };
         try {
           var a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA=');
-          a.play().catch(function () {});
-        } catch (e) {}
-        document.removeEventListener('pointerdown', unlock);
-        document.removeEventListener('touchstart', unlock);
-        if (self.blocked) {
-          self.blocked = false;
-          self._status('🔊 جاري تشغيل ' + self.q.length + ' رسالة...');
-          self._play();
-        }
+          a.play().then(ok).catch(function () {
+            tried = false;
+            self._status('⚠️ الدوسة مش متسجلة — دوس على الصفحة نفسها مرة');
+          });
+        } catch (e) { ok(); }
       };
       document.addEventListener('pointerdown', unlock);
+      document.addEventListener('click', unlock);
       document.addEventListener('touchstart', unlock);
     },
 
@@ -1081,6 +1090,8 @@
     }
   };
 })();
+
+
 
 
 
