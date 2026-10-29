@@ -903,6 +903,22 @@
     _signal: async function (p) {
       if (!p || !p.from || p.from === this.cfg.id) return;
       var id = String(p.from), self = this;
+      if (p.type === 'call') {
+        /* ⭐ مكالمة واردة — الرد التلقائي: اختيار المتصل وفتح الاتصال فورًا */
+        if (String(this.cfg.id) === 'master') {
+          this.onlinePeers[id] = { id: id, name: p.name || id, seen: Date.now() };
+          if (String(this.selectedId) !== id) {
+            Object.keys(this.peers).forEach(function (o) { if (o !== id) self._drop(o); });
+            this.selectedId = id;
+          }
+          this._renderTargets();
+          this._speaker('📞 ' + (p.name || id));
+          this._status('📞 مكالمة من ' + (p.name || id) + ' — جاري الرد التلقائي');
+          if (!this.peers[id]) this._offer(id, p.name);
+          else this._playAll();
+        }
+        return;
+      }
       if (p.type === 'hello') {
         var isNew = !this.onlinePeers[id];
         this.onlinePeers[id] = { id: id, name: p.name || id, seen: Date.now() };
@@ -918,6 +934,8 @@
       try {
         if (p.type === 'disconnect') { this._drop(id); return; }
         if (p.type === 'offer') {
+          this._speaker('📞 ' + (p.name || id));
+          this._status('📞 مكالمة واردة من ' + (p.name || id) + ' — جاري الرد التلقائي');
           if (!pc || pc.signalingState === 'closed') { delete this.peers[id]; pc = this._makePeer(id, p.name); }
           await pc.setRemoteDescription(new RTCSessionDescription(p.sdp));
           var ans = await pc.createAnswer();
@@ -1029,6 +1047,8 @@
         var self = this; clearTimeout(this.maxTimer);
         this.maxTimer = setTimeout(function () { self.stop(); }, 60000);
         this._hello();
+        /* ⭐ ضغطة المايك = اتصال: المندوب ينادي المكتب والمكتب يتصل بيه فورًا */
+        this._send({ type: 'call', from: this.cfg.id, name: this.cfg.name, to: String(this.cfg.id) === 'master' ? '' : 'master' });
       } catch (e) { this.starting = false; this._status('⚠️ المايك: ' + (e.message || 'رفض الإذن')); }
     },
     stop: function () {
@@ -1056,7 +1076,7 @@
       if (!box) {
         box = document.createElement('div');
         box.id = 'faTargets';
-        box.style.cssText = 'position:fixed;left:14px;bottom:152px;z-index:2147483647;display:flex;flex-direction:column;gap:6px;direction:rtl;max-height:40vh;overflow:auto';
+        box.style.cssText = 'position:fixed;left:14px;top:152px;z-index:2147483647;display:flex;flex-direction:column;gap:6px;direction:rtl;max-height:40vh;overflow:auto';
         document.body.appendChild(box);
       }
       /* القايمة = كل المناديب من إعدادات البرنامج + أي واحد متصل مش مسجل */
@@ -1099,7 +1119,7 @@
     _ui: function () {
       if (document.getElementById('faPttBtn')) return;
       var wrap = document.createElement('div');
-      wrap.innerHTML = '<style>#faPttBtn{position:fixed;left:14px;bottom:14px;z-index:2147483647;width:62px;height:62px;border-radius:50%;background:linear-gradient(145deg,#1e9e6a,#12805a);color:#fff;font-size:27px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(18,128,90,.45);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;border:3px solid rgba(255,255,255,.55);transition:transform .1s}#faPttBtn.on{background:linear-gradient(145deg,#e85d5d,#b92e2e);transform:scale(1.12);box-shadow:0 0 0 10px rgba(232,93,93,.28)}#faPttSts{position:fixed;left:14px;bottom:84px;z-index:2147483647;background:#0f2e21;color:#a8d5bd;padding:6px 13px;border-radius:12px;font-size:12px;font-weight:700;max-width:280px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl}#faPttSpk{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;display:none;background:#b92e2e;color:#fff;padding:9px 22px;border-radius:24px;font-size:15px;font-weight:900;box-shadow:0 8px 24px rgba(185,46,46,.4);direction:rtl}</style><div id="faPttSts">🎙️ جاري الاتصال...</div><div id="faPttSpk"></div><div id="faPttBtn" title="اضغط للتحدث المباشر">🎙️</div>';
+      wrap.innerHTML = '<style>#faPttBtn{position:fixed;left:14px;top:14px;z-index:2147483647;width:62px;height:62px;border-radius:50%;background:linear-gradient(145deg,#1e9e6a,#12805a);color:#fff;font-size:27px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(18,128,90,.45);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;border:3px solid rgba(255,255,255,.55);transition:transform .1s}#faPttBtn.on{background:linear-gradient(145deg,#e85d5d,#b92e2e);transform:scale(1.12);box-shadow:0 0 0 10px rgba(232,93,93,.28)}#faPttSts{position:fixed;left:14px;top:84px;z-index:2147483647;background:#0f2e21;color:#a8d5bd;padding:6px 13px;border-radius:12px;font-size:12px;font-weight:700;max-width:280px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl}#faPttSpk{position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:2147483647;display:none;background:#b92e2e;color:#fff;padding:9px 22px;border-radius:24px;font-size:15px;font-weight:900;box-shadow:0 8px 24px rgba(185,46,46,.4);direction:rtl}</style><div id="faPttSts">🎙️ جاري الاتصال...</div><div id="faPttSpk"></div><div id="faPttBtn" title="اضغط للتحدث المباشر">🎙️</div>';
       document.body.appendChild(wrap);
       var self = this, btn = document.getElementById('faPttBtn');
       btn.addEventListener('pointerdown', function (e) {
