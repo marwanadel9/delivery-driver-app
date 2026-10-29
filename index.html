@@ -845,7 +845,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
-/* FAVoice LIVE v2 — صوت مباشر ثنائي الاتجاه (مسار صامت دائم — بلا إعادة تفاوض) */
+/* FAVoice LIVE v2 — صوت مباشر ثنائي الاتجاه + اختيار المندوب */
 (function () {
   var SILENT = null, SILENT_CTX = null;
   function silentTrack() {
@@ -861,7 +861,7 @@
   var V = window.FAVoice = {
     cfg: null, sb: null, ch: null, peers: {}, audioEls: {}, onlinePeers: {},
     micStream: null, talking: false, starting: false, toggleMode: false, downAt: 0,
-    timer: null, maxTimer: null, pendingIce: {}, selectedId: '',
+    timer: null, maxTimer: null, pendingIce: {}, selectedId: '', _seenTargets: '',
 
     init: function (cfg) {
       this.cfg = cfg || {};
@@ -877,7 +877,18 @@
           if (status === 'SUBSCRIBED') {
             self._status('🟢 متصل — اضغط المايك واتكلم');
             self._hello();
-            self.timer = setInterval(function () { self._hello(); }, 8000);
+            self.timer = setInterval(function () {
+              self._hello();
+              if (String(self.cfg.id) === 'master') {
+                /* تنضيف قائمة المتصلين (لو مبعتش hello من 25 ثانية يعتبر offline) */
+                var now = Date.now(), changed = false;
+                Object.keys(self.onlinePeers).forEach(function (id) {
+                  if (now - self.onlinePeers[id].seen > 25000) { delete self.onlinePeers[id]; changed = true; }
+                });
+                if (changed) self._renderTargets();
+              }
+            }, 8000);
+            self._renderTargets();
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             self._status('⚠️ تعذر الاتصال — بيحاول تاني...');
           }
@@ -893,6 +904,7 @@
       if (!p || !p.from || p.from === this.cfg.id) return;
       var id = String(p.from), self = this;
       if (p.type === 'hello') {
+        var isNew = !this.onlinePeers[id];
         this.onlinePeers[id] = { id: id, name: p.name || id, seen: Date.now() };
         if (String(this.cfg.id) === 'master') {
           this._renderTargets();
@@ -909,6 +921,7 @@
           if (!pc || pc.signalingState === 'closed') { delete this.peers[id]; pc = this._makePeer(id, p.name); }
           await pc.setRemoteDescription(new RTCSessionDescription(p.sdp));
           var ans = await pc.createAnswer();
+          ans.sdp = this._tuneSdp(ans.sdp);
           await pc.setLocalDescription(ans);
           this._send({ type: 'answer', from: this.cfg.id, to: id, name: this.cfg.name, sdp: pc.localDescription });
           this._flushIce(id);
@@ -922,10 +935,27 @@
       } catch (e) { this._status('⚠️ اتصال صوتي: ' + (e.message || e)); }
     },
 
+    /* ⭐ تحسين جودة الصوت: Opus نقي 64kbps + تصحيح أخطاء — صوت واضح بلا تقطيع */
+    _tuneSdp: function (sdp) {
+      return sdp.replace(/(a=fmtp:\d+ .*?)(\r?\n)/, function (m, p, nl) {
+        if (p.indexOf('maxaveragebitrate') > -1) return m;
+        return p + ';maxaveragebitrate=64000;stereo=0;sprop-stereo=0;useinbandfec=1;usedtx=0' + nl;
+      });
+    },
+    _tuneSenders: function (pc) {
+      try {
+        pc.getSenders().forEach(function (s) {
+          if (s.track && s.track.kind === 'audio') {
+            s.setParameters({ encodings: [{ maxBitrate: 64000, active: true }] }).catch(function () {});
+          }
+        });
+      } catch (e) {}
+    },
+
     _makePeer: function (id, name) {
       var self = this;
       if (this.peers[id]) return this.peers[id];
-      var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] });
+      var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun2.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] });
       pc._faName = name || id;
       var liveMic = this.micStream && this.micStream.getAudioTracks()[0];
       var sendTrack = (liveMic && liveMic.readyState === 'live') ? liveMic : silentTrack();
@@ -945,7 +975,7 @@
         self._playOne(a);
       };
       pc.onconnectionstatechange = function () {
-        if (pc.connectionState === 'connected') self._status('🟢 اتصال صوتي مباشر (الاتجاهين)');
+        if (pc.connectionState === 'connected') { self._tuneSenders(pc); self._status('🟢 اتصال صوتي مباشر HD (الاتجاهين)'); }
         else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') self._drop(id, true);
       };
       this.peers[id] = pc;
@@ -963,6 +993,7 @@
         var pc = this._makePeer(id, name);
         if (pc.signalingState !== 'stable') return;
         var o = await pc.createOffer();
+        o.sdp = this._tuneSdp(o.sdp);
         await pc.setLocalDescription(o);
         this._send({ type: 'offer', from: this.cfg.id, to: id, name: this.cfg.name, sdp: pc.localDescription });
       } catch (e) { this._status('⚠️ تعذر بدء الاتصال'); }
@@ -977,7 +1008,7 @@
       if (this.talking || this.starting) return;
       this.starting = true; this._status('🎤 جاري فتح المايك...');
       try {
-        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: 48000, latency: 0.003 } });
         var track = this.micStream.getAudioTracks()[0];
         var ids = Object.keys(this.peers);
         for (var i = 0; i < ids.length; i++) {
@@ -1010,28 +1041,50 @@
     _playOne: function (a) { if (a) { var p = a.play(); if (p && p.catch) p.catch(function () {}); } },
     _playAll: function () { var s = this; Object.keys(this.audioEls).forEach(function (id) { s._playOne(s.audioEls[id]); }); },
 
+    /* ⭐ اختيار المندوب — يظهر للماستر فوق زرار المايك */
     _renderTargets: function () {
       if (String(this.cfg.id) !== 'master') return;
+      var self = this;
       var box = document.getElementById('faTargets');
       if (!box) {
         box = document.createElement('div');
         box.id = 'faTargets';
-        box.style.cssText = 'position:fixed;left:14px;bottom:155px;z-index:2147483647;display:flex;flex-direction:column;gap:6px;direction:rtl';
+        box.style.cssText = 'position:fixed;left:14px;bottom:152px;z-index:2147483647;display:flex;flex-direction:column;gap:6px;direction:rtl;max-height:40vh;overflow:auto';
         document.body.appendChild(box);
       }
-      var s = this;
-      box.innerHTML = Object.keys(this.onlinePeers).map(function (id) {
-        var p = s.onlinePeers[id];
-        var on = String(s.selectedId) === id;
-        return '<button data-id="' + id + '" style="padding:8px 14px;border-radius:12px;border:2px solid ' + (on ? '#d4a72c' : '#2f5444') + ';background:' + (on ? 'linear-gradient(145deg,#d4a72c,#b8860b)' : '#0f2e21') + ';color:' + (on ? '#2b2105' : '#a8d5bd') + ';font-weight:800;font-size:13px;cursor:pointer;text-align:right">🚚 ' + (p.name || id) + '</button>';
+      /* القايمة = كل المناديب من إعدادات البرنامج + أي واحد متصل مش مسجل */
+      var list = [];
+      if (typeof drivers !== 'undefined' && Array.isArray(drivers)) {
+        drivers.forEach(function (d) { list.push({ id: String(d.sheet), name: d.name || d.sheet }); });
+      }
+      Object.keys(this.onlinePeers).forEach(function (id) {
+        if (!list.some(function (x) { return x.id === id; })) list.push({ id: id, name: self.onlinePeers[id].name });
+      });
+      var self = this;
+      var html = '<div style="font-size:11px;font-weight:900;color:#a8d5bd;background:#081a12;padding:5px 10px;border-radius:8px">🎙️ اختر المندوب اللي هتكلمه:</div>';
+      html += list.map(function (d) {
+        var on = self.onlinePeers[d.id] && (Date.now() - self.onlinePeers[d.id].seen < 25000);
+        var sel = String(self.selectedId) === d.id;
+        var live = self.peers[d.id] && self.peers[d.id].connectionState === 'connected';
+        return '<button data-id="' + d.id + '" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;border:2px solid ' + (sel ? '#d4a72c' : '#2f5444') + ';background:' + (sel ? 'linear-gradient(145deg,#d4a72c,#b8860b)' : '#0f2e21') + ';color:' + (sel ? '#2b2105' : '#a8d5bd') + ';font-weight:800;font-size:13px;cursor:pointer;text-align:right">' +
+          '<span style="width:9px;height:9px;border-radius:50%;background:' + (on ? '#4ade80' : '#6b7280') + ';box-shadow:0 0 6px ' + (on ? '#4ade80' : 'transparent') + '"></span>' +
+          '<span style="flex:1">🚚 ' + d.name + '</span>' +
+          (live ? '<span style="font-size:10px;background:rgba(0,0,0,.25);padding:2px 8px;border-radius:8px">متصل صوتيًا 🔊</span>' : (on ? '<span style="font-size:10px;opacity:.75">متصل</span>' : '<span style="font-size:10px;opacity:.55">غير متصل</span>')) +
+          '</button>';
       }).join('');
-      box.querySelectorAll('button').forEach(function (b) {
+      if (!list.length) html += '<div style="font-size:12px;color:#8fa89c;padding:6px">مفيش مناديب — افتح تطبيق المندوب الأول</div>';
+      box.innerHTML = html;
+      box.querySelectorAll('button[data-id]').forEach(function (b) {
         b.onclick = function () {
-          s.selectedId = b.getAttribute('data-id');
-          var old = s.peers[s.selectedId];
-          if (old) { try { old.close(); } catch (e) {} delete s.peers[s.selectedId]; }
+          var id = b.getAttribute('data-id');
+          if (String(s.selectedId) !== id) {
+            /* قفل الاتصال القديم */
+            Object.keys(s.peers).forEach(function (old) { if (old !== id) s._drop(old); });
+            s.selectedId = id;
+          }
           s._renderTargets();
-          s._offer(s.selectedId, s.onlinePeers[s.selectedId] ? s.onlinePeers[s.selectedId].name : '');
+          if (s.onlinePeers[id]) s._offer(id, s.onlinePeers[id].name);
+          else s._status('⚠️ ' + (s.onlinePeers[id] ? s.onlinePeers[id].name : id) + ' مش متصل حاليًا');
         };
       });
     },
@@ -1063,6 +1116,7 @@
     _speaker: function (n) { var s = document.getElementById('faPttSpk'); if (!s) return; s.textContent = '📢 ' + (n || 'المتحدث'); s.style.display = 'block'; clearTimeout(this._spkT); this._spkT = setTimeout(function () { s.style.display = 'none'; }, 1400); }
   };
 })();
+
 
 
 
