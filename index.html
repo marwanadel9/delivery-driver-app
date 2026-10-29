@@ -941,6 +941,17 @@
         else if (pc.connectionState === 'failed') self._status('⚠️ فشل الاتصال الصوتي؛ قد تحتاج الشبكة إلى TURN');
       };
       this.peers[id] = pc;
+      // لو الاتصال اتعمل بعد ما المكتب بدأ الكلام، اربط المايك فورًا.
+      // بدون هذا الربط قد يسمع المكتب المندوب ولا يسمع المندوب المكتب.
+      if (this.talking && this.micStream) {
+        var liveTrack = this.micStream.getAudioTracks().find(function (t) { return t.readyState === 'live'; });
+        if (liveTrack && pc._faAudioTransceiver && pc._faAudioTransceiver.sender) {
+          pc._faAudioTransceiver.direction = 'sendrecv';
+          pc._faAudioTransceiver.sender.replaceTrack(liveTrack).catch(function (e) {
+            self._status('⚠️ تعذر ربط المايك بالاتصال الجديد');
+          });
+        }
+      }
       return pc;
     },
     _offer: async function (id, name) {
@@ -968,13 +979,17 @@
         }
         var track = this.micStream.getAudioTracks()[0];
         if (!track) throw new Error('لم يتم العثور على مسار صوت');
+        track.enabled = true;
         var ids = Object.keys(this.peers);
         for (var i = 0; i < ids.length; i++) {
           var pc = this.peers[ids[i]];
-          if (pc && pc._faAudioTransceiver) await pc._faAudioTransceiver.sender.replaceTrack(track);
+          if (pc && pc._faAudioTransceiver && pc._faAudioTransceiver.sender) {
+            pc._faAudioTransceiver.direction = 'sendrecv';
+            await pc._faAudioTransceiver.sender.replaceTrack(track);
+          }
         }
-        track.enabled = true; this.talking = true; this.starting = false; this._btnState(true);
-        this._status('🔴 بث مباشر — اتكلم الآن');
+        this.talking = true; this.starting = false; this._btnState(true);
+        this._status(Object.keys(this.peers).length ? '🔴 بث مباشر — اتكلم الآن' : '🔴 المايك يعمل — جاري انتظار اتصال الطرف الآخر');
         var self = this; clearTimeout(this.maxTimer);
         this.maxTimer = setTimeout(function () { self.stop(); }, 60000);
         this._hello();
