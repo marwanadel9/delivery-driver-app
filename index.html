@@ -939,7 +939,7 @@
     _tuneSdp: function (sdp) {
       return sdp.replace(/(a=fmtp:\d+ .*?)(\r?\n)/, function (m, p, nl) {
         if (p.indexOf('maxaveragebitrate') > -1) return m;
-        return p + ';maxaveragebitrate=64000;stereo=0;sprop-stereo=0;useinbandfec=1;usedtx=0' + nl;
+        return p + ';maxaveragebitrate=64000;stereo=0;sprop-stereo=0;useinbandfec=1;usedtx=0;minptime=10;maxptime=20' + nl;
       });
     },
     _tuneSenders: function (pc) {
@@ -955,7 +955,14 @@
     _makePeer: function (id, name) {
       var self = this;
       if (this.peers[id]) return this.peers[id];
-      var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun2.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] });
+      var pc = new RTCPeerConnection({ iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' },
+        /* ⭐ TURN — بيشتغل تلقائيًا بس لو الشبكة صعبة (NAT مغلق) */
+        { urls: 'turn:a.relay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:a.relay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:a.relay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+      ] });
       pc._faName = name || id;
       var liveMic = this.micStream && this.micStream.getAudioTracks()[0];
       var sendTrack = (liveMic && liveMic.readyState === 'live') ? liveMic : silentTrack();
