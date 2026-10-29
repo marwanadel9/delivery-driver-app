@@ -846,14 +846,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
 /* ============================================================
-   FAVoice — ووكي توكي عبر Supabase Realtime Broadcast
-   ضغطة سريعة = مايك مفتوح | ضغطة مطولة = ووكي توكي عادي
+   FAVoice v5 — ووكي توكي عبر Supabase Realtime Broadcast
+   ضغطة سريعة = مايك مفتوح | ضغطة مطولة = ووكي توكي
    ============================================================ */
 (function () {
   var V = window.FAVoice = {
     cfg: null, sb: null, ch: null, rec: null, stream: null,
     seq: 0, q: [], playing: false, peers: {}, timer: null,
-    talking: false, blocked: false, _maxT: null,
+    talking: false, blocked: false, _maxT: null, _meter: null, _silentChunks: 0,
 
     init: function (cfg) {
       this.cfg = cfg || {};
@@ -871,7 +871,7 @@
         this.ch.on('broadcast', { event: 'ptt-hi' }, function (m) { self._hi(m.payload || {}); });
         this.ch.subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
-            self._status('🎙️ جاهز (v4)');
+            self._status('🎙️ جاهز (v5)');
             self._hi({ from: cfg.id, name: cfg.name }, true);
             self.timer = setInterval(function () {
               self._hi({ from: cfg.id, name: cfg.name }, true);
@@ -883,7 +883,7 @@
       } catch (e) { this._status('⚠️ ' + e.message); }
     },
 
-    /* أول دوسة على الشاشة: تفك حظر الصوت وتشغل المخزن */
+    /* أول دوسة: تفك حظر الصوت + تشغل المخزن */
     _unlockAudio: function () {
       var self = this;
       var unlock = function () {
@@ -895,15 +895,13 @@
         document.removeEventListener('touchstart', unlock);
         if (self.blocked) {
           self.blocked = false;
-          self._status('🔊 جاري تشغيل الرسائل...');
+          self._status('🔊 جاري تشغيل ' + self.q.length + ' رسالة...');
           self._play();
         }
       };
       document.addEventListener('pointerdown', unlock);
       document.addEventListener('touchstart', unlock);
     },
-
-    _meter: null, _level: 0, _silentChunks: 0,
 
     _startMeter: function (st) {
       try {
@@ -918,7 +916,6 @@
           an.getByteTimeDomainData(buf);
           var mx = 0;
           for (var i = 0; i < buf.length; i++) { var v = Math.abs(buf[i] - 128); if (v > mx) mx = v; }
-          self._level = mx;
           if (self.talking) {
             if (mx < 8) self._status('🔴 بتتكلم... ⚠️ المايك ساكت! (' + mx + ')');
             else self._status('🔴 بتتكلم... 🎤 ' + mx);
@@ -941,10 +938,11 @@
         if (window.MediaRecorder && !MediaRecorder.isTypeSupported(mime)) mime = '';
         try { self.rec = new MediaRecorder(st, mime ? { mimeType: mime } : undefined); }
         catch (e) { self.rec = new MediaRecorder(st); }
+        var mtype = self.rec.mimeType || 'audio/webm';
         self.rec.ondataavailable = function (ev) {
           if (ev.data && ev.data.size > 0 && self.talking && ev.data.size < 150) {
             self._silentChunks++;
-            if (self._silentChunks === 5) self._status('⚠️ المايك بيسجل سكون — افحص المايك في إعدادات ويندوز');
+            if (self._silentChunks === 5) self._status('⚠️ المايك بيسجل سكون — افحص المايك في ويندوز');
           } else if (ev.data && ev.data.size >= 150) self._silentChunks = 0;
           if (ev.data && ev.data.size > 0 && self.ch) {
             var r = new FileReader();
@@ -952,7 +950,7 @@
               var b64 = String(r.result).split(',')[1] || '';
               self.ch && self.ch.send({
                 type: 'broadcast', event: 'ptt',
-                payload: { d: b64, mime: self.rec.mimeType || 'audio/webm', from: self.cfg.id, name: self.cfg.name, seq: self.seq++ }
+                payload: { d: b64, mime: mtype, from: self.cfg.id, name: self.cfg.name, seq: self.seq++ }
               });
             };
             r.readAsDataURL(ev.data);
@@ -961,7 +959,6 @@
         self.rec.start(200);
         self.talking = true;
         self._btnState(true);
-        /* أمان: قفل تلقائي بعد 60 ثانية */
         clearTimeout(self._maxT);
         self._maxT = setTimeout(function () { if (self.talking) self.stop(); }, 60000);
       }).catch(function (e) { self._status('⚠️ المايك: ' + (e.message || 'مرفوض')); });
@@ -984,12 +981,17 @@
         var bin = atob(p.d), arr = new Uint8Array(bin.length);
         for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
         this.q.push(new Blob([arr], { type: p.mime || 'audio/webm' }));
+        if (this.q.length > 80) this.q.shift();
+        if (this.blocked) {
+          this._status('🔊 وصل صوت (' + this.q.length + ' قطعة مخزنة) — دوس على الشاشة يشتغل');
+          return;
+        }
         this._play();
       } catch (e) {}
     },
 
     _play: function () {
-      if (this.playing || !this.q.length) return;
+      if (this.playing || !this.q.length || this.blocked) return;
       this.playing = true;
       var self = this;
       var blob = this.q.shift();
@@ -1000,12 +1002,11 @@
       a.play().then(function () {
         self._status('🔊 بيسمع: ' + (self._lastSpeaker || ''));
       }).catch(function () {
+        window.URL.revokeObjectURL(u);
         self.q.unshift(blob);
         self.playing = false;
-        if (!self.blocked) {
-          self.blocked = true;
-          self._status('🔊 وصل صوت — هيشتغل مع أول دوسة');
-        }
+        self.blocked = true;
+        self._status('🔊 وصل صوت (' + self.q.length + ' قطعة مخزنة) — دوس على الشاشة يشتغل');
       });
     },
 
@@ -1027,7 +1028,7 @@
         '-webkit-user-select:none;touch-action:none;border:3px solid rgba(255,255,255,.55);transition:transform .1s;}' +
         '#faPttBtn.on{background:linear-gradient(145deg,#e85d5d,#b92e2e);transform:scale(1.12);box-shadow:0 0 0 10px rgba(232,93,93,.28);}' +
         '#faPttSts{position:fixed;left:14px;bottom:84px;z-index:2147483647;background:#0f2e21;color:#a8d5bd;padding:6px 13px;' +
-        'border-radius:12px;font-size:12px;font-weight:700;max-width:250px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl;}' +
+        'border-radius:12px;font-size:12px;font-weight:700;max-width:260px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl;}' +
         '#faPttSpk{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;display:none;' +
         'background:#b92e2e;color:#fff;padding:9px 22px;border-radius:24px;font-size:15px;font-weight:900;' +
         'box-shadow:0 8px 24px rgba(185,46,46,.4);direction:rtl;}</style>' +
@@ -1080,6 +1081,8 @@
     }
   };
 })();
+
+
 
 
 
