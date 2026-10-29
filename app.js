@@ -111,6 +111,12 @@
     return String(code >= 0x06F0 ? code - 0x06F0 : code - 0x0660);
   });
 
+  // إزالة الإيموجي من نصوص الأصناف
+  const stripEmoji = (value) => String(value ?? '')
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE0F}]/gu, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
   const normalizePayment = (value) => {
     const v = String(value ?? '').trim().toLowerCase();
 
@@ -1035,7 +1041,7 @@
       i += 1
     ) {
       const name =
-        nameList[i] || '';
+        stripEmoji(nameList[i] || '');
 
       const qty =
         qtyList[i] || '';
