@@ -4,7 +4,7 @@
 (function () {
   var V = window.FAVoice = {
     cfg: null, sb: null, ch: null, rec: null, stream: null,
-    seq: 0, q: [], playing: false, peers: {}, timer: null, talking: false,
+    seq: 0, q: [], playing: false, peers: {}, timer: null, talking: false, blocked: false,
 
     init: function (cfg) {
       this.cfg = cfg || {};
@@ -22,21 +22,21 @@
         this.ch.on('broadcast', { event: 'ptt-hi' }, function (m) { self._hi(m.payload || {}); });
         this.ch.subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
-            self._status('🎙️ القناة جاهزة — دوس على الشاشة مرة واحدة');
+            self._status('🎙️ جاهز');
             self._hi({ from: cfg.id, name: cfg.name }, true);
             self.timer = setInterval(function () {
               self._hi({ from: cfg.id, name: cfg.name }, true);
             }, 12000);
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            self._status('⚠️ تعذر الاتصال — بيحاول تاني...');
             setTimeout(function () { self.init(self.cfg); }, 4000);
           }
         });
       } catch (e) { this._status('⚠️ ' + e.message); }
     },
 
-    /* فتح قفل الصوت التلقائي في المتصفح — أول دوسة على الشاشة */
+    /* أول دوسة على الشاشة: تفك حظر الصوت + تشغل اللي اتخزن */
     _unlockAudio: function () {
+      var self = this;
       var unlock = function () {
         try {
           var a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA=');
@@ -44,6 +44,11 @@
         } catch (e) {}
         document.removeEventListener('pointerdown', unlock);
         document.removeEventListener('touchstart', unlock);
+        if (self.blocked) {
+          self.blocked = false;
+          self._status('🔊 جاري تشغيل الرسائل المخزنة...');
+          self._play();
+        }
       };
       document.addEventListener('pointerdown', unlock);
       document.addEventListener('touchstart', unlock);
@@ -103,23 +108,28 @@
       if (this.playing || !this.q.length) return;
       this.playing = true;
       var self = this;
-      var url = URL.createObjectURL(this.q.shift());
-      var a = new Audio(url);
-      a.onended = function () { URL.revokeObjectURL(url); self.playing = false; self._play(); };
-      a.onerror = function () { URL.revokeObjectURL(url); self.playing = false; self._play(); };
+      var blob = this.q.shift();
+      var u = window.URL.createObjectURL(blob);
+      var a = new Audio(u);
+      a.onended = function () { window.URL.revokeObjectURL(u); self.playing = false; self._play(); };
+      a.onerror = function () { window.URL.revokeObjectURL(u); self.playing = false; self._play(); };
       a.play().then(function () {
-        self._status('🔊 بيسمع: ' + (self._lastSpeaker || 'حد') + '...');
+        self._status('🔊 بيسمع: ' + (self._lastSpeaker || ''));
       }).catch(function () {
+        /* الصوت محظور لسه: نرجع القطعة ونستنى أول دوسة */
+        self.q.unshift(blob);
         self.playing = false;
-        self._status('⚠️ دوس على الشاشة مرة واحدة عشان يشتغل الصوت');
-        self._play();
+        if (!self.blocked) {
+          self.blocked = true;
+          self._status('🔊 وصل صوت — هيشتغل مع أول دوسة');
+        }
       });
     },
 
     _hi: function (p, quiet) {
       if (!p || !p.from || p.from === this.cfg.id) return;
       this.peers[p.from] = p.name || p.from;
-      if (!quiet) this._status('🟢 ' + (p.name || p.from) + ' دخل القناة');
+      if (!quiet && !this.talking && !this.blocked) this._status('🟢 ' + (p.name || p.from) + ' دخل القناة');
     },
 
     _ui: function () {
@@ -155,7 +165,7 @@
     _btnState: function (on) {
       var b = document.getElementById('faPttBtn');
       if (b) { b.classList.toggle('on', on); b.textContent = on ? '📢' : '🎙️'; }
-      this._status(on ? '🔴 بتتكلم...' : '🎙️ القناة جاهزة');
+      this._status(on ? '🔴 بتتكلم...' : '🎙️ جاهز');
     },
     _status: function (t) {
       var s = document.getElementById('faPttSts');
@@ -165,7 +175,6 @@
       this._lastSpeaker = name;
       var s = document.getElementById('faPttSpk');
       if (!s) return;
-      var self = this;
       s.textContent = '📢 ' + (name || 'حد') + ' بيتكلم...';
       s.style.display = 'block';
       clearTimeout(this._spkT);
