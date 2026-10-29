@@ -264,6 +264,7 @@
     }
 
   </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -842,5 +843,21 @@
   </script>
   <script src="/app.js"></script>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/voice-walkie.js"></script>
+  <script>
+  /* 🎙️ قناة الصوت — اسم المندوب بيتقرأ من جلسته تلقائيًا */
+  (function(){
+    var cfg = { url: 'https://wnfibznjxihilgfedfij.supabase.co',
+                key: 'sb_publishable_adbAl6HXUFEBXxjG5nsg_A_lg1s1trz',
+                room: 'fa-dispatch-voice', name: 'مندوب', id: 'mandoub' };
+    try {
+      var s = JSON.parse(localStorage.getItem('driver_session') || '{}');
+      cfg.id   = s.sheet_name || s.username || 'mandoub';
+      cfg.name = s.mandoub_name || s.username || 'مندوب';
+    } catch(e){}
+    if (window.FAVoice) FAVoice.init(cfg);
+  })();
+  </script>
 </body>
 </html>
