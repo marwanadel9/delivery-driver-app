@@ -871,7 +871,7 @@
         this.ch.on('broadcast', { event: 'ptt-hi' }, function (m) { self._hi(m.payload || {}); });
         this.ch.subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
-            self._status('🎙️ جاهز (v3)');
+            self._status('🎙️ جاهز (v4)');
             self._hi({ from: cfg.id, name: cfg.name }, true);
             self.timer = setInterval(function () {
               self._hi({ from: cfg.id, name: cfg.name }, true);
@@ -903,6 +903,30 @@
       document.addEventListener('touchstart', unlock);
     },
 
+    _meter: null, _level: 0, _silentChunks: 0,
+
+    _startMeter: function (st) {
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        this._actx = this._actx || new AC();
+        var src = this._actx.createMediaStreamSource(st);
+        var an = this._actx.createAnalyser(); an.fftSize = 512;
+        src.connect(an);
+        var buf = new Uint8Array(an.frequencyBinCount), self = this;
+        clearInterval(this._meter);
+        this._meter = setInterval(function () {
+          an.getByteTimeDomainData(buf);
+          var mx = 0;
+          for (var i = 0; i < buf.length; i++) { var v = Math.abs(buf[i] - 128); if (v > mx) mx = v; }
+          self._level = mx;
+          if (self.talking) {
+            if (mx < 8) self._status('🔴 بتتكلم... ⚠️ المايك ساكت! (' + mx + ')');
+            else self._status('🔴 بتتكلم... 🎤 ' + mx);
+          }
+        }, 300);
+      } catch (e) {}
+    },
+
     start: function () {
       if (this.talking || this.rec) return;
       var self = this;
@@ -910,12 +934,18 @@
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       }).then(function (st) {
         self.stream = st;
+        self._startMeter(st);
+        self._silentChunks = 0;
         var mime = 'audio/webm;codecs=opus';
         if (!window.MediaRecorder || !MediaRecorder.isTypeSupported(mime)) mime = 'audio/webm';
         if (window.MediaRecorder && !MediaRecorder.isTypeSupported(mime)) mime = '';
         try { self.rec = new MediaRecorder(st, mime ? { mimeType: mime } : undefined); }
         catch (e) { self.rec = new MediaRecorder(st); }
         self.rec.ondataavailable = function (ev) {
+          if (ev.data && ev.data.size > 0 && self.talking && ev.data.size < 150) {
+            self._silentChunks++;
+            if (self._silentChunks === 5) self._status('⚠️ المايك بيسجل سكون — افحص المايك في إعدادات ويندوز');
+          } else if (ev.data && ev.data.size >= 150) self._silentChunks = 0;
           if (ev.data && ev.data.size > 0 && self.ch) {
             var r = new FileReader();
             r.onload = function () {
@@ -939,6 +969,7 @@
 
     stop: function () {
       clearTimeout(this._maxT);
+      clearInterval(this._meter);
       this.talking = false;
       this._btnState(false);
       try { if (this.rec && this.rec.state !== 'inactive') this.rec.stop(); } catch (e) {}
@@ -1049,6 +1080,8 @@
     }
   };
 })();
+
+
 
   </script>
   <script>
