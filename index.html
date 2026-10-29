@@ -845,20 +845,29 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
-/* FAVoice LIVE — صوت WebRTC مباشر بلا تسجيل أو تخزين للمقاطع */
+/* FAVoice LIVE v2 — صوت مباشر ثنائي الاتجاه (مسار صامت دائم — بلا إعادة تفاوض) */
 (function () {
+  var SILENT = null, SILENT_CTX = null;
+  function silentTrack() {
+    if (SILENT && SILENT.readyState === 'live') return SILENT;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    SILENT_CTX = new AC();
+    var dest = SILENT_CTX.createMediaStreamDestination();
+    var osc = SILENT_CTX.createOscillator(), g = SILENT_CTX.createGain();
+    g.gain.value = 0; osc.connect(g); g.connect(dest); osc.start();
+    SILENT = dest.stream.getAudioTracks()[0];
+    return SILENT;
+  }
   var V = window.FAVoice = {
-    cfg: null, sb: null, ch: null, peers: {}, streams: {}, micStream: null,
-    talking: false, starting: false, toggleMode: false, downAt: 0,
-    timer: null, maxTimer: null, pendingIce: {}, audioEls: {}, onlinePeers: {}, selectedId: '',
+    cfg: null, sb: null, ch: null, peers: {}, audioEls: {}, onlinePeers: {},
+    micStream: null, talking: false, starting: false, toggleMode: false, downAt: 0,
+    timer: null, maxTimer: null, pendingIce: {}, selectedId: '',
 
     init: function (cfg) {
       this.cfg = cfg || {};
       this._ui();
       var self = this;
-      if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        this._status('⚠️ المتصفح لا يدعم الصوت المباشر WebRTC أو يلزم HTTPS'); return;
-      }
+      if (!window.RTCPeerConnection) { this._status('⚠️ المتصفح لا يدعم WebRTC'); return; }
       if (!window.supabase || !cfg.key || !cfg.url) { this._status('⚠️ إعدادات الاتصال غير مكتملة'); return; }
       try {
         this.sb = window.supabase.createClient(cfg.url, cfg.key);
@@ -866,194 +875,171 @@
         this.ch.on('broadcast', { event: 'rtc-signal' }, function (m) { self._signal(m.payload || {}); });
         this.ch.subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
-            self._status('🟢 متصل — الصوت مباشر');
+            self._status('🟢 متصل — اضغط المايك واتكلم');
             self._hello();
             self.timer = setInterval(function () { self._hello(); }, 8000);
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            self._status('⚠️ تعذر الاتصال — جاري إعادة المحاولة');
+            self._status('⚠️ تعذر الاتصال — بيحاول تاني...');
           }
         });
         document.addEventListener('pointerdown', function () { self._playAll(); }, { passive: true });
-        document.addEventListener('click', function () { self._playAll(); }, { passive: true });
       } catch (e) { this._status('⚠️ ' + (e.message || e)); }
     },
 
-    _send: function (payload) {
-      if (!this.ch) return Promise.resolve();
-      return Promise.resolve(this.ch.send({ type: 'broadcast', event: 'rtc-signal', payload: payload })).catch(function () {});
-    },
+    _send: function (p) { if (this.ch) { try { this.ch.send({ type: 'broadcast', event: 'rtc-signal', payload: p }); } catch (e) {} } },
     _hello: function () { this._send({ type: 'hello', from: this.cfg.id, name: this.cfg.name }); },
+
     _signal: async function (p) {
       if (!p || !p.from || p.from === this.cfg.id) return;
-      var id = String(p.from);
+      var id = String(p.from), self = this;
       if (p.type === 'hello') {
-        // المكتب يكتشف المندوبين المتصلين، لكنه لا يفتح اتصالًا إلا مع المندوب المحدد.
+        this.onlinePeers[id] = { id: id, name: p.name || id, seen: Date.now() };
         if (String(this.cfg.id) === 'master') {
-          this.onlinePeers[id] = { id: id, name: p.name || id, seen: Date.now() };
           this._renderTargets();
-          if (String(this.selectedId) === id && !this.peers[id]) await this._offer(id, p.name);
+          if (!this.selectedId) this.selectedId = id;
+          if (String(this.selectedId) === id && !this.peers[id]) this._offer(id, p.name);
         }
         return;
       }
       if (p.to && String(p.to) !== String(this.cfg.id)) return;
       var pc = this.peers[id];
       try {
-        if (p.type === 'disconnect') {
-          if (pc) {
-            try { pc.close(); } catch (_) {}
-            delete this.peers[id];
-          }
-          var oldAudio = this.audioEls[id];
-          if (oldAudio) { oldAudio.pause(); oldAudio.srcObject = null; oldAudio.remove(); delete this.audioEls[id]; }
-          return;
-        }
+        if (p.type === 'disconnect') { this._drop(id); return; }
         if (p.type === 'offer') {
-          if (!pc || pc.signalingState === 'closed') {
-            delete this.peers[id];
-            pc = this._makePeer(id, p.name);
-          }
+          if (!pc || pc.signalingState === 'closed') { delete this.peers[id]; pc = this._makePeer(id, p.name); }
           await pc.setRemoteDescription(new RTCSessionDescription(p.sdp));
-          var answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          await this._send({ type: 'answer', from: this.cfg.id, to: id, name: this.cfg.name, sdp: pc.localDescription });
-          await this._flushIce(id);
-        } else if (p.type === 'answer' && pc) {
-          if (!pc.currentRemoteDescription) {
-            await pc.setRemoteDescription(new RTCSessionDescription(p.sdp));
-            await this._flushIce(id);
-          }
+          var ans = await pc.createAnswer();
+          await pc.setLocalDescription(ans);
+          this._send({ type: 'answer', from: this.cfg.id, to: id, name: this.cfg.name, sdp: pc.localDescription });
+          this._flushIce(id);
+        } else if (p.type === 'answer' && pc && !pc.currentRemoteDescription) {
+          await pc.setRemoteDescription(new RTCSessionDescription(p.sdp));
+          this._flushIce(id);
         } else if (p.type === 'ice') {
-          if (!pc || !pc.remoteDescription) {
-            (this.pendingIce[id] = this.pendingIce[id] || []).push(p.candidate);
-          } else if (p.candidate) {
-            try { await pc.addIceCandidate(new RTCIceCandidate(p.candidate)); } catch (_) {}
-          }
+          if (!pc || !pc.remoteDescription) { (this.pendingIce[id] = this.pendingIce[id] || []).push(p.candidate); }
+          else if (p.candidate) { try { await pc.addIceCandidate(new RTCIceCandidate(p.candidate)); } catch (e) {} }
         }
-      } catch (e) { this._status('⚠️ تعذر إنشاء اتصال صوتي مع ' + (p.name || id)); }
+      } catch (e) { this._status('⚠️ اتصال صوتي: ' + (e.message || e)); }
     },
+
     _makePeer: function (id, name) {
       var self = this;
       if (this.peers[id]) return this.peers[id];
       var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] });
       pc._faName = name || id;
-      pc._faAudioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
-      pc.onicecandidate = function (ev) {
-        if (ev.candidate) self._send({ type: 'ice', from: self.cfg.id, to: id, candidate: ev.candidate });
-      };
+      var liveMic = this.micStream && this.micStream.getAudioTracks()[0];
+      var sendTrack = (liveMic && liveMic.readyState === 'live') ? liveMic : silentTrack();
+      pc.addTrack(sendTrack, liveMic ? this.micStream : new MediaStream([sendTrack]));
+      pc.onicecandidate = function (ev) { if (ev.candidate) self._send({ type: 'ice', from: self.cfg.id, to: id, candidate: ev.candidate }); };
       pc.ontrack = function (ev) {
         var stream = (ev.streams && ev.streams[0]) || new MediaStream([ev.track]);
-        var audio = self.audioEls[id];
-        if (!audio) {
-          audio = document.createElement('audio');
-          audio.autoplay = true;
-          audio.playsInline = true;
-          audio.muted = false;
-          audio.volume = 1;
-          audio.setAttribute('playsinline', '');
-          audio.setAttribute('autoplay', '');
-          audio.style.display = 'none';
-          document.body.appendChild(audio);
-          self.audioEls[id] = audio;
+        var a = self.audioEls[id];
+        if (!a) {
+          a = document.createElement('audio');
+          a.autoplay = true; a.playsInline = true; a.volume = 1; a.muted = false;
+          a.style.display = 'none'; document.body.appendChild(a);
+          self.audioEls[id] = a;
         }
-        audio.muted = false;
-        audio.volume = 1;
-        if (audio.srcObject !== stream) audio.srcObject = stream;
-        // بعض المتصفحات لا تسمح بتشغيل الصوت إلا بعد فك كتم مسار الاستقبال.
-        ev.track.onunmute = function () {
-          audio.muted = false;
-          audio.volume = 1;
-          self._playOne(audio);
-          self._status('🔊 يتم استقبال صوت ' + pc._faName);
-        };
-        ev.track.onended = function () {
-          self._status('ℹ️ انتهى مسار صوت ' + pc._faName);
-        };
-        self._playOne(audio);
-        self._speaker(pc._faName);
-        self._status('🔊 تم استلام مسار صوت من ' + pc._faName);
+        a.srcObject = stream;
+        ev.track.onunmute = function () { a.muted = false; a.volume = 1; self._playOne(a); self._speaker(pc._faName); self._status('🔊 بيسمع: ' + pc._faName); };
+        self._playOne(a);
       };
       pc.onconnectionstatechange = function () {
-        if (pc.connectionState === 'connected') self._status('🟢 اتصال صوتي مباشر جاهز');
-        else if (pc.connectionState === 'failed') self._status('⚠️ فشل الاتصال الصوتي؛ قد تحتاج الشبكة إلى TURN');
+        if (pc.connectionState === 'connected') self._status('🟢 اتصال صوتي مباشر (الاتجاهين)');
+        else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') self._drop(id, true);
       };
       this.peers[id] = pc;
-      if (this.talking && this.micStream) {
-        var liveTrack = this.micStream.getAudioTracks().find(function (t) { return t.readyState === 'live'; });
-        if (liveTrack && pc._faAudioTransceiver && pc._faAudioTransceiver.sender) {
-          pc._faAudioTransceiver.direction = 'sendrecv';
-          pc._faAudioTransceiver.sender.replaceTrack(liveTrack).catch(function () {
-            self._status('⚠️ تعذر ربط المايك بالاتصال');
-          });
-        }
-      }
       return pc;
+    },
+    _drop: function (id, silent) {
+      var pc = this.peers[id];
+      if (pc) { try { pc.close(); } catch (e) {} delete this.peers[id]; }
+      var a = this.audioEls[id];
+      if (a) { try { a.pause(); a.srcObject = null; a.remove(); } catch (e) {} delete this.audioEls[id]; }
+      if (!silent) this._send({ type: 'disconnect', from: this.cfg.id, to: id });
     },
     _offer: async function (id, name) {
       try {
         var pc = this._makePeer(id, name);
         if (pc.signalingState !== 'stable') return;
-        var offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-        await this._send({ type: 'offer', from: this.cfg.id, to: id, name: this.cfg.name, sdp: pc.localDescription });
-      } catch (e) { this._status('⚠️ تعذر بدء الاتصال الصوتي'); }
+        var o = await pc.createOffer();
+        await pc.setLocalDescription(o);
+        this._send({ type: 'offer', from: this.cfg.id, to: id, name: this.cfg.name, sdp: pc.localDescription });
+      } catch (e) { this._status('⚠️ تعذر بدء الاتصال'); }
     },
     _flushIce: async function (id) {
       var pc = this.peers[id], list = this.pendingIce[id] || [];
       delete this.pendingIce[id];
-      for (var i = 0; i < list.length; i++) {
-        if (list[i] && pc && pc.remoteDescription) { try { await pc.addIceCandidate(new RTCIceCandidate(list[i])); } catch (_) {} }
-      }
+      for (var i = 0; i < list.length; i++) { if (list[i] && pc && pc.remoteDescription) { try { await pc.addIceCandidate(new RTCIceCandidate(list[i])); } catch (e) {} } }
     },
 
     start: async function () {
       if (this.talking || this.starting) return;
       this.starting = true; this._status('🎤 جاري فتح المايك...');
       try {
-        if (!this.micStream || !this.micStream.getAudioTracks().some(function (t) { return t.readyState === 'live'; })) {
-          this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-        }
+        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
         var track = this.micStream.getAudioTracks()[0];
-        if (!track) throw new Error('لم يتم العثور على مسار صوت');
-        track.enabled = true;
         var ids = Object.keys(this.peers);
         for (var i = 0; i < ids.length; i++) {
           var pc = this.peers[ids[i]];
-          if (pc && pc.signalingState !== 'closed' && pc._faAudioTransceiver) {
-            pc._faAudioTransceiver.direction = 'sendrecv';
-            await pc._faAudioTransceiver.sender.replaceTrack(track);
-          }
+          if (!pc || pc.signalingState === 'closed') continue;
+          var sender = pc.getSenders().find(function (s) { return s.track && s.track.kind === 'audio'; });
+          if (sender) { await sender.replaceTrack(track); }
         }
         this.talking = true; this.starting = false; this._btnState(true);
-        this._status('🔴 بث مباشر — اتكلم الآن');
+        this._status('🔴 بث مباشر للجميع');
         var self = this; clearTimeout(this.maxTimer);
         this.maxTimer = setTimeout(function () { self.stop(); }, 60000);
         this._hello();
-      } catch (e) {
-        this.starting = false; this._status('⚠️ تعذر تشغيل المايك: ' + (e.message || 'تحقق من الإذن وHTTPS'));
-      }
+      } catch (e) { this.starting = false; this._status('⚠️ المايك: ' + (e.message || 'رفض الإذن')); }
     },
     stop: function () {
       clearTimeout(this.maxTimer);
       this.talking = false; this.starting = false; this._btnState(false);
-      if (this.micStream) {
-        this.micStream.getAudioTracks().forEach(function (t) { t.enabled = false; t.stop(); });
-        this.micStream = null;
-      }
-      var ids = Object.keys(this.peers);
-      for (var i = 0; i < ids.length; i++) {
-        var pc = this.peers[ids[i]];
-        if (pc && pc._faAudioTransceiver) pc._faAudioTransceiver.sender.replaceTrack(null).catch(function () {});
-      }
-      this._status('🟢 جاهز — لا يوجد صوت محفوظ');
+      if (this.micStream) { this.micStream.getTracks().forEach(function (t) { t.stop(); }); this.micStream = null; }
+      var st = silentTrack();
+      Object.keys(this.peers).forEach(function (id) {
+        var pc = V.peers[id];
+        if (!pc || pc.signalingState === 'closed') return;
+        var sender = pc.getSenders().find(function (s) { return s.track && s.track.kind === 'audio'; });
+        if (sender) sender.replaceTrack(st).catch(function () {});
+      });
+      this._status('🟢 جاهز');
     },
-    _playOne: function (audio) {
-      if (!audio) return;
-      var p = audio.play(); if (p && p.catch) p.catch(function () {});
+
+    _playOne: function (a) { if (a) { var p = a.play(); if (p && p.catch) p.catch(function () {}); } },
+    _playAll: function () { var s = this; Object.keys(this.audioEls).forEach(function (id) { s._playOne(s.audioEls[id]); }); },
+
+    _renderTargets: function () {
+      if (String(this.cfg.id) !== 'master') return;
+      var box = document.getElementById('faTargets');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'faTargets';
+        box.style.cssText = 'position:fixed;left:14px;bottom:155px;z-index:2147483647;display:flex;flex-direction:column;gap:6px;direction:rtl';
+        document.body.appendChild(box);
+      }
+      var s = this;
+      box.innerHTML = Object.keys(this.onlinePeers).map(function (id) {
+        var p = s.onlinePeers[id];
+        var on = String(s.selectedId) === id;
+        return '<button data-id="' + id + '" style="padding:8px 14px;border-radius:12px;border:2px solid ' + (on ? '#d4a72c' : '#2f5444') + ';background:' + (on ? 'linear-gradient(145deg,#d4a72c,#b8860b)' : '#0f2e21') + ';color:' + (on ? '#2b2105' : '#a8d5bd') + ';font-weight:800;font-size:13px;cursor:pointer;text-align:right">🚚 ' + (p.name || id) + '</button>';
+      }).join('');
+      box.querySelectorAll('button').forEach(function (b) {
+        b.onclick = function () {
+          s.selectedId = b.getAttribute('data-id');
+          var old = s.peers[s.selectedId];
+          if (old) { try { old.close(); } catch (e) {} delete s.peers[s.selectedId]; }
+          s._renderTargets();
+          s._offer(s.selectedId, s.onlinePeers[s.selectedId] ? s.onlinePeers[s.selectedId].name : '');
+        };
+      });
     },
-    _playAll: function () { var self = this; Object.keys(this.audioEls).forEach(function (id) { self._playOne(self.audioEls[id]); }); },
+
     _ui: function () {
       if (document.getElementById('faPttBtn')) return;
       var wrap = document.createElement('div');
-      wrap.innerHTML = '<style>#faPttBtn{position:fixed;left:14px;bottom:14px;z-index:2147483647;width:62px;height:62px;border-radius:50%;background:linear-gradient(145deg,#1e9e6a,#12805a);color:#fff;font-size:27px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(18,128,90,.45);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;border:3px solid rgba(255,255,255,.55);transition:transform .1s}#faPttBtn.on{background:linear-gradient(145deg,#e85d5d,#b92e2e);transform:scale(1.12);box-shadow:0 0 0 10px rgba(232,93,93,.28)}#faPttSts{position:fixed;left:14px;bottom:84px;z-index:2147483647;background:#0f2e21;color:#a8d5bd;padding:6px 13px;border-radius:12px;font-size:12px;font-weight:700;max-width:280px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl}#faPttSpk{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;display:none;background:#b92e2e;color:#fff;padding:9px 22px;border-radius:24px;font-size:15px;font-weight:900;box-shadow:0 8px 24px rgba(185,46,46,.4);direction:rtl}</style><div id="faPttSts">🎙️ جاري الاتصال...</div><div id="faPttSpk"></div><div id="faPttBtn" title="اضغط للتحدث مباشرة">🎙️</div>';
+      wrap.innerHTML = '<style>#faPttBtn{position:fixed;left:14px;bottom:14px;z-index:2147483647;width:62px;height:62px;border-radius:50%;background:linear-gradient(145deg,#1e9e6a,#12805a);color:#fff;font-size:27px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(18,128,90,.45);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;border:3px solid rgba(255,255,255,.55);transition:transform .1s}#faPttBtn.on{background:linear-gradient(145deg,#e85d5d,#b92e2e);transform:scale(1.12);box-shadow:0 0 0 10px rgba(232,93,93,.28)}#faPttSts{position:fixed;left:14px;bottom:84px;z-index:2147483647;background:#0f2e21;color:#a8d5bd;padding:6px 13px;border-radius:12px;font-size:12px;font-weight:700;max-width:280px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl}#faPttSpk{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;display:none;background:#b92e2e;color:#fff;padding:9px 22px;border-radius:24px;font-size:15px;font-weight:900;box-shadow:0 8px 24px rgba(185,46,46,.4);direction:rtl}</style><div id="faPttSts">🎙️ جاري الاتصال...</div><div id="faPttSpk"></div><div id="faPttBtn" title="اضغط للتحدث المباشر">🎙️</div>';
       document.body.appendChild(wrap);
       var self = this, btn = document.getElementById('faPttBtn');
       btn.addEventListener('pointerdown', function (e) {
@@ -1061,24 +1047,31 @@
         if (self.toggleMode) { self.toggleMode = false; self.stop(); return; }
         self.downAt = Date.now(); self.start();
       });
-      function release(e) {
+      function rel(e) {
         if (e) e.preventDefault();
         if (!self.talking && !self.starting) return;
-        if (Date.now() - self.downAt < 300) { self.toggleMode = true; self._status('🔴 البث المباشر مفتوح — اضغط مرة أخرى للإيقاف'); }
+        if (Date.now() - self.downAt < 300) { self.toggleMode = true; self._status('🔴 البث مفتوح — اضغط تاني للإيقاف'); }
         else self.stop();
       }
-      btn.addEventListener('pointerup', release);
-      btn.addEventListener('pointercancel', release);
-      btn.addEventListener('pointerleave', function (e) { if (!self.toggleMode) release(e); });
+      btn.addEventListener('pointerup', rel);
+      btn.addEventListener('pointercancel', rel);
+      btn.addEventListener('pointerleave', function (e) { if (!self.toggleMode) rel(e); });
       btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     },
     _btnState: function (on) { var b = document.getElementById('faPttBtn'); if (b) { b.classList.toggle('on', on); b.textContent = on ? '📢' : '🎙️'; } },
     _status: function (t) { var s = document.getElementById('faPttSts'); if (s) s.textContent = t; },
-    _speaker: function (name) { var s = document.getElementById('faPttSpk'); if (!s) return; s.textContent = '📢 ' + (name || 'المتحدث'); s.style.display = 'block'; clearTimeout(this._spkT); this._spkT = setTimeout(function () { s.style.display = 'none'; }, 1400); }
+    _speaker: function (n) { var s = document.getElementById('faPttSpk'); if (!s) return; s.textContent = '📢 ' + (n || 'المتحدث'); s.style.display = 'block'; clearTimeout(this._spkT); this._spkT = setTimeout(function () { s.style.display = 'none'; }, 1400); }
   };
 })();
 
-</script>
+
+
+
+
+
+
+
+  </script>
   <script>
 /* ============================================================
    location-fix.js — فتح موقع العميل: يصلح كل أشكال الروابط تلقائيًا
