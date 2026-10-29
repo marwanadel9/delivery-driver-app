@@ -850,7 +850,7 @@
   var V = window.FAVoice = {
     cfg: null, sb: null, ch: null, peers: {}, streams: {}, micStream: null,
     talking: false, starting: false, toggleMode: false, downAt: 0,
-    timer: null, maxTimer: null, pendingIce: {}, audioEls: {},
+    timer: null, maxTimer: null, pendingIce: {}, audioEls: {}, onlinePeers: {}, selectedId: '',
 
     init: function (cfg) {
       this.cfg = cfg || {};
@@ -887,14 +887,31 @@
       if (!p || !p.from || p.from === this.cfg.id) return;
       var id = String(p.from);
       if (p.type === 'hello') {
-        if (String(this.cfg.id) < id && !this.peers[id]) await this._offer(id, p.name);
+        // المكتب يكتشف المندوبين المتصلين، لكنه لا يفتح اتصالًا إلا مع المندوب المحدد.
+        if (String(this.cfg.id) === 'master') {
+          this.onlinePeers[id] = { id: id, name: p.name || id, seen: Date.now() };
+          this._renderTargets();
+          if (String(this.selectedId) === id && !this.peers[id]) await this._offer(id, p.name);
+        }
         return;
       }
       if (p.to && String(p.to) !== String(this.cfg.id)) return;
       var pc = this.peers[id];
       try {
+        if (p.type === 'disconnect') {
+          if (pc) {
+            try { pc.close(); } catch (_) {}
+            delete this.peers[id];
+          }
+          var oldAudio = this.audioEls[id];
+          if (oldAudio) { oldAudio.pause(); oldAudio.srcObject = null; oldAudio.remove(); delete this.audioEls[id]; }
+          return;
+        }
         if (p.type === 'offer') {
-          if (!pc) pc = this._makePeer(id, p.name);
+          if (!pc || pc.signalingState === 'closed') {
+            delete this.peers[id];
+            pc = this._makePeer(id, p.name);
+          }
           await pc.setRemoteDescription(new RTCSessionDescription(p.sdp));
           var answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
@@ -941,14 +958,12 @@
         else if (pc.connectionState === 'failed') self._status('⚠️ فشل الاتصال الصوتي؛ قد تحتاج الشبكة إلى TURN');
       };
       this.peers[id] = pc;
-      // لو الاتصال اتعمل بعد ما المكتب بدأ الكلام، اربط المايك فورًا.
-      // بدون هذا الربط قد يسمع المكتب المندوب ولا يسمع المندوب المكتب.
       if (this.talking && this.micStream) {
         var liveTrack = this.micStream.getAudioTracks().find(function (t) { return t.readyState === 'live'; });
         if (liveTrack && pc._faAudioTransceiver && pc._faAudioTransceiver.sender) {
           pc._faAudioTransceiver.direction = 'sendrecv';
-          pc._faAudioTransceiver.sender.replaceTrack(liveTrack).catch(function (e) {
-            self._status('⚠️ تعذر ربط المايك بالاتصال الجديد');
+          pc._faAudioTransceiver.sender.replaceTrack(liveTrack).catch(function () {
+            self._status('⚠️ تعذر ربط المايك بالاتصال');
           });
         }
       }
@@ -983,13 +998,13 @@
         var ids = Object.keys(this.peers);
         for (var i = 0; i < ids.length; i++) {
           var pc = this.peers[ids[i]];
-          if (pc && pc._faAudioTransceiver && pc._faAudioTransceiver.sender) {
+          if (pc && pc.signalingState !== 'closed' && pc._faAudioTransceiver) {
             pc._faAudioTransceiver.direction = 'sendrecv';
             await pc._faAudioTransceiver.sender.replaceTrack(track);
           }
         }
         this.talking = true; this.starting = false; this._btnState(true);
-        this._status(Object.keys(this.peers).length ? '🔴 بث مباشر — اتكلم الآن' : '🔴 المايك يعمل — جاري انتظار اتصال الطرف الآخر');
+        this._status('🔴 بث مباشر — اتكلم الآن');
         var self = this; clearTimeout(this.maxTimer);
         this.maxTimer = setTimeout(function () { self.stop(); }, 60000);
         this._hello();
