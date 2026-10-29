@@ -1,9 +1,5 @@
 /* ============================================================
    FAVoice — ووكي توكي عبر Supabase Realtime Broadcast
-   يعمل على: متصفح الكمبيوتر + WebView الـ APK + Electron
-   الاستخدام:
-     FAVoice.init({url:'https://xxxx.supabase.co', key:'anon_key',
-                   room:'fa-dispatch-voice', name:'زين', id:'Mandoub'});
    ============================================================ */
 (function () {
   var V = window.FAVoice = {
@@ -13,9 +9,10 @@
     init: function (cfg) {
       this.cfg = cfg || {};
       this._ui();
+      this._unlockAudio();
       var self = this;
-      if (!window.supabase || !cfg.key || cfg.key.indexOf('YOUR') === 0) {
-        this._status('⚠️ أكمل إعداد الصوت (المفتاح)');
+      if (!window.supabase || !cfg.key || cfg.key.indexOf('sb_publishable') !== 0) {
+        this._status('⚠️ مفتاح Supabase غير مكتمل');
         return;
       }
       try {
@@ -25,7 +22,7 @@
         this.ch.on('broadcast', { event: 'ptt-hi' }, function (m) { self._hi(m.payload || {}); });
         this.ch.subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
-            self._status('🎙️ القناة جاهزة');
+            self._status('🎙️ القناة جاهزة — دوس على الشاشة مرة واحدة');
             self._hi({ from: cfg.id, name: cfg.name }, true);
             self.timer = setInterval(function () {
               self._hi({ from: cfg.id, name: cfg.name }, true);
@@ -38,7 +35,20 @@
       } catch (e) { this._status('⚠️ ' + e.message); }
     },
 
-    /* ---------- الإرسال: ضاغط تتكلم ---------- */
+    /* فتح قفل الصوت التلقائي في المتصفح — أول دوسة على الشاشة */
+    _unlockAudio: function () {
+      var unlock = function () {
+        try {
+          var a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA=');
+          a.play().catch(function () {});
+        } catch (e) {}
+        document.removeEventListener('pointerdown', unlock);
+        document.removeEventListener('touchstart', unlock);
+      };
+      document.addEventListener('pointerdown', unlock);
+      document.addEventListener('touchstart', unlock);
+    },
+
     start: function () {
       if (this.talking || this.rec) return;
       var self = this;
@@ -64,7 +74,7 @@
             r.readAsDataURL(ev.data);
           }
         };
-        self.rec.start(200); /* قطعة كل 200ms = وصول فوري */
+        self.rec.start(200);
         self.talking = true;
         self._btnState(true);
       }).catch(function (e) { self._status('⚠️ المايك: ' + (e.message || 'مرفوض')); });
@@ -78,7 +88,6 @@
       if (this.stream) { this.stream.getTracks().forEach(function (t) { t.stop(); }); this.stream = null; }
     },
 
-    /* ---------- الاستقبال ---------- */
     _chunk: function (p) {
       if (!p || !p.d || p.from === this.cfg.id) return;
       this._speaker(p.name);
@@ -98,31 +107,35 @@
       var a = new Audio(url);
       a.onended = function () { URL.revokeObjectURL(url); self.playing = false; self._play(); };
       a.onerror = function () { URL.revokeObjectURL(url); self.playing = false; self._play(); };
-      a.play().catch(function () { self.playing = false; self._play(); });
+      a.play().then(function () {
+        self._status('🔊 بيسمع: ' + (self._lastSpeaker || 'حد') + '...');
+      }).catch(function () {
+        self.playing = false;
+        self._status('⚠️ دوس على الشاشة مرة واحدة عشان يشتغل الصوت');
+        self._play();
+      });
     },
 
     _hi: function (p, quiet) {
       if (!p || !p.from || p.from === this.cfg.id) return;
       this.peers[p.from] = p.name || p.from;
-      if (!quiet) this._status('🟢 ' + (p.name || p.from) + ' على القناة');
-      this._peers();
+      if (!quiet) this._status('🟢 ' + (p.name || p.from) + ' دخل القناة');
     },
 
-    /* ---------- الواجهة ---------- */
     _ui: function () {
       if (document.getElementById('faPttBtn')) return;
       var self = this;
       var wrap = document.createElement('div');
       wrap.innerHTML =
         '<style>' +
-        '#faPttBtn{position:fixed;left:14px;bottom:14px;z-index:99999;width:62px;height:62px;border-radius:50%;' +
+        '#faPttBtn{position:fixed;left:14px;bottom:14px;z-index:2147483647;width:62px;height:62px;border-radius:50%;' +
         'background:linear-gradient(145deg,#1e9e6a,#12805a);color:#fff;font-size:27px;display:flex;align-items:center;' +
         'justify-content:center;box-shadow:0 8px 22px rgba(18,128,90,.45);cursor:pointer;user-select:none;' +
         '-webkit-user-select:none;touch-action:none;border:3px solid rgba(255,255,255,.55);transition:transform .1s;}' +
         '#faPttBtn.on{background:linear-gradient(145deg,#e85d5d,#b92e2e);transform:scale(1.12);box-shadow:0 0 0 10px rgba(232,93,93,.28);}' +
-        '#faPttSts{position:fixed;left:14px;bottom:84px;z-index:99999;background:#0f2e21;color:#a8d5bd;padding:6px 13px;' +
-        'border-radius:12px;font-size:12px;font-weight:700;max-width:230px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl;}' +
-        '#faPttSpk{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:99999;display:none;' +
+        '#faPttSts{position:fixed;left:14px;bottom:84px;z-index:2147483647;background:#0f2e21;color:#a8d5bd;padding:6px 13px;' +
+        'border-radius:12px;font-size:12px;font-weight:700;max-width:250px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl;}' +
+        '#faPttSpk{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;display:none;' +
         'background:#b92e2e;color:#fff;padding:9px 22px;border-radius:24px;font-size:15px;font-weight:900;' +
         'box-shadow:0 8px 24px rgba(185,46,46,.4);direction:rtl;}</style>' +
         '<div id="faPttSts">🎙️ جاري الاتصال...</div>' +
@@ -147,9 +160,9 @@
     _status: function (t) {
       var s = document.getElementById('faPttSts');
       if (s) s.textContent = t;
-      this._peers();
     },
     _speaker: function (name) {
+      this._lastSpeaker = name;
       var s = document.getElementById('faPttSpk');
       if (!s) return;
       var self = this;
@@ -157,11 +170,6 @@
       s.style.display = 'block';
       clearTimeout(this._spkT);
       this._spkT = setTimeout(function () { s.style.display = 'none'; }, 1200);
-    },
-    _peers: function () {
-      var names = Object.keys(this.peers).map(function (k) { return V.peers[k]; });
-      var s = document.getElementById('faPttSts');
-      if (s && names.length) s.setAttribute('title', 'على القناة: ' + names.join('، '));
     }
   };
 })();
