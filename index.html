@@ -944,14 +944,33 @@
         var stream = (ev.streams && ev.streams[0]) || new MediaStream([ev.track]);
         var audio = self.audioEls[id];
         if (!audio) {
-          audio = document.createElement('audio'); audio.autoplay = true; audio.playsInline = true;
-          audio.setAttribute('playsinline', ''); audio.style.display = 'none';
-          document.body.appendChild(audio); self.audioEls[id] = audio;
+          audio = document.createElement('audio');
+          audio.autoplay = true;
+          audio.playsInline = true;
+          audio.muted = false;
+          audio.volume = 1;
+          audio.setAttribute('playsinline', '');
+          audio.setAttribute('autoplay', '');
+          audio.style.display = 'none';
+          document.body.appendChild(audio);
+          self.audioEls[id] = audio;
         }
+        audio.muted = false;
+        audio.volume = 1;
         if (audio.srcObject !== stream) audio.srcObject = stream;
+        // بعض المتصفحات لا تسمح بتشغيل الصوت إلا بعد فك كتم مسار الاستقبال.
+        ev.track.onunmute = function () {
+          audio.muted = false;
+          audio.volume = 1;
+          self._playOne(audio);
+          self._status('🔊 يتم استقبال صوت ' + pc._faName);
+        };
+        ev.track.onended = function () {
+          self._status('ℹ️ انتهى مسار صوت ' + pc._faName);
+        };
         self._playOne(audio);
         self._speaker(pc._faName);
-        self._status('🔊 صوت مباشر من ' + pc._faName);
+        self._status('🔊 تم استلام مسار صوت من ' + pc._faName);
       };
       pc.onconnectionstatechange = function () {
         if (pc.connectionState === 'connected') self._status('🟢 اتصال صوتي مباشر جاهز');
