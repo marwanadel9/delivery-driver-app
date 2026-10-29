@@ -871,7 +871,7 @@
         this.ch.on('broadcast', { event: 'ptt-hi' }, function (m) { self._hi(m.payload || {}); });
         this.ch.subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
-            self._status('🎙️ جاهز');
+            self._status('🎙️ جاهز (v3)');
             self._hi({ from: cfg.id, name: cfg.name }, true);
             self.timer = setInterval(function () {
               self._hi({ from: cfg.id, name: cfg.name }, true);
