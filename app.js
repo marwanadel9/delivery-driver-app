@@ -3485,11 +3485,8 @@
       });
   }
 
-  // تحويلات تاريخية مضافة للعرض في صفحة الماستر فقط؛ لا تنشئ فواتير ولا تعدّل قاعدة البيانات.
-  const MASTER_HISTORICAL_TRANSFERS = [
-    { id: 'historical-amna-20260810', customer_name: 'أمنه', total: 378, transfer_date: '10/08/2026', received: false },
-    { id: 'historical-khaled-20260927', customer_name: 'خالد الفلاسي', total: 160, transfer_date: '27/09/2026', received: false }
-  ];
+  // تم حذف التحويلات التاريخية اليدوية من صفحة الماستر.
+  const MASTER_HISTORICAL_TRANSFERS = [];
 
   function renderMasterOldPendingTransfers() {
     const list = $('master-old-transfer-list');
@@ -3543,11 +3540,13 @@
       });
     }
 
-    const historicalTitle = document.createElement('div');
-    historicalTitle.className = 'master-old-transfer-title';
-    historicalTitle.style.cssText = 'margin-top:14px;padding-top:12px;border-top:1px solid #e8edef;font-weight:900;color:#24343a';
-    historicalTitle.textContent = 'تحويلات تاريخية مضافة';
-    list.appendChild(historicalTitle);
+    if (MASTER_HISTORICAL_TRANSFERS.length) {
+      const historicalTitle = document.createElement('div');
+      historicalTitle.className = 'master-old-transfer-title';
+      historicalTitle.style.cssText = 'margin-top:14px;padding-top:12px;border-top:1px solid #e8edef;font-weight:900;color:#24343a';
+      historicalTitle.textContent = 'تحويلات تاريخية مضافة';
+      list.appendChild(historicalTitle);
+    }
 
     MASTER_HISTORICAL_TRANSFERS.forEach((transfer) => {
       const card = document.createElement('article');
