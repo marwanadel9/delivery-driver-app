@@ -829,37 +829,19 @@
   }
 
   function sortPendingOrdersForDisplay(orders) {
-    /* المسلّم: ترتيبهم ثابت — لا نلمسهم. غير المسلّم: الأقرب للمندوب (GPS) ← دبي ← أبوظبي ← المنطقة */
+    /* ترتيب يدوي من البرنامج: route_seq = ترتيبك بأزرار ⬆️⬇️ — المسلّم ثابت */
+    const planSeq = (o) => { const n = Number(o?.route_seq); return Number.isFinite(n) && n > 0 ? n : Number.MAX_SAFE_INTEGER; };
     const seqNo = (o) => {
       const v = String(o?.order_number ?? o?.invoice_number ?? '');
       const m = v.match(/\d+/);
       return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER;
     };
-    const areaName = (o) => faNorm(String(o?.area || ''));
     const pending = orders.filter((o) => !isDelivered(o.delivery_status));
     const done = orders.filter((o) => isDelivered(o.delivery_status));
-    let sortedPending;
-    if (driverPos) {
-      sortedPending = pending.slice().sort((x, y) => {
-        const cx = faCoordsFromUrl(x), cy = faCoordsFromUrl(y);
-        const dx = cx ? faDistKm(driverPos, cx) : Infinity;
-        const dy = cy ? faDistKm(driverPos, cy) : Infinity;
-        if (dx !== dy) return dx - dy;
-        const rx = faEmiRank(x), ry = faEmiRank(y);
-        if (rx !== ry) return rx - ry;
-        const ax = areaName(x), ay = areaName(y);
-        if (ax !== ay) return ax < ay ? -1 : 1;
-        return seqNo(x) - seqNo(y);
-      });
-    } else {
-      sortedPending = pending.slice().sort((x, y) => {
-        const rx = faEmiRank(x), ry = faEmiRank(y);
-        if (rx !== ry) return rx - ry;
-        const ax = areaName(x), ay = areaName(y);
-        if (ax !== ay) return ax < ay ? -1 : 1;
-        return seqNo(x) - seqNo(y);
-      });
-    }
+    const sortedPending = pending.slice().sort((x, y) => {
+      const a = planSeq(x), b = planSeq(y);
+      return a !== b ? a - b : seqNo(x) - seqNo(y);
+    });
     return [...sortedPending, ...done];
   }
 
