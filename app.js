@@ -3287,6 +3287,14 @@
     const li = masterNormalizeDuplicateValue(left?.invoice_number || left?.invoice_no || '');
     const ri = masterNormalizeDuplicateValue(right?.invoice_number || right?.invoice_no || '');
     if (li && ri) return li === ri;
+    /* طبقة ثانية: نفس الرقم + نفس التليفون */
+    {
+      const ln = masterNormalizeDuplicateValue(left?.order_number || '');
+      const rn = masterNormalizeDuplicateValue(right?.order_number || '');
+      const lp = masterNormalizeDuplicateValue(left?.phone || '');
+      const rp = masterNormalizeDuplicateValue(right?.phone || '');
+      if (ln && rn && lp && rp && ln === rn && lp === rp) return true;
+    }
     const leftNumber = masterOrderInvoiceNumber(left);
     const rightNumber = masterOrderInvoiceNumber(right);
     if (!leftNumber || leftNumber !== rightNumber) return false;
@@ -3870,6 +3878,7 @@
   }
 
   function renderMasterOrders() {
+    document.title = 'فروج الزين — الماستر (فلتر التكرار v2)';
     const body = $('master-orders-body');
 
     if (!body) {
