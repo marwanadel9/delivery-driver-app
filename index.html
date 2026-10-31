@@ -266,6 +266,7 @@
   </style>
 <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -901,9 +902,12 @@
     _send: function (p) { if (this.ch) { try { this.ch.send({ type: 'broadcast', event: 'rtc-signal', payload: p }); } catch (e) {} } },
     _hello: function () { this._send({ type: 'hello', from: this.cfg.id, name: this.cfg.name }); },
 
+    _pingTalk: function () { this._send({ kind: 'talk' }); },
     _signal: async function (p) {
       if (!p || !p.from || p.from === this.cfg.id) return;
       var id = String(p.from), self = this;
+      /* ⭐ إشارة بدء الكلام — جرس عند الطرف الآخر مع كل ضغطة */
+      if (p.kind === 'talk') { var now = Date.now(); if (!self._lastTalkRing || now - self._lastTalkRing > 1200) { self._lastTalkRing = now; try { self._faRing(); } catch (e) {} } return; }
       if (p.type === 'call') {
         /* ⭐ مكالمة واردة — الرد التلقائي: اختيار المتصل وفتح الاتصال فورًا */
         if (String(this.cfg.id) === 'master') {
@@ -989,14 +993,18 @@
       pc.onicecandidate = function (ev) { if (ev.candidate) self._send({ type: 'ice', from: self.cfg.id, to: id, candidate: ev.candidate }); };
       pc.ontrack = function (ev) {
         var stream = (ev.streams && ev.streams[0]) || new MediaStream([ev.track]);
+        if (!self._rang) self._rang = {};
+        var first = !self._rang[id];
+        if (first) self._rang[id] = 1;
         var a = self.audioEls[id];
         if (!a) {
           a = document.createElement('audio');
-          a.autoplay = true; a.playsInline = true; a.volume = 1; a.muted = false;
+          a.autoplay = !first; a.playsInline = true; a.volume = 1; a.muted = false;
           a.style.display = 'none'; document.body.appendChild(a);
           self.audioEls[id] = a;
-        }
+        } else { a.autoplay = true; }
         a.srcObject = stream;
+        if (first) { try { self._faRing(); } catch (e) {} setTimeout(function () { self._playOne(a); }, 650); }
         /* ⭐ تثبيت استقبال الصوت: buffer ثابت = نقاء بدون تقطيع */
         try { (pc.getReceivers() || []).forEach(function (r) { if ('jitterBufferTarget' in r) r.jitterBufferTarget = 80; }); } catch (_) {}
         ev.track.onunmute = function () { a.muted = false; a.volume = 1; self._playOne(a); self._speaker(pc._faName); self._status('🔊 بيسمع: ' + pc._faName); };
@@ -1072,6 +1080,24 @@
       this._status('🟢 جاهز');
     },
 
+    _faRing: function () {
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        var ctx = this._faRingCtx || (this._faRingCtx = new AC());
+        if (ctx.state === 'suspended') ctx.resume();
+        var t = ctx.currentTime;
+        [880, 660, 880].forEach(function (f, i) {
+          var o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = 'sine'; o.frequency.value = f;
+          var s = t + i * 0.22;
+          g.gain.setValueAtTime(0.0001, s);
+          g.gain.exponentialRampToValueAtTime(0.45, s + 0.03);
+          g.gain.exponentialRampToValueAtTime(0.0001, s + 0.21);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(s); o.stop(s + 0.22);
+        });
+      } catch (e) {}
+    },
     _playOne: function (a) { if (a) { var p = a.play(); if (p && p.catch) p.catch(function () {}); } },
     _playAll: function () { var s = this; Object.keys(this.audioEls).forEach(function (id) { s._playOne(s.audioEls[id]); }); },
 
@@ -1126,13 +1152,13 @@
     _ui: function () {
       if (document.getElementById('faPttBtn')) return;
       var wrap = document.createElement('div');
-      wrap.innerHTML = '<style>#faPttBtn{position:fixed;left:14px;top:14px;z-index:2147483647;width:62px;height:62px;border-radius:50%;background:linear-gradient(145deg,#1e9e6a,#12805a);color:#fff;font-size:27px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(18,128,90,.45);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;border:3px solid rgba(255,255,255,.55);transition:transform .1s}#faPttBtn.on{background:linear-gradient(145deg,#e85d5d,#b92e2e);transform:scale(1.12);box-shadow:0 0 0 10px rgba(232,93,93,.28)}#faPttSts{position:fixed;left:14px;top:84px;z-index:2147483647;background:#0f2e21;color:#a8d5bd;padding:6px 13px;border-radius:12px;font-size:12px;font-weight:700;max-width:280px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl}#faPttSpk{position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:2147483647;display:none;background:#b92e2e;color:#fff;padding:9px 22px;border-radius:24px;font-size:15px;font-weight:900;box-shadow:0 8px 24px rgba(185,46,46,.4);direction:rtl}</style><div id="faPttSts">🎙️ جاري الاتصال...</div><div id="faPttSpk"></div><div id="faPttBtn" title="اضغط للتحدث المباشر">🎙️</div>';
+      wrap.innerHTML = '<style>.driver-invoice-open #faPttBtn,.driver-invoice-open #faTargets{display:none!important}#faPttBtn{position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:2147483647;width:62px;height:62px;border-radius:50%;background:linear-gradient(145deg,#1e9e6a,#12805a);color:#fff;font-size:27px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(18,128,90,.45);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;border:3px solid rgba(255,255,255,.55);transition:transform .1s}#faPttBtn.on{background:linear-gradient(145deg,#e85d5d,#b92e2e);transform:scale(1.12);box-shadow:0 0 0 10px rgba(232,93,93,.28)}#faPttSts{position:fixed;left:14px;top:84px;z-index:2147483647;background:#0f2e21;color:#a8d5bd;padding:6px 13px;border-radius:12px;font-size:12px;font-weight:700;max-width:280px;box-shadow:0 6px 16px rgba(0,0,0,.3);direction:rtl}#faPttSpk{position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:2147483647;display:none;background:#b92e2e;color:#fff;padding:9px 22px;border-radius:24px;font-size:15px;font-weight:900;box-shadow:0 8px 24px rgba(185,46,46,.4);direction:rtl}</style><div id="faPttSts">🎙️ جاري الاتصال...</div><div id="faPttSpk"></div><div id="faPttBtn" title="اضغط للتحدث المباشر">🎙️</div>';
       document.body.appendChild(wrap);
       var self = this, btn = document.getElementById('faPttBtn');
       btn.addEventListener('pointerdown', function (e) {
         e.preventDefault(); self._playAll();
         if (self.toggleMode) { self.toggleMode = false; self.stop(); return; }
-        self.downAt = Date.now(); self.start();
+        self.downAt = Date.now(); self.start(); try { self._pingTalk(); } catch (e) {}
       });
       function rel(e) {
         if (e) e.preventDefault();
