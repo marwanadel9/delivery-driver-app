@@ -775,7 +775,31 @@
   }
 
   function sortPendingOrdersForDisplay(orders) {
-    return orders;
+    // تجميع جغرافي للمندوب: الإمارة أولًا (دبي ← أبوظبي ← باقي الإمارات)
+    // ثم تجميع المناطق أبجديًا داخل كل إمارة — عشان المسار مايروحش دبي↔أبوظبي بالتناوب
+    const gv = (o, keys) => { for (const k of keys) { const v = o ? o[k] : null; if (v !== null && v !== undefined && String(v).trim() !== '') return String(v); } return ''; };
+    const norm = (s) => String(s || '').replace(/[ً-ْٰ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
+    const emirateIdx = (o) => {
+      const e = norm(gv(o, ['emirate', 'emirate_name', 'emirateName']) || gv(o, ['area', 'area_name', 'areaName']));
+      if (!e) return 50;
+      if (e.includes('ام القيوين')) return 4;
+      if (e.includes('راس الخيمه')) return 5;
+      if (e.includes('دبي')) return 0;
+      if (e.includes('ابوظبي')) return 1;
+      if (e.includes('الشارقه')) return 2;
+      if (e.includes('عجمان')) return 3;
+      if (e.includes('الفجيره')) return 6;
+      if (e.includes('العين')) return 7;
+      return 50;
+    };
+    return orders.slice().sort((x, y) => {
+      const d = emirateIdx(x) - emirateIdx(y);
+      if (d !== 0) return d;
+      const aa = norm(gv(x, ['area', 'area_name', 'areaName']));
+      const bb = norm(gv(y, ['area', 'area_name', 'areaName']));
+      if (aa !== bb) return aa < bb ? -1 : 1;
+      return 0;
+    });
   }
 
   function setText(
