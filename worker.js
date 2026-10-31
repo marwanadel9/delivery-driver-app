@@ -2079,6 +2079,30 @@ export default {
         return json(data);
       }
 
+      if (path === "/api/resolve-map" && method === "POST") {
+        try {
+          const body = await request.json();
+          let finalUrl = String(body.url || "").trim();
+          if (!/^https?:\/\//i.test(finalUrl)) {
+            return json({ ok: false, error: "رابط غير صالح" }, 400);
+          }
+          let coords = null;
+          for (let hop = 0; hop < 6; hop++) {
+            const m = finalUrl.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/) ||
+                      finalUrl.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/) ||
+                      finalUrl.match(/[?&](?:q|query|destination)=(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/);
+            if (m) { coords = [parseFloat(m[1]), parseFloat(m[2])]; break; }
+            const resp = await fetch(finalUrl, { method: "GET", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0" } });
+            const loc = resp.headers.get("location");
+            if (!loc) break;
+            finalUrl = new URL(loc, finalUrl).toString();
+          }
+          return json({ ok: true, url: finalUrl, coords: coords });
+        } catch (e) {
+          return json({ ok: false, error: String(e && e.message || e) }, 500);
+        }
+      }
+
       if (
         path === "/api/master/order/delete-by-number" &&
         request.method === "POST"
