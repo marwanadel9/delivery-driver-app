@@ -601,6 +601,21 @@
             ? data.orders
             : [];
 
+      /* فلتر التكرار: نسخة واحدة لكل فاتورة — لو نسخة اتسلّمت تظهر هي، وإلا الأحدث */
+      {
+        const seen = new Map();
+        for (const row of orders) {
+          const key = String(row.invoice_number || row.order_number || row.id);
+          const prev = seen.get(key);
+          if (!prev) { seen.set(key, row); continue; }
+          const prevDone = String(prev.delivery_status || '').toLowerCase().includes('deliver') || String(prev.delivery_status || '').includes('تم');
+          const rowDone = String(row.delivery_status || '').toLowerCase().includes('deliver') || String(row.delivery_status || '').includes('تم');
+          if (rowDone && !prevDone) seen.set(key, row);
+          else if (rowDone === prevDone && Number(row.id) > Number(prev.id)) seen.set(key, row);
+        }
+        orders.length = 0;
+        orders.push(...seen.values());
+      }
       state.orders = orders.sort((a, b) => {
         const getInvoiceNumber = (order) => {
           const value =
@@ -4804,8 +4819,6 @@
             method: 'POST',
             body: JSON.stringify({
               orderId: target.id,
-              // أرسل كل معرّفات نسخ الفاتورة نفسها حتى يحدّث الـ Worker النسخ المحددة فقط.
-              invoiceCopyIds: uniqueTargets.map((copy) => Number(copy.id)).filter((id) => Number.isInteger(id) && id > 0),
               order: payloadForTarget
             })
           });
