@@ -534,6 +534,7 @@
   }
 
   function showOrders() {
+    try { faStartGps(); } catch (e) {}
     const loginView =
       $('login-view');
 
@@ -774,15 +775,63 @@
     );
   }
 
+  /* ============ ملاحة حية بالـ GPS ============ */
+  let driverPos = null, gpsStarted = false;
+
+  function faCoordsFromUrl(o) {
+    const u = String(o?.location_url || o?.map || o?.locationUrl || '');
+    const m = u.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/) ||
+              u.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/) ||
+              u.match(/[?&](?:q|query|destination)=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+    return m ? [parseFloat(m[1]), parseFloat(m[2])] : null;
+  }
+
+  function faDistKm(p1, p2) {
+    const R = 6371, dLa = (p2[0] - p1[0]) * Math.PI / 180, dLo = (p2[1] - p1[1]) * Math.PI / 180;
+    const la1 = p1[0] * Math.PI / 180, la2 = p2[0] * Math.PI / 180;
+    const h = Math.sin(dLa / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLo / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  function faStartGps() {
+    if (gpsStarted) return;
+    gpsStarted = true;
+    if (!('geolocation' in navigator)) return;
+    const opts = { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 };
+    let firstFix = false;
+    const onPos = (p) => {
+      const la = p.coords.latitude, lo = p.coords.longitude;
+      if (!driverPos || Math.abs(la - driverPos[0]) > 0.0003 || Math.abs(lo - driverPos[1]) > 0.0003) {
+        driverPos = [la, lo];
+        if (!firstFix) { firstFix = true; try { toast('📡 تم تحديد موقعك — الترتيب حسب الأقرب ليك'); } catch (e) {} }
+        try { if (!document.body.classList.contains('driver-invoice-open')) render(); } catch (e) {}
+      }
+    };
+    try { navigator.geolocation.getCurrentPosition(onPos, () => {}, opts); } catch (e) {}
+    try { navigator.geolocation.watchPosition(onPos, () => {}, opts); } catch (e) {}
+  }
+
   function sortPendingOrdersForDisplay(orders) {
-    // العرض حسب رقم الطلب مباشرة: F001 أول وقفة ← F026 آخر وقفة
-    // (البرنامج بيرقّم الفواتير حسب المسار الجغرافي وأول ما تتدفع للموقع أرقامها متتابعة)
     const seq = (o) => {
       const v = String(o?.order_number ?? o?.invoice_number ?? o?.invoiceNo ?? '');
       const m = v.match(/\d+/);
       return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER;
     };
-    return orders.slice().sort((x, y) => seq(x) - seq(y));
+    const pending = orders.filter((o) => !isDelivered(o.delivery_status));
+    const done = orders.filter((o) => isDelivered(o.delivery_status)); /* المسلّم: ترتيبهم ثابت — لا نلمسهم */
+    let sortedPending;
+    if (driverPos) {
+      sortedPending = pending.slice().sort((x, y) => {
+        const cx = faCoordsFromUrl(x), cy = faCoordsFromUrl(y);
+        const dx = cx ? faDistKm(driverPos, cx) : Infinity;
+        const dy = cy ? faDistKm(driverPos, cy) : Infinity;
+        if (dx !== dy) return dx - dy;
+        return seq(x) - seq(y);
+      });
+    } else {
+      sortedPending = pending.slice().sort((x, y) => seq(x) - seq(y));
+    }
+    return [...sortedPending, ...done];
   }
 
   function setText(
@@ -1228,6 +1277,19 @@
           .firstElementChild
           .cloneNode(true);
       node.classList.add('is-compact');
+
+      /* شارة المسافة الحية: أقرب وقفة من موقع المندوب */
+      if (driverPos && !isDelivered(order.delivery_status)) {
+        const cc = faCoordsFromUrl(order);
+        if (cc) {
+          const km = faDistKm(driverPos, cc);
+          const isNext = !shown.some((o) => o !== order && !isDelivered(o.delivery_status) && (() => { const c2 = faCoordsFromUrl(o); return c2 ? faDistKm(driverPos, c2) : Infinity; })() < km);
+          const badge = document.createElement('div');
+          badge.textContent = (isNext ? '⬅️ التالي • ' : '📍 ') + (km < 1 ? Math.round(km * 1000) + ' م منك' : km.toFixed(1) + ' كم منك');
+          badge.style.cssText = 'align-self:flex-start;margin:2px 0;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:900;' + (isNext ? 'background:#16a34a;color:#fff;box-shadow:0 2px 6px rgba(22,163,74,.35);' : 'background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;');
+          node.appendChild(badge);
+        }
+      }
 
       // زر فتح التفاصيل يبقى ظاهرًا في البطاقة المختصرة.
       const expandButton = document.createElement('button');
