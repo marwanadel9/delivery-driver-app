@@ -812,13 +812,10 @@
   }
 
   function sortPendingOrdersForDisplay(orders) {
-    const seq = (o) => {
-      const v = String(o?.order_number ?? o?.invoice_number ?? o?.invoiceNo ?? '');
-      const m = v.match(/\d+/);
-      return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER;
-    };
+    /* ترتيب خطة الصبح: route_seq (البرنامج بيبعت بالترتيب الجغرافي) — والمسلّم ثابت */
+    const planSeq = (o) => { const n = Number(o?.route_seq); return Number.isFinite(n) && n > 0 ? n : Number.MAX_SAFE_INTEGER; };
     const pending = orders.filter((o) => !isDelivered(o.delivery_status));
-    const done = orders.filter((o) => isDelivered(o.delivery_status)); /* المسلّم: ترتيبهم ثابت — لا نلمسهم */
+    const done = orders.filter((o) => isDelivered(o.delivery_status));
     let sortedPending;
     if (driverPos) {
       sortedPending = pending.slice().sort((x, y) => {
@@ -826,10 +823,10 @@
         const dx = cx ? faDistKm(driverPos, cx) : Infinity;
         const dy = cy ? faDistKm(driverPos, cy) : Infinity;
         if (dx !== dy) return dx - dy;
-        return seq(x) - seq(y);
+        return planSeq(x) - planSeq(y);
       });
     } else {
-      sortedPending = pending.slice().sort((x, y) => seq(x) - seq(y));
+      sortedPending = pending.slice().sort((x, y) => planSeq(x) - planSeq(y));
     }
     return [...sortedPending, ...done];
   }
