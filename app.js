@@ -4819,6 +4819,8 @@
             method: 'POST',
             body: JSON.stringify({
               orderId: target.id,
+              // أرسل كل معرّفات نسخ الفاتورة نفسها حتى يحدّث الـ Worker النسخ المحددة فقط.
+              invoiceCopyIds: uniqueTargets.map((copy) => Number(copy.id)).filter((id) => Number.isInteger(id) && id > 0),
               order: payloadForTarget
             })
           });
@@ -4839,8 +4841,11 @@
 
       if (failedTargets.length) {
         await loadMasterOrders();
-        const failedLabels = failedTargets.map((item) => `${item.sheet} (#${item.id})`).join('، ');
-        throw new Error(`تم تحديث ${successfulIds.size} من ${uniqueTargets.length} نسخة. تعذر تحديث: ${failedLabels}. راجع اتصال قاعدة البيانات قبل إعادة المحاولة.`);
+        const failedLabels = failedTargets.map((item) => {
+          const reason = String(item.error || 'سبب الرفض غير معروف').replace(/\s+/g, ' ').trim();
+          return `${item.sheet} (#${item.id}): ${reason}`;
+        }).join(' | ');
+        throw new Error(`تم تحديث ${successfulIds.size} من ${uniqueTargets.length} نسخة. تفاصيل فشل الحفظ: ${failedLabels}`);
       }
 
       // Refresh from the source of truth after all updates so the master shows the newest state.
