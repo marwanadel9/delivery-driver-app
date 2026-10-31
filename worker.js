@@ -1270,16 +1270,61 @@ export default {
           return json(
             {
               error:
-                (rpcData &&
-                  rpcData.message) ||
-                (rpcData &&
-                  rpcData.hint) ||
-                (rpcData &&
-                  rpcData.error) ||
-                "تعذر تعديل الفاتورة"
+                [
+                  rpcData && rpcData.message,
+                  rpcData && rpcData.details,
+                  rpcData && rpcData.hint,
+                  rpcData && rpcData.code ? "Code: " + rpcData.code : null,
+                  rpcData && rpcData.error
+                ].filter(Boolean).join(" | ") || "تعذر تعديل الفاتورة"
             },
             400
           );
+        }
+
+        // مزامنة صريحة لطريقة الدفع على كل نسخ هذه الفاتورة المحددة بالمعرّفات.
+        // لا نعتمد هنا على تطابق رقم الفاتورة وحده، حتى لا نمس فاتورة أخرى قد تحمل رقمًا مشابهًا.
+        if (Object.prototype.hasOwnProperty.call(order, "payment_method")) {
+          const paymentMethod = normalizePayment(order.payment_method);
+          if (!paymentMethod) {
+            return json({ error: "طريقة الدفع غير صحيحة. اختر كاش أو تحويل بنكي." }, 400);
+          }
+          const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+          if (!serviceKey) {
+            return json({ error: "إعداد مزامنة طريقة الدفع غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
+          }
+          const rawIds = Array.isArray(body.invoiceCopyIds) ? body.invoiceCopyIds : [orderId];
+          const copyIds = Array.from(new Set(rawIds.concat([orderId]).map(Number).filter((id) => Number.isInteger(id) && id > 0)));
+          if (!copyIds.length || copyIds.length > 20) {
+            return json({ error: "تعذر تحديد نسخ الفاتورة المراد تحديثها" }, 400);
+          }
+          const serviceHeaders = {
+            apikey: serviceKey,
+            Authorization: "Bearer " + serviceKey,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal"
+          };
+          const paymentBody = JSON.stringify({
+            payment_method: paymentMethod,
+            bank_transfer_received: paymentMethod === "bank_transfer" ? (order.bank_transfer_received === true) : false
+          });
+          const idFilter = "in.(" + copyIds.join(",") + ")";
+          const ordersPaymentResponse = await supabaseRequest(
+            "/rest/v1/orders?id=" + encodeURIComponent(idFilter),
+            { method: "PATCH", headers: serviceHeaders, body: paymentBody }
+          );
+          if (!ordersPaymentResponse.ok) {
+            const paymentError = await ordersPaymentResponse.json().catch(function () { return null; });
+            return json({ error: (paymentError && (paymentError.message || paymentError.hint || paymentError.error)) || "تعذر تحديث طريقة الدفع في نسخ المندوبين" }, 502);
+          }
+          const archivePaymentResponse = await supabaseRequest(
+            "/rest/v1/master_orders_archive?id=" + encodeURIComponent(idFilter),
+            { method: "PATCH", headers: serviceHeaders, body: paymentBody }
+          );
+          if (!archivePaymentResponse.ok) {
+            const paymentError = await archivePaymentResponse.json().catch(function () { return null; });
+            return json({ error: (paymentError && (paymentError.message || paymentError.hint || paymentError.error)) || "تم تحديث المندوبين لكن تعذر تحديث أرشيف الماستر" }, 502);
+          }
         }
 
         // حدّث نسخة أرشيف الماستر أيضًا؛ واجهة MASTER تقرأ الفواتير من هذا الأرشيف.
@@ -1327,8 +1372,8 @@ export default {
             {
               method: "PATCH",
               headers: {
-                apikey: env.SUPABASE_ANON_KEY,
-                Authorization: "Bearer " + auth.token,
+                apikey: env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY,
+                Authorization: "Bearer " + (env.SUPABASE_SERVICE_ROLE_KEY || auth.token),
                 "Content-Type": "application/json",
                 Prefer: "return=minimal"
               },
