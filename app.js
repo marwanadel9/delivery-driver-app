@@ -4804,6 +4804,8 @@
             method: 'POST',
             body: JSON.stringify({
               orderId: target.id,
+              // أرسل كل معرّفات نسخ الفاتورة نفسها حتى يحدّث الـ Worker النسخ المحددة فقط.
+              invoiceCopyIds: uniqueTargets.map((copy) => Number(copy.id)).filter((id) => Number.isInteger(id) && id > 0),
               order: payloadForTarget
             })
           });
