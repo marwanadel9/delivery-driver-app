@@ -265,6 +265,7 @@
 
   </style>
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -996,11 +997,17 @@
           self.audioEls[id] = a;
         }
         a.srcObject = stream;
+        /* ⭐ تثبيت استقبال الصوت: buffer ثابت = نقاء بدون تقطيع */
+        try { (pc.getReceivers() || []).forEach(function (r) { if ('jitterBufferTarget' in r) r.jitterBufferTarget = 80; }); } catch (_) {}
         ev.track.onunmute = function () { a.muted = false; a.volume = 1; self._playOne(a); self._speaker(pc._faName); self._status('🔊 بيسمع: ' + pc._faName); };
         self._playOne(a);
       };
       pc.onconnectionstatechange = function () {
-        if (pc.connectionState === 'connected') { self._tuneSenders(pc); self._status('🟢 اتصال صوتي مباشر HD (الاتجاهين)'); }
+        if (pc.connectionState === 'connected') {
+          self._tuneSenders(pc);
+          try { (pc.getReceivers() || []).forEach(function (r) { if ('jitterBufferTarget' in r) r.jitterBufferTarget = 80; }); } catch (_) {}
+          self._status('🟢 اتصال صوتي مباشر HD (الاتجاهين)');
+        }
         else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') self._drop(id, true);
       };
       this.peers[id] = pc;
@@ -1033,7 +1040,7 @@
       if (this.talking || this.starting) return;
       this.starting = true; this._status('🎤 جاري فتح المايك...');
       try {
-        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: 48000, latency: 0.003 } });
+        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, echoCancellationType: 'system', noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: 48000, latency: 0.003, googEchoCancellation: true, googEchoCancellationType: 'system', googHighpassFilter: true, googNoiseSuppression: true, googAutoGainControl: true, googTypingNoiseDetection: true, googNoiseReduction: true } });
         var track = this.micStream.getAudioTracks()[0];
         var ids = Object.keys(this.peers);
         for (var i = 0; i < ids.length; i++) {
