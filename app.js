@@ -3283,6 +3283,10 @@
   // The sheet name and creation timestamp are intentionally ignored: the same
   // invoice may be copied to several drivers, and each copy can have a different timestamp.
   function masterSameInvoiceCopy(left, right) {
+    /* الهوية الحقيقية: invoice_number — ثابت لكل فاتورة مهما تكررت النسخ */
+    const li = masterNormalizeDuplicateValue(left?.invoice_number || left?.invoice_no || '');
+    const ri = masterNormalizeDuplicateValue(right?.invoice_number || right?.invoice_no || '');
+    if (li && ri) return li === ri;
     const leftNumber = masterOrderInvoiceNumber(left);
     const rightNumber = masterOrderInvoiceNumber(right);
     if (!leftNumber || leftNumber !== rightNumber) return false;
