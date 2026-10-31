@@ -775,7 +775,7 @@
     );
   }
 
-  /* ============ ملاحة حية بالـ GPS ============ */
+  /* ============ ملاحة حية بالـ GPS + ترتيب جغرافي ذاتي ============ */
   let driverPos = null, gpsStarted = false;
 
   function faCoordsFromUrl(o) {
@@ -791,6 +791,23 @@
     const la1 = p1[0] * Math.PI / 180, la2 = p2[0] * Math.PI / 180;
     const h = Math.sin(dLa / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLo / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  function faNorm(s) {
+    return String(s || '').replace(/[ً-ْٰ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
+  }
+
+  function faEmiRank(o) {
+    const s = faNorm(String(o?.emirate || '') + ' ' + String(o?.area || '') + ' ' + String(o?.location || ''));
+    if (s.includes('ام القيوين')) return 4;
+    if (s.includes('راس الخيمه')) return 5;
+    if (s.includes('دبي')) return 0;
+    if (s.includes('ابوظبي')) return 1;
+    if (s.includes('الشارقه')) return 2;
+    if (s.includes('عجمان')) return 3;
+    if (s.includes('الفجيره')) return 6;
+    if (s.includes('العين')) return 7;
+    return 9;
   }
 
   function faStartGps() {
@@ -812,8 +829,13 @@
   }
 
   function sortPendingOrdersForDisplay(orders) {
-    /* ترتيب خطة الصبح: route_seq (البرنامج بيبعت بالترتيب الجغرافي) — والمسلّم ثابت */
-    const planSeq = (o) => { const n = Number(o?.route_seq); return Number.isFinite(n) && n > 0 ? n : Number.MAX_SAFE_INTEGER; };
+    /* المسلّم: ترتيبهم ثابت — لا نلمسهم. غير المسلّم: الأقرب للمندوب (GPS) ← دبي ← أبوظبي ← المنطقة */
+    const seqNo = (o) => {
+      const v = String(o?.order_number ?? o?.invoice_number ?? '');
+      const m = v.match(/\d+/);
+      return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER;
+    };
+    const areaName = (o) => faNorm(String(o?.area || ''));
     const pending = orders.filter((o) => !isDelivered(o.delivery_status));
     const done = orders.filter((o) => isDelivered(o.delivery_status));
     let sortedPending;
@@ -823,10 +845,20 @@
         const dx = cx ? faDistKm(driverPos, cx) : Infinity;
         const dy = cy ? faDistKm(driverPos, cy) : Infinity;
         if (dx !== dy) return dx - dy;
-        return planSeq(x) - planSeq(y);
+        const rx = faEmiRank(x), ry = faEmiRank(y);
+        if (rx !== ry) return rx - ry;
+        const ax = areaName(x), ay = areaName(y);
+        if (ax !== ay) return ax < ay ? -1 : 1;
+        return seqNo(x) - seqNo(y);
       });
     } else {
-      sortedPending = pending.slice().sort((x, y) => planSeq(x) - planSeq(y));
+      sortedPending = pending.slice().sort((x, y) => {
+        const rx = faEmiRank(x), ry = faEmiRank(y);
+        if (rx !== ry) return rx - ry;
+        const ax = areaName(x), ay = areaName(y);
+        if (ax !== ay) return ax < ay ? -1 : 1;
+        return seqNo(x) - seqNo(y);
+      });
     }
     return [...sortedPending, ...done];
   }
@@ -1926,7 +1958,7 @@
         const gatePhotoBox = document.createElement('div');
         gatePhotoBox.className = 'gate-photo-box';
         gatePhotoBox.style.cssText = 'display:flex;flex-direction:column;gap:7px;width:100%;box-sizing:border-box;margin:10px 0;';
-        gatePhotoUrls.forEach((gatePhotoUrl, index) => {
+        const faAddGateBtn = (gatePhotoUrl, index) => {
           const gatePhotoButton = document.createElement('a');
           gatePhotoButton.className = 'gate-photo-btn';
           gatePhotoButton.href = gatePhotoUrl;
@@ -1941,6 +1973,12 @@
             : '📷 عرض صورة بوابة الفيلا';
           gatePhotoButton.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin:0;padding:11px 14px;border-radius:10px;background:#e8f2ff;color:#1455b8;border:1px solid #b9d4ff;text-align:center;font-weight:800;text-decoration:none;';
           gatePhotoBox.appendChild(gatePhotoButton);
+        };
+        /* الزرار بيظهر بس لو الصورة فعلاً موجودة على السيرفر — ممنوع الروابط الميتة */
+        gatePhotoUrls.forEach((gatePhotoUrl, index) => {
+          const faProbe = new Image();
+          faProbe.onload = () => faAddGateBtn(gatePhotoUrl, index);
+          faProbe.src = gatePhotoUrl;
         });
 
         const insertBefore = node.querySelector('.payment-current, .payment-buttons, .payment-options, .btn-deliver');
