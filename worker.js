@@ -44,12 +44,24 @@ function getBearerToken(request) {
 
 async function supabaseRequest(path, options) {
   const opts = options || {};
-
-  return fetch(SUPABASE_URL + path, {
-    method: opts.method || "GET",
-    headers: opts.headers || {},
-    body: opts.body
-  });
+  const timeoutMs = Number(opts.timeoutMs) || 25000;
+  const controller = new AbortController();
+  const timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  try {
+    return await fetch(SUPABASE_URL + path, {
+      method: opts.method || "GET",
+      headers: opts.headers || {},
+      body: opts.body,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      throw new Error("انتهت مهلة الاتصال بقاعدة البيانات أثناء طلب " + path);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function getUser(token, anonKey) {
@@ -2088,6 +2100,7 @@ export default {
             "/rest/v1/rpc/get_order_delivery_statuses",
             {
               method: "POST",
+              timeoutMs: 15000,
               headers: {
                 apikey:
                   env.SUPABASE_ANON_KEY,
