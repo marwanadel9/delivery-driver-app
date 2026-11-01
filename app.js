@@ -1720,7 +1720,12 @@
         paymentCurrent.textContent =
           payment
             ? `طريقة الدفع الحالية: ${paymentLabel(payment)}`
-            : 'لم يتم تحديد طريقة الدفع';
+            : '⚠️ المكتب عدّل الفاتورة — اختر طريقة الدفع من فضلك';
+      }
+
+      /* إعادة الاختيار: الكمبيوتر حدد كاش/تحويل → السيرفر يمسح اختيار المندوب فيُطلب منه الاختيار من جديد */
+      if (paymentSection && !paidInAdvance && !delivered && !payment) {
+        paymentSection.style.cssText += 'border:2px solid #d97706!important;background:#fffbeb!important;border-radius:12px;';
       }
 
       const paymentButtons =
@@ -1902,6 +1907,22 @@
       if (current) {
         current.textContent =
           `طريقة الدفع الحالية: ${paymentLabel(method)}`;
+      }
+
+      /* إزالة تمييز إعادة الاختيار بعد حفظ الاختيار الجديد */
+      if (card) {
+        const section =
+          card.querySelector(
+            '.payment-section'
+          );
+
+        if (section) {
+          section.style.border =
+            '';
+
+          section.style.background =
+            '';
+        }
       }
 
       toast(
