@@ -995,201 +995,69 @@ export default {
         return json({ departures: Array.isArray(rows) ? rows : [] });
       }
 
-      if (
-        path === "/api/payment" &&
-        request.method === "POST"
-      ) {
+      if (path === "/api/payment" && request.method === "POST") {
         const auth = await requireDriver(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
-
-        const body = await request.json().catch(function () { return {}; });
-        const orderId = Number(body.orderId);
-        const paymentMethod = normalizePayment(body.payment_method);
-
-        if (!Number.isInteger(orderId) || orderId <= 0) {
-          return json({ error: "رقم الطلب غير صحيح" }, 400);
-        }
-        if (!paymentMethod) {
-          return json({ error: "طريقة الدفع غير صحيحة" }, 400);
-        }
-
-        // لا نستخدم مفتاحاً سرياً داخل الكود؛ نقرأه من إعدادات Cloudflare.
-        const paymentServiceKey = String(
-          env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || ""
-        ).trim();
-        if (!paymentServiceKey) {
-          return json({ error: "إعداد مزامنة الدفع غير مكتمل: أضف SUPABASE_SECRET_KEY في أسرار Worker" }, 500);
-        }
-
-        const paymentHeaders = { apikey: paymentServiceKey };
-        // مفاتيح sb_secret_ ليست JWT، أما service_role القديم فهو JWT.
-        if (!paymentServiceKey.startsWith("sb_secret_")) {
-          paymentHeaders.Authorization = "Bearer " + paymentServiceKey;
-        }
-
-        // تحقق أن الفاتورة تخص المندوب الحالي قبل تحديث أي نسخة أخرى.
-        const sourceResponse = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) +
-          "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) +
-          "&select=id,order_number,customer_name,sheet_name&limit=1",
-          { headers: paymentHeaders }
-        );
-        const sourceRows = await sourceResponse.json().catch(function () { return null; });
-        if (!sourceResponse.ok) {
-          return json({ error: (sourceRows && (sourceRows.message || sourceRows.hint || sourceRows.error)) || "تعذر التحقق من الفاتورة قبل مزامنة الدفع" }, 502);
-        }
-        if (!Array.isArray(sourceRows) || sourceRows.length === 0) {
-          return json({ error: "الفاتورة غير موجودة ضمن طلبات حسابك" }, 404);
-        }
-
-        const sourceOrder = sourceRows[0];
-        const invoiceNumber = String(sourceOrder.order_number || "").trim();
-        if (!invoiceNumber) {
-          return json({ error: "الفاتورة لا تحتوي على رقم فاتورة يمكن مزامنته" }, 400);
-        }
-
-        // حدّث طريقة الدفع فقط في جميع نسخ الفاتورة لدى المناديب.
-        const duplicatesResponse = await supabaseRequest(
-          "/rest/v1/orders?order_number=eq." + encodeURIComponent(invoiceNumber) + "&select=id",
-          { headers: paymentHeaders }
-        );
-        const duplicateRows = await duplicatesResponse.json().catch(function () { return null; });
-        if (!duplicatesResponse.ok || !Array.isArray(duplicateRows) || duplicateRows.length === 0) {
-          return json({ error: (duplicateRows && (duplicateRows.message || duplicateRows.hint || duplicateRows.error)) || "تعذر العثور على نسخ الفاتورة لمزامنة الدفع" }, 502);
-        }
-
-        const updateOrdersResponse = await supabaseRequest(
-          "/rest/v1/orders?order_number=eq." + encodeURIComponent(invoiceNumber),
-          {
-            method: "PATCH",
-            headers: Object.assign({}, paymentHeaders, {
-              "Content-Type": "application/json",
-              Prefer: "return=representation"
-            }),
-            body: JSON.stringify({ payment_method: paymentMethod })
-          }
-        );
-        const updatedOrders = await updateOrdersResponse.json().catch(function () { return null; });
-        if (!updateOrdersResponse.ok) {
-          return json({ error: (updatedOrders && (updatedOrders.message || updatedOrders.hint || updatedOrders.error)) || "تعذر تحديث طريقة الدفع عند المناديب" }, 502);
-        }
-
-        // حدّث نسخة الماستر/الأرشيف أيضاً، مع لمس عمود طريقة الدفع فقط.
-        const archiveResponse = await supabaseRequest(
-          "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(invoiceNumber),
-          {
-            method: "PATCH",
-            headers: Object.assign({}, paymentHeaders, {
-              "Content-Type": "application/json",
-              Prefer: "return=representation"
-            }),
-            body: JSON.stringify({ payment_method: paymentMethod })
-          }
-        );
-        const archiveData = await archiveResponse.json().catch(function () { return null; });
-        if (!archiveResponse.ok) {
-          return json({ error: (archiveData && (archiveData.message || archiveData.hint || archiveData.error)) || "تم تحديث المناديب لكن تعذر تحديث طريقة الدفع في الماستر" }, 502);
-        }
-
-        return json({
-          success: true,
-          payment_method: paymentMethod,
-          payment_label: paymentLabel(paymentMethod),
-          synced_orders: Array.isArray(updatedOrders) ? updatedOrders.length : duplicateRows.length,
-          synced_master: Array.isArray(archiveData) ? archiveData.length : 0
-        });
+        return json({ error: "تغيير طريقة الدفع متاح من برنامج الكمبيوتر فقط" }, 403);
       }
 
-      if (
-        path === "/api/deliver" &&
-        request.method === "POST"
-      ) {
-        const auth =
-          await requireDriver(
-            request,
-            env
-          );
+      if (path === "/api/deliver" && request.method === "POST") {
+        const auth = await requireDriver(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(() => ({}));
+        const orderId = Number(body.orderId);
+        if (!Number.isInteger(orderId) || orderId <= 0) return json({ error: "رقم الطلب غير صحيح" }, 400);
 
-        if (auth.error) {
-          return json(
-            {
-              error:
-                auth.error
-            },
-            auth.status
-          );
-        }
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
+        const H = { apikey: serviceKey, "Content-Type": "application/json" };
+        if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
 
-        const body =
-          await request.json().catch(function () {
-            return {};
-          });
-
-        const orderId =
-          Number(body.orderId);
-
-        if (
-          !Number.isInteger(orderId) ||
-          orderId <= 0
-        ) {
-          return json(
-            {
-              error:
-                "رقم الطلب غير صحيح"
-            },
-            400
-          );
-        }
-
-        const rpcResponse =
-          await supabaseRequest(
-            "/rest/v1/rpc/mark_order_delivered",
-            {
-              method: "POST",
-              headers: {
-                apikey:
-                  env.SUPABASE_ANON_KEY,
-                Authorization:
-                  "Bearer " +
-                  auth.token,
-                "Content-Type":
-                  "application/json"
-              },
-              body:
-                JSON.stringify({
-                  p_order_id:
-                    orderId
-                })
-            }
-          );
-
-        const rpcData =
-          await rpcResponse.json().catch(function () {
-            return null;
-          });
-
-        if (!rpcResponse.ok) {
-          return json(
-            {
-              error:
-                (rpcData &&
-                  rpcData.message) ||
-                (rpcData &&
-                  rpcData.hint) ||
-                (rpcData &&
-                  rpcData.error) ||
-                "تعذر تسجيل التسليم"
-            },
-            400
-          );
-        }
-
-        return json({
-          success:
-            true,
-          delivery_status:
-            "delivered"
+        const sourceRes = await supabaseRequest(
+          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) + "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) + "&select=id,order_number,sheet_name,customer_name&limit=1",
+          { headers: H }
+        );
+        const sourceRows = await sourceRes.json().catch(() => null);
+        if (!sourceRes.ok) return json({ error: sourceRows?.message || sourceRows?.hint || "تعذر التحقق من الفاتورة" }, 502);
+        if (!Array.isArray(sourceRows) || !sourceRows.length) return json({ error: "الفاتورة غير موجودة ضمن طلبات حسابك" }, 404);
+        const order = sourceRows[0];
+        const requestRes = await supabaseRequest("/rest/v1/delivery_approval_requests?on_conflict=order_id", {
+          method: "POST",
+          headers: Object.assign({}, H, { Prefer: "resolution=merge-duplicates,return=representation" }),
+          body: JSON.stringify({ order_id: order.id, order_number: order.order_number, sheet_name: order.sheet_name, customer_name: order.customer_name || "", driver_user_id: auth.user.id, status: "pending", requested_at: new Date().toISOString(), processed_at: null })
         });
+        const requestData = await requestRes.json().catch(() => null);
+        if (!requestRes.ok) return json({ error: requestData?.message || requestData?.hint || "تعذر إرسال طلب اعتماد التسليم" }, 502);
+        return json({ success: true, approval_requested: true, message: "تم إرسال طلب اعتماد التسليم إلى الكمبيوتر" });
+      }
+
+      if (path === "/api/excel-approve-delivery" && request.method === "POST") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const body = await request.json().catch(() => ({}));
+        const requestId = Number(body.request_id);
+        if (!Number.isInteger(requestId) || requestId <= 0) return json({ error: "رقم طلب الاعتماد غير صحيح" }, 400);
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
+        const H = { apikey: serviceKey, "Content-Type": "application/json" };
+        if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
+        const getRes = await supabaseRequest("/rest/v1/delivery_approval_requests?id=eq." + requestId + "&status=eq.pending&select=id,order_id,order_number,sheet_name&limit=1", { headers: H });
+        const rows = await getRes.json().catch(() => null);
+        if (!getRes.ok) return json({ error: rows?.message || rows?.hint || "تعذر قراءة طلب الاعتماد" }, 502);
+        if (!Array.isArray(rows) || !rows.length) return json({ error: "طلب الاعتماد غير موجود أو تمت معالجته مسبقًا" }, 404);
+        const req = rows[0];
+        const orderRes = await supabaseRequest("/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name), {
+          method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=representation" }),
+          body: JSON.stringify({ delivery_status: "delivered" })
+        });
+        const changed = await orderRes.json().catch(() => null);
+        if (!orderRes.ok || !Array.isArray(changed) || !changed.length) return json({ error: changed?.message || changed?.hint || "تعذر اعتماد حالة التسليم في الفاتورة" }, 502);
+        const doneRes = await supabaseRequest("/rest/v1/delivery_approval_requests?id=eq." + requestId + "&status=eq.pending", {
+          method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }),
+          body: JSON.stringify({ status: "approved", processed_at: new Date().toISOString() })
+        });
+        if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة لكن تعذر إغلاق طلب الاعتماد؛ أعد المزامنة قبل الموافقة مرة أخرى" }, 502);
+        return json({ success: true, order_number: req.order_number, delivery_status: "delivered" });
       }
 
       if (
@@ -2116,45 +1984,19 @@ export default {
           );
         }
 
-        const rpcResponse =
-          await supabaseRequest(
-            "/rest/v1/rpc/get_order_delivery_statuses",
-            {
-              method: "POST",
-              headers: {
-                apikey:
-                  env.SUPABASE_ANON_KEY,
-                Authorization:
-                  "Bearer " +
-                  env.SUPABASE_ANON_KEY,
-                "Content-Type":
-                  "application/json"
-              }
-            }
-          );
-
-        const data =
-          await rpcResponse.json().catch(function () {
-            return null;
-          });
-
-        if (!rpcResponse.ok) {
-          return json(
-            {
-              error:
-                (data &&
-                  data.message) ||
-                (data &&
-                  data.hint) ||
-                (data &&
-                  data.error) ||
-                "تعذر قراءة حالات التسليم"
-            },
-            500
-          );
-        }
-
-        return json(data);
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
+        const H = { apikey: serviceKey };
+        if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
+        const [ordersRes, requestsRes] = await Promise.all([
+          supabaseRequest("/rest/v1/orders?select=id,order_number,sheet_name,delivery_status,gate_photo_url,created_at&sheet_name=in.(Mandoub,Mandoub2)&order=id.asc&limit=5000", { headers: H }),
+          supabaseRequest("/rest/v1/delivery_approval_requests?status=eq.pending&select=id,order_id,order_number,sheet_name,customer_name,requested_at&order=requested_at.asc&limit=500", { headers: H })
+        ]);
+        const orders = await ordersRes.json().catch(() => null);
+        const requests = await requestsRes.json().catch(() => null);
+        if (!ordersRes.ok) return json({ error: orders?.message || orders?.hint || "تعذر قراءة حالات التسليم" }, 502);
+        if (!requestsRes.ok) return json({ error: requests?.message || requests?.hint || "تعذر قراءة طلبات اعتماد التسليم" }, 502);
+        return json({ orders: Array.isArray(orders) ? orders : [], delivery_requests: Array.isArray(requests) ? requests : [] });
       }
 
       if (path === "/api/resolve-map" && method === "POST") {
