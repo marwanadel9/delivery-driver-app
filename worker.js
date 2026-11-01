@@ -368,6 +368,18 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
+    // صلاحيات الماستر: قراءة وحذف فقط. أي كتابة إدارية تتم من برنامج الكمبيوتر.
+    // تحديث الدفع والتسليم من تطبيق المندوب يظل عبر /api/payment و /api/deliver.
+    if (request.method === "POST" && (
+      path === "/api/master/order/update" ||
+      path === "/api/master/order/update-by-number" ||
+      path === "/api/master/transfer-received"
+    )) {
+      return json({
+        error: "الماستر للعرض والحذف فقط. تعديل الفواتير يتم من برنامج الكمبيوتر، وتحديث الدفع والتسليم من تطبيق المندوب."
+      }, 403);
+    }
+
     try {
       if (
         path === "/api/health" &&
