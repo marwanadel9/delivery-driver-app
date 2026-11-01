@@ -2033,34 +2033,6 @@ export default {
           );
         }
 
-        /* قاعدة إعادة الاختيار: كاش/تحويل بنكي يحددها المندوب عند التسليم.
-           نُبقي قيمة الكمبيوتر في أرشيف الماستر (من بيانات المزامنة نفسها)
-           ونمسح payment_method في نسخة المندوب (قبل التسليم فقط) ليُطلب منه إعادة الاختيار. */
-        {
-          const svcKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-          if (svcKey) {
-            const toClear = new Set();
-            for (const o of orders) {
-              if (!o || typeof o !== "object") continue;
-              const pm = normalizePayment(o.payment_method);
-              if (pm !== "cash" && pm !== "bank_transfer") continue;
-              if (o.paid_in_advance === true) continue;
-              const st = String(o.delivery_status || "").toLowerCase();
-              if (st === "delivered" || st.includes("تم")) continue;
-              const n = String(o.order_number || "").trim();
-              if (/^[a-zA-Z0-9_-]{1,80}$/.test(n)) toClear.add(n);
-            }
-            if (toClear.size) {
-              const cH = { apikey: svcKey, Authorization: "Bearer " + svcKey, "Content-Type": "application/json", Prefer: "return=minimal" };
-              for (const n of toClear) {
-                await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(n), { method: "PATCH", headers: cH, body: JSON.stringify({ payment_method: "" }) });
-              }
-            }
-          }
-        }
-
-        // حذف ملفات الصور يتم بعد نجاح RPC فقط، وفقط عندما يؤكد رد قاعدة البيانات
-        // عدم وجود أي تحديثات قديمة تم رفضها. عند غياب عداد الرفض نحتفظ بالملفات بأمان.
         let skippedOldRevision = null;
         if (rpcData && typeof rpcData === "object") {
           const rpcResult = Array.isArray(rpcData) ? (rpcData[0] || {}) : rpcData;
@@ -2092,6 +2064,24 @@ export default {
           gate_photo_file_deletion_skipped: photosDeletionSkipped,
           skipped_old_revision: skippedOldRevision
         });
+      }
+
+      /* سحب حالة المندوب للكمبيوتر: حالة التسليم + طريقة الدفع المختارة من المندوب + تأكيد التحويل */
+      if (path === "/api/excel-driver-status" && request.method === "GET") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
+        const H = { apikey: svc, Authorization: "Bearer " + svc };
+        const r = await supabaseRequest(
+          "/rest/v1/orders?select=order_number,sheet_name,payment_method,delivery_status,paid_in_advance,bank_transfer_received&order=order_number.asc",
+          { headers: H }
+        );
+        const rows = await r.json().catch(function () { return null; });
+        if (!r.ok || !Array.isArray(rows)) {
+          return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر سحب حالات المندوبين" }, 502);
+        }
+        return json({ orders: rows });
       }
 
       if (
