@@ -2173,6 +2173,25 @@ export default {
         return json({ success: true, updated: orderNumber });
       }
 
+      if (path === "/api/master/delete-by-date" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(function () { return {}; });
+        const d = String(body.date || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: "تاريخ غير صحيح" }, 400);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
+        const H = { apikey: svc, Authorization: "Bearer " + svc, Prefer: "return=representation" };
+        const from = d + "T00:00:00";
+        const toD = new Date(new Date(d + "T00:00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
+        const to = toD + "T00:00:00";
+        const filt = "created_at=gte." + encodeURIComponent(from) + "&created_at=lt." + encodeURIComponent(to);
+        const r1 = await supabaseRequest("/rest/v1/orders?" + filt, { method: "DELETE", headers: H });
+        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?" + filt, { method: "DELETE", headers: H });
+        const c1 = Array.isArray(await r1.clone().json().catch(() => [])) ? 1 : 0;
+        return json({ success: true, orders_cleared: r1.ok, archive_cleared: r2.ok, date: d });
+      }
+
       if (path === "/api/master/dedupe" && request.method === "POST") {
         const auth = await requireMaster(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
