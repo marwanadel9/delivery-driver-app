@@ -998,7 +998,82 @@ export default {
       if (path === "/api/payment" && request.method === "POST") {
         const auth = await requireDriver(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
-        return json({ error: "تغيير طريقة الدفع متاح من برنامج الكمبيوتر فقط" }, 403);
+
+        const body = await request.json().catch(function () { return {}; });
+        const orderId = Number(body.orderId);
+        const paymentMethod = normalizePayment(body.payment_method);
+
+        if (!Number.isInteger(orderId) || orderId <= 0) {
+          return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+        }
+        if (!paymentMethod) {
+          return json({ error: "اختر كاش أو تحويل بنكي فقط" }, 400);
+        }
+
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) {
+          return json({ error: "إعداد تحديث الدفع غير مكتمل في Worker" }, 500);
+        }
+        const serviceHeaders = {
+          apikey: serviceKey,
+          "Content-Type": "application/json"
+        };
+        if (!serviceKey.startsWith("sb_secret_")) {
+          serviceHeaders.Authorization = "Bearer " + serviceKey;
+        }
+
+        const orderResponse = await supabaseRequest(
+          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) +
+            "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) +
+            "&select=id,order_number,paid_in_advance,delivery_status&limit=1",
+          { headers: serviceHeaders }
+        );
+        const orderRows = await orderResponse.json().catch(function () { return null; });
+        if (!orderResponse.ok) {
+          return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة" }, 502);
+        }
+        if (!Array.isArray(orderRows) || !orderRows.length) {
+          return json({ error: "الفاتورة غير موجودة ضمن طلبات حسابك" }, 404);
+        }
+
+        const order = orderRows[0];
+        if (order.paid_in_advance === true) {
+          return json({ error: "هذه الفاتورة مدفوعة مقدمًا، ولا يمكن تغيير طريقة الدفع من التطبيق" }, 403);
+        }
+        if (String(order.delivery_status || "").toLowerCase() === "delivered") {
+          return json({ error: "لا يمكن تغيير طريقة الدفع بعد تسليم الفاتورة" }, 403);
+        }
+
+        const paymentBody = JSON.stringify({
+          payment_method: paymentMethod,
+          bank_transfer_received: false
+        });
+        const patchHeaders = Object.assign({}, serviceHeaders, { Prefer: "return=minimal" });
+        const updateResponse = await supabaseRequest(
+          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) +
+            "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name),
+          { method: "PATCH", headers: patchHeaders, body: paymentBody }
+        );
+        if (!updateResponse.ok) {
+          const updateError = await updateResponse.json().catch(function () { return null; });
+          return json({ error: (updateError && (updateError.message || updateError.hint || updateError.error)) || "تعذر حفظ طريقة الدفع" }, 502);
+        }
+
+        const archiveResponse = await supabaseRequest(
+          "/rest/v1/master_orders_archive?id=eq." + encodeURIComponent(orderId),
+          { method: "PATCH", headers: patchHeaders, body: paymentBody }
+        );
+        if (!archiveResponse.ok && archiveResponse.status !== 404) {
+          const archiveError = await archiveResponse.json().catch(function () { return null; });
+          return json({ error: (archiveError && (archiveError.message || archiveError.hint || archiveError.error)) || "تم تحديث الطلب لكن تعذر تحديث نسخة أرشيف الماستر" }, 502);
+        }
+
+        return json({
+          success: true,
+          orderId: orderId,
+          payment_method: paymentMethod,
+          bank_transfer_received: false
+        });
       }
 
       if (path === "/api/deliver" && request.method === "POST") {
