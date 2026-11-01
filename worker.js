@@ -1285,8 +1285,9 @@ export default {
         // مزامنة صريحة لطريقة الدفع على كل نسخ هذه الفاتورة المحددة بالمعرّفات.
         // لا نعتمد هنا على تطابق رقم الفاتورة وحده، حتى لا نمس فاتورة أخرى قد تحمل رقمًا مشابهًا.
         if (Object.prototype.hasOwnProperty.call(order, "payment_method")) {
-          const paymentMethod = normalizePayment(order.payment_method);
-          if (!paymentMethod) {
+          const rawPaymentMethod = String(order.payment_method ?? "").trim();
+          const paymentMethod = rawPaymentMethod ? normalizePayment(rawPaymentMethod) : null;
+          if (rawPaymentMethod && !paymentMethod) {
             return json({ error: "طريقة الدفع غير صحيحة. اختر كاش أو تحويل بنكي." }, 400);
           }
           const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
@@ -1304,89 +1305,39 @@ export default {
             "Content-Type": "application/json",
             Prefer: "return=minimal"
           };
-          const paymentBody = JSON.stringify({
-            payment_method: paymentMethod,
-            bank_transfer_received: paymentMethod === "bank_transfer" ? (order.bank_transfer_received === true) : false
-          });
-          const idFilter = "in.(" + copyIds.join(",") + ")";
-          const ordersPaymentResponse = await supabaseRequest(
-            "/rest/v1/orders?id=" + encodeURIComponent(idFilter),
-            { method: "PATCH", headers: serviceHeaders, body: paymentBody }
-          );
-          if (!ordersPaymentResponse.ok) {
-            const paymentError = await ordersPaymentResponse.json().catch(function () { return null; });
-            return json({ error: (paymentError && (paymentError.message || paymentError.hint || paymentError.error)) || "تعذر تحديث طريقة الدفع في نسخ المندوبين" }, 502);
-          }
-          const archivePaymentResponse = await supabaseRequest(
-            "/rest/v1/master_orders_archive?id=" + encodeURIComponent(idFilter),
-            { method: "PATCH", headers: serviceHeaders, body: paymentBody }
-          );
-          if (!archivePaymentResponse.ok) {
-            const paymentError = await archivePaymentResponse.json().catch(function () { return null; });
-            return json({ error: (paymentError && (paymentError.message || paymentError.hint || paymentError.error)) || "تم تحديث المندوبين لكن تعذر تحديث أرشيف الماستر" }, 502);
-          }
-        }
-
-        // حدّث نسخة أرشيف الماستر أيضًا؛ واجهة MASTER تقرأ الفواتير من هذا الأرشيف.
-        // بدون هذه الخطوة قد تظهر القيم القديمة مرة أخرى بعد إعادة فتح الفاتورة.
-        const invoiceNumber = String(
-          (rpcData && (rpcData.order_number || rpcData.invoice_number)) ||
-          order.order_number ||
-          order.invoice_number ||
-          ""
-        ).trim();
-
-        if (invoiceNumber) {
-          const archivePatchBody = {};
-          const archiveFields = [
-            "customer_name",
-            "phone",
-            "emirate",
-            "area",
-            "chicken_weights",
-            "chicken_qtys",
-            "plate_names",
-            "plate_qtys",
-            "total",
-            "location_url",
-            "note",
-            "appointment_coordinator",
-            "payment_method",
-            "delivery_status",
-            "gate_photo_url",
-            "gate_photo_urls",
-            "driver_notes",
-            "delivery_fee",
-            "paid_in_advance",
-            "bank_transfer_received"
+          // تحديث نسخ الفاتورة بواسطة معرّفاتها فقط. ممنوع استخدام order_number هنا
+          // لأنه قد يتكرر بين عملاء أو تواريخ مختلفة ويؤدي إلى خلط الفواتير.
+          const syncFields = [
+            "customer_name", "phone", "emirate", "area",
+            "chicken_weights", "chicken_qtys", "plate_names", "plate_qtys",
+            "total", "location_url", "note", "appointment_coordinator",
+            "payment_method", "delivery_status", "gate_photo_url", "gate_photo_urls",
+            "driver_notes", "delivery_fee", "paid_in_advance", "bank_transfer_received",
+            "order_details", "notes"
           ];
-
-          for (const field of archiveFields) {
-            if (rpcData && Object.prototype.hasOwnProperty.call(rpcData, field)) {
-              archivePatchBody[field] = rpcData[field];
-            }
+          const syncPatch = {};
+          for (const field of syncFields) {
+            if (Object.prototype.hasOwnProperty.call(order, field)) syncPatch[field] = order[field];
           }
-
-          const archivePatchResponse = await supabaseRequest(
-            "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(invoiceNumber),
-            {
-              method: "PATCH",
-              headers: {
-                apikey: env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY,
-                Authorization: "Bearer " + (env.SUPABASE_SERVICE_ROLE_KEY || auth.token),
-                "Content-Type": "application/json",
-                Prefer: "return=minimal"
-              },
-              body: JSON.stringify(archivePatchBody)
-            }
+          syncPatch.payment_method = paymentMethod;
+          syncPatch.bank_transfer_received = paymentMethod === "bank_transfer" && order.bank_transfer_received === true;
+          const syncBody = JSON.stringify(syncPatch);
+          const idFilter = "in.(" + copyIds.join(",") + ")";
+          const ordersSyncResponse = await supabaseRequest(
+            "/rest/v1/orders?id=" + encodeURIComponent(idFilter),
+            { method: "PATCH", headers: serviceHeaders, body: syncBody }
           );
-
-          if (!archivePatchResponse.ok) {
-            const archiveError = await archivePatchResponse.json().catch(function () { return null; });
-            return json({
-              error: (archiveError && (archiveError.message || archiveError.hint || archiveError.error)) ||
-                "تم تعديل الطلب، لكن تعذر تحديث نسخة أرشيف الماستر"
-            }, 502);
+          if (!ordersSyncResponse.ok) {
+            const syncError = await ordersSyncResponse.json().catch(function () { return null; });
+            return json({ error: (syncError && (syncError.message || syncError.hint || syncError.error)) || "تعذر تحديث نسخ المناديب المحددة" }, 502);
+          }
+          const archiveSyncResponse = await supabaseRequest(
+            "/rest/v1/master_orders_archive?id=" + encodeURIComponent(idFilter),
+            { method: "PATCH", headers: serviceHeaders, body: syncBody }
+          );
+          if (!archiveSyncResponse.ok) {
+            const syncError = await archiveSyncResponse.json().catch(function () { return null; });
+            return json({ error: (syncError && (syncError.message || syncError.hint || syncError.error)) || "تم تحديث الطلبات لكن تعذر تحديث نسخ الماستر المحددة" }, 502);
           }
         }
 
@@ -2151,26 +2102,7 @@ export default {
       if (path === "/api/master/order/update-by-number" && request.method === "POST") {
         const auth = await requireMaster(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
-        const body = await request.json().catch(function () { return {}; });
-        const orderNumber = String(body.order_number || "").trim();
-        const patch = body.order && typeof body.order === "object" ? body.order : null;
-        if (!orderNumber || !patch) return json({ error: "بيانات غير مكتملة" }, 400);
-        delete patch.id;
-        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
-        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
-        const bodyStr = JSON.stringify(patch);
-        const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: bodyStr });
-        if (!r1.ok) {
-          const e1 = await r1.json().catch(function () { return null; });
-          return json({ error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ الطلبات" }, 502);
-        }
-        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: bodyStr });
-        if (!r2.ok) {
-          const e2 = await r2.json().catch(function () { return null; });
-          return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
-        }
-        return json({ success: true, updated: orderNumber });
+        return json({ error: "تم إيقاف التعديل برقم الفاتورة وحده لحماية الفواتير المتشابهة. حدّث نسخة البرنامج لاستخدام التعديل بالمعرّف." }, 410);
       }
 
       if (path === "/api/master/delete-by-date" && request.method === "POST") {
