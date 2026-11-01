@@ -2131,20 +2131,29 @@ export default {
 
         // اجلب طلبات التسليم المعلقة من نفس الجدول الذي يكتب فيه /api/deliver.
         // الكمبيوتر يتوقعها في الخاصية delivery_requests.
-        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
+        // استخدم مفتاح service_role أولاً حتى لا يحجب مفتاح anon/secret غير المناسب قراءة الطلبات.
+        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker: أضف SUPABASE_SERVICE_ROLE_KEY" }, 500);
         const serviceHeaders = { apikey: serviceKey };
         if (!serviceKey.startsWith("sb_secret_")) serviceHeaders.Authorization = "Bearer " + serviceKey;
         const requestsResponse = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?status=eq.pending&select=id,order_id,invoice_number,sheet_name,driver_name,requested_at&order=requested_at.asc",
+          "/rest/v1/driver_delivery_requests?select=id,order_id,invoice_number,sheet_name,driver_name,requested_at,status&order=requested_at.asc",
           { headers: serviceHeaders }
         );
-        const deliveryRequests = await requestsResponse.json().catch(function () { return null; });
-        if (!requestsResponse.ok || !Array.isArray(deliveryRequests)) {
-          return json({ error: (deliveryRequests && (deliveryRequests.message || deliveryRequests.hint || deliveryRequests.error)) || "تعذر قراءة طلبات اعتماد التسليم" }, 502);
+        const allDeliveryRequests = await requestsResponse.json().catch(function () { return null; });
+        if (!requestsResponse.ok || !Array.isArray(allDeliveryRequests)) {
+          return json({ error: (allDeliveryRequests && (allDeliveryRequests.message || allDeliveryRequests.hint || allDeliveryRequests.error)) || "تعذر قراءة طلبات اعتماد التسليم" }, 502);
         }
+        // بعض النسخ القديمة قد تستخدم requested بدلاً من pending؛ اعرض الطلبات غير المعالجة فقط.
+        const deliveryRequests = allDeliveryRequests.filter(function (row) {
+          const status = String(row.status || "pending").trim().toLowerCase();
+          return status === "pending" || status === "requested" || status === "waiting" || status === "قيد الانتظار";
+        });
         const statusOrders = Array.isArray(data) ? data : (Array.isArray(data && data.orders) ? data.orders : []);
-        return json({ orders: statusOrders, delivery_requests: deliveryRequests });
+        return new Response(JSON.stringify({ orders: statusOrders, delivery_requests: deliveryRequests }), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store, no-cache, must-revalidate" }
+        });
       }
 
       // اعتماد طلب التسليم من الكمبيوتر فقط. لا يتم تحديث الفاتورة إلا بعد ضغط المستخدم للموافقة.
@@ -2154,7 +2163,7 @@ export default {
         const body = await request.json().catch(function () { return {}; });
         const requestId = Number(body.request_id);
         if (!Number.isInteger(requestId) || requestId <= 0) return json({ error: "رقم طلب الاعتماد غير صحيح" }, 400);
-        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
         if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
         const H = { apikey: serviceKey, "Content-Type": "application/json" };
         if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
