@@ -2007,7 +2007,6 @@
         node.querySelector('.payment-section');
 
       if (paymentSection) {
-        // المدفوع مقدمًا يحدده الكمبيوتر فقط؛ لا تظهر اختيارات الدفع للمندوب.
         paymentSection.style.display = paidInAdvance ? 'none' : '';
       }
 
@@ -2016,12 +2015,11 @@
           '.payment-current'
         );
 
-      if (paymentCurrent) {
-        paymentCurrent.textContent = paidInAdvance
-          ? '✅ مدفوع مقدمًا — يحدده الكمبيوتر'
-          : payment
+      if (paymentCurrent && !paidInAdvance) {
+        paymentCurrent.textContent =
+          payment
             ? `طريقة الدفع الحالية: ${paymentLabel(payment)}`
-            : 'يرجى تحديد طريقة الدفع';
+            : 'لم يتم تحديد طريقة الدفع';
       }
 
       const paymentButtons =
@@ -2043,7 +2041,6 @@
 
           button.disabled =
             delivered || paidInAdvance;
-          button.style.display = paidInAdvance ? 'none' : '';
 
           button.addEventListener(
             'click',
@@ -2058,8 +2055,7 @@
         }
       );
 
-      // يظل للمندوب حق إعادة اختيار الكاش أو التحويل البنكي.
-      // لا تظهر اختيارات الدفع عند كون الفاتورة مدفوعة مقدمًا؛ هذا القرار للكمبيوتر فقط.
+      /* يظل اختيار كاش/تحويل متاحًا للمندوب حتى يغيّر الكمبيوتر طريقة الدفع ويطلب إعادة الاختيار. */
       const oldPayLock = node.querySelector('.pay-locked');
       if (oldPayLock) oldPayLock.remove();
 
@@ -2074,7 +2070,10 @@
         );
 
       if (deliverButton) {
-        if (delivered) {
+        if (order.delivery_request_pending && !delivered) {
+          deliverButton.disabled = true;
+          deliverButton.textContent = '✓ تم إرسال طلب التسليم — بانتظار سحب الكمبيوتر';
+        } else if (delivered) {
           deliverButton.disabled =
             true;
 
@@ -2146,10 +2145,9 @@
     allButtons
   ) {
     if (
-      !method ||
-      isDelivered(
-        order.delivery_status
-      )
+      !['cash', 'bank_transfer'].includes(method) ||
+      isPaidInAdvance(order) ||
+      isDelivered(order.delivery_status)
     ) {
       return;
     }
@@ -2289,14 +2287,10 @@
         }
       );
 
-      order.delivery_status =
-        'delivered';
-
-      toast(
-        'تم تسجيل التسليم بنجاح ✅'
-      );
-
-      render();
+      order.delivery_request_pending = true;
+      button.disabled = true;
+      button.textContent = '✓ تم إرسال طلب التسليم — بانتظار سحب الكمبيوتر';
+      toast('تم إرسال طلب التسليم للكمبيوتر. ستتغير الحالة عند سحب الطلبات ✅');
     } catch (error) {
       if (
         error.message ===
