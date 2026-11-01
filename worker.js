@@ -372,7 +372,6 @@ export default {
     // تحديث الدفع والتسليم من تطبيق المندوب يظل عبر /api/payment و /api/deliver.
     if (request.method === "POST" && (
       path === "/api/master/order/update" ||
-      path === "/api/master/order/update-by-number" ||
       path === "/api/master/transfer-received"
     )) {
       return json({
@@ -2034,6 +2033,32 @@ export default {
           );
         }
 
+        /* قاعدة إعادة الاختيار: كاش/تحويل بنكي يحددها المندوب عند التسليم.
+           نُبقي قيمة الكمبيوتر في أرشيف الماستر (من بيانات المزامنة نفسها)
+           ونمسح payment_method في نسخة المندوب (قبل التسليم فقط) ليُطلب منه إعادة الاختيار. */
+        {
+          const svcKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+          if (svcKey) {
+            const toClear = new Set();
+            for (const o of orders) {
+              if (!o || typeof o !== "object") continue;
+              const pm = normalizePayment(o.payment_method);
+              if (pm !== "cash" && pm !== "bank_transfer") continue;
+              if (o.paid_in_advance === true) continue;
+              const st = String(o.delivery_status || "").toLowerCase();
+              if (st === "delivered" || st.includes("تم")) continue;
+              const n = String(o.order_number || "").trim();
+              if (/^[a-zA-Z0-9_-]{1,80}$/.test(n)) toClear.add(n);
+            }
+            if (toClear.size) {
+              const cH = { apikey: svcKey, Authorization: "Bearer " + svcKey, "Content-Type": "application/json", Prefer: "return=minimal" };
+              for (const n of toClear) {
+                await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(n), { method: "PATCH", headers: cH, body: JSON.stringify({ payment_method: "" }) });
+              }
+            }
+          }
+        }
+
         // حذف ملفات الصور يتم بعد نجاح RPC فقط، وفقط عندما يؤكد رد قاعدة البيانات
         // عدم وجود أي تحديثات قديمة تم رفضها. عند غياب عداد الرفض نحتفظ بالملفات بأمان.
         let skippedOldRevision = null;
@@ -2227,13 +2252,56 @@ export default {
         const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
         if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
         const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
-        const bodyStr = JSON.stringify(patch);
-        const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: bodyStr });
+        // كاش/تحويل بنكي يحددها المندوب عند التسليم: نحتفظ بقيمة الكمبيوتر في أرشيف الماستر
+        // ونمسح نسخة المندوب (قبل التسليم فقط) ليُطلب منه إعادة الاختيار.
+        const driverPatch = Object.assign({}, patch);
+        const archivePatch = Object.assign({}, patch);
+        const stRaw = String(patch.delivery_status || "").toLowerCase();
+        const isDelivered = stRaw === "delivered" || stRaw.includes("تم");
+        const pmRaw = String(patch.payment_method || "").trim();
+        const isDriverChoice = pmRaw === "cash" || pmRaw === "bank_transfer" || pmRaw === "كاش" || pmRaw === "تحويل بنكي";
+        const isAdvance = patch.paid_in_advance === true || /مقدم/.test(pmRaw);
+        if (isDriverChoice && !isDelivered) driverPatch.payment_method = "";
+        if (isAdvance) { driverPatch.paid_in_advance = true; archivePatch.paid_in_advance = true; }
+        const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(driverPatch) });
         if (!r1.ok) {
           const e1 = await r1.json().catch(function () { return null; });
           return json({ error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ الطلبات" }, 502);
         }
-        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: bodyStr });
+        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(archivePatch) });
+        if (!r2.ok) {
+          const e2 = await r2.json().catch(function () { return null; });
+          return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
+        }
+        return json({ success: true, updated: orderNumber });
+      }
+
+      /* تصحيح فوري من برنامج الكمبيوتر (بسر المزامنة): حالة تسليم / طريقة دفع / تأكيد تحويل.
+         لا يحذف أي بيانات — يعدّل الحقول المحددة فقط في نسخ الطلبات والأرشيف. */
+      if (path === "/api/excel-correct" && request.method === "POST") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
+        const body = await request.json().catch(function () { return {}; });
+        const orderNumber = String(body.order_number || "").trim();
+        const set = body.set && typeof body.set === "object" ? body.set : null;
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !set) return json({ error: "بيانات غير صحيحة" }, 400);
+        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
+        const driverPatch = Object.assign({}, set);
+        const archivePatch = Object.assign({}, set);
+        const stRaw = String(set.delivery_status || "").toLowerCase();
+        const isDelivered = stRaw === "delivered" || stRaw.includes("تم");
+        const pmRaw = String(set.payment_method || "").trim();
+        const isDriverChoice = pmRaw === "cash" || pmRaw === "bank_transfer" || pmRaw === "كاش" || pmRaw === "تحويل بنكي";
+        if (isDriverChoice && !isDelivered) driverPatch.payment_method = "";
+        if (set.paid_in_advance === true || /مقدم/.test(pmRaw)) { driverPatch.paid_in_advance = true; archivePatch.paid_in_advance = true; }
+        const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(driverPatch) });
+        if (!r1.ok) {
+          const e1 = await r1.json().catch(function () { return null; });
+          return json({ error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ الطلبات" }, 502);
+        }
+        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(archivePatch) });
         if (!r2.ok) {
           const e2 = await r2.json().catch(function () { return null; });
           return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
