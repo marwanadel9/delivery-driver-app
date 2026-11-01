@@ -2124,7 +2124,7 @@ export default {
         return json(data);
       }
 
-      if (path === "/api/resolve-map" && request.method === "POST") {
+      if (path === "/api/resolve-map" && method === "POST") {
         try {
           const body = await request.json();
           let finalUrl = String(body.url || "").trim();
@@ -2146,6 +2146,59 @@ export default {
         } catch (e) {
           return json({ ok: false, error: String(e && e.message || e) }, 500);
         }
+      }
+
+      if (path === "/api/master/order/update-by-number" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(function () { return {}; });
+        const orderNumber = String(body.order_number || "").trim();
+        const patch = body.order && typeof body.order === "object" ? body.order : null;
+        if (!orderNumber || !patch) return json({ error: "بيانات غير مكتملة" }, 400);
+        delete patch.id;
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
+        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
+        const bodyStr = JSON.stringify(patch);
+        const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: bodyStr });
+        if (!r1.ok) {
+          const e1 = await r1.json().catch(function () { return null; });
+          return json({ error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ الطلبات" }, 502);
+        }
+        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: bodyStr });
+        if (!r2.ok) {
+          const e2 = await r2.json().catch(function () { return null; });
+          return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
+        }
+        return json({ success: true, updated: orderNumber });
+      }
+
+      if (path === "/api/master/dedupe" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "إعداد التنضيف غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
+        const H = { apikey: svc, Authorization: "Bearer " + svc };
+        async function dedupeTable(table, withSheet) {
+          const cols = withSheet ? "id,order_number,sheet_name" : "id,order_number";
+          const res = await supabaseRequest("/rest/v1/" + table + "?select=" + cols + "&order=id.asc", { headers: H });
+          const rows = await res.json().catch(function () { return []; });
+          if (!res.ok || !Array.isArray(rows)) return { error: "تعذر قراءة " + table };
+          const keep = new Map();
+          for (const r of rows) {
+            const key = (withSheet ? String(r.sheet_name) + "|" : "") + String(r.order_number);
+            keep.set(key, r.id);
+          }
+          const del = rows
+            .filter((r) => keep.get((withSheet ? String(r.sheet_name) + "|" : "") + String(r.order_number)) !== r.id)
+            .map((r) => r.id);
+          if (!del.length) return { removed: 0 };
+          const dres = await supabaseRequest("/rest/v1/" + table + "?id=in.(" + del.join(",") + ")", { method: "DELETE", headers: H });
+          return { removed: del.length, ok: dres.ok };
+        }
+        const o = await dedupeTable("orders", true);
+        const a = await dedupeTable("master_orders_archive", false);
+        return json({ success: true, orders: o, archive: a });
       }
 
       if (
