@@ -3669,10 +3669,8 @@
         <div class="master-old-transfer-meta">${masterEscape([order.emirate, order.area].filter(Boolean).join(' / ') || '—')}</div>
         <div class="master-old-transfer-meta">تاريخ الفاتورة: ${masterEscape(masterDate(order.created_at))}</div>
         <div class="master-old-transfer-amount">${masterEscape(formatTotal(order.total))}</div>
-        <button class="master-transfer-btn pending" data-old-transfer="${masterEscape(order.id)}">تأكيد استلام التحويل</button>
+        <span class="master-transfer-state">تأكيد التحويل يتم من تطبيق المندوب فقط</span>
       `;
-      const button = card.querySelector('[data-old-transfer]');
-      if (button) button.addEventListener('click', () => setMasterTransferReceived(order, true, button));
       list.appendChild(card);
       });
     }
@@ -3768,7 +3766,7 @@
         <td>${masterEscape(masterDate(order.created_at))}</td>
         <td><strong>${masterEscape(moneyText(masterMoney(order.total)))}</strong></td>
         <td>${status}</td>
-        <td><button type="button" class="${buttonClass}" data-month-transfer-action="${masterEscape(order.id)}">${buttonLabel}</button></td>
+        <td><span class="master-transfer-state">${isReceived ? 'تم الاستلام' : 'بانتظار تحديث المندوب'}</span></td>
       </tr>`;
     };
 
@@ -3779,15 +3777,6 @@
       ? transfers.map(rowHtml).join('')
       : '<tr><td colspan="9" class="master-monthly-empty">لا توجد فواتير تحويل بنكي في الشهر المحدد.</td></tr>';
 
-    [pendingBody, allBody].forEach((body) => {
-      body.querySelectorAll('[data-month-transfer-action]').forEach((button) => {
-        button.addEventListener('click', () => {
-          const id = String(button.dataset.monthTransferAction || '');
-          const order = transfers.find((item) => String(item.id) === id);
-          if (order) setMasterTransferReceived(order, order.bank_transfer_received !== true, button);
-        });
-      });
-    });
   }
 
   function isBalancePaymentOrder(order) {
@@ -4024,7 +4013,7 @@
           ${!paidInAdvance && payment === 'bank_transfer'
             ? (order.bank_transfer_received === true
               ? '<span class="master-transfer-state received">✓ تم الاستلام</span>'
-              : `<button class="master-transfer-btn pending" data-master-transfer="${masterEscape(order.id)}">تأكيد الاستلام</button>`)
+              : '<span class="master-transfer-state">بانتظار تحديث المندوب</span>')
             : '<span class="master-transfer-state">—</span>'}
         </td>
 
@@ -4072,16 +4061,14 @@
         );
       }
 
-      const transferButton = tr.querySelector('[data-master-transfer]');
-      if (transferButton) {
-        transferButton.addEventListener('click', () => setMasterTransferReceived(order, true, transferButton));
-      }
 
       body.appendChild(tr);
     });
   }
 
   async function setMasterTransferReceived(order, received, button) {
+    toast('تحديث حالة التحويل يتم من تطبيق المندوب فقط', true);
+    return;
     if (isPaidInAdvance(order) || normalizePayment(order.payment_method) !== 'bank_transfer') {
       toast('تأكيد الاستلام متاح لفواتير التحويل البنكي فقط', true);
       return;
@@ -4634,6 +4621,8 @@
   }
 
   function openMasterEdit(order) {
+    toast('تعديل الفواتير متاح من برنامج الكمبيوتر فقط', true);
+    return;
     const body = $('master-modal-body');
     const title = $('master-modal-title');
     if (!body) return;
@@ -4737,6 +4726,8 @@
   }
 
   async function saveMasterOrder(order) {
+    toast('تعديل الفواتير متاح من برنامج الكمبيوتر فقط', true);
+    return;
     const button = $('master-save-edit');
     if (button?.dataset.saving === 'true') return;
     if (button) {
