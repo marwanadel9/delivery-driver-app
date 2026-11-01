@@ -2129,7 +2129,58 @@ export default {
           );
         }
 
-        return json(data);
+        // اجلب طلبات التسليم المعلقة من نفس الجدول الذي يكتب فيه /api/deliver.
+        // الكمبيوتر يتوقعها في الخاصية delivery_requests.
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
+        const serviceHeaders = { apikey: serviceKey };
+        if (!serviceKey.startsWith("sb_secret_")) serviceHeaders.Authorization = "Bearer " + serviceKey;
+        const requestsResponse = await supabaseRequest(
+          "/rest/v1/driver_delivery_requests?status=eq.pending&select=id,order_id,invoice_number,sheet_name,driver_name,requested_at&order=requested_at.asc",
+          { headers: serviceHeaders }
+        );
+        const deliveryRequests = await requestsResponse.json().catch(function () { return null; });
+        if (!requestsResponse.ok || !Array.isArray(deliveryRequests)) {
+          return json({ error: (deliveryRequests && (deliveryRequests.message || deliveryRequests.hint || deliveryRequests.error)) || "تعذر قراءة طلبات اعتماد التسليم" }, 502);
+        }
+        const statusOrders = Array.isArray(data) ? data : (Array.isArray(data && data.orders) ? data.orders : []);
+        return json({ orders: statusOrders, delivery_requests: deliveryRequests });
+      }
+
+      // اعتماد طلب التسليم من الكمبيوتر فقط. لا يتم تحديث الفاتورة إلا بعد ضغط المستخدم للموافقة.
+      if (path === "/api/excel-approve-delivery" && request.method === "POST") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const body = await request.json().catch(function () { return {}; });
+        const requestId = Number(body.request_id);
+        if (!Number.isInteger(requestId) || requestId <= 0) return json({ error: "رقم طلب الاعتماد غير صحيح" }, 400);
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
+        const H = { apikey: serviceKey, "Content-Type": "application/json" };
+        if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
+
+        const getRes = await supabaseRequest(
+          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending&select=id,order_id,invoice_number,sheet_name&limit=1",
+          { headers: H }
+        );
+        const rows = await getRes.json().catch(function () { return null; });
+        if (!getRes.ok) return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة طلب الاعتماد" }, 502);
+        if (!Array.isArray(rows) || !rows.length) return json({ error: "طلب الاعتماد غير موجود أو تمت معالجته مسبقًا" }, 404);
+        const req = rows[0];
+
+        const orderRes = await supabaseRequest(
+          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name),
+          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=representation" }), body: JSON.stringify({ delivery_status: "delivered" }) }
+        );
+        const changed = await orderRes.json().catch(function () { return null; });
+        if (!orderRes.ok || !Array.isArray(changed) || !changed.length) return json({ error: (changed && (changed.message || changed.hint || changed.error)) || "تعذر اعتماد حالة التسليم في الفاتورة" }, 502);
+
+        const doneRes = await supabaseRequest(
+          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending",
+          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: new Date().toISOString() }) }
+        );
+        if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة لكن تعذر إغلاق طلب الاعتماد" }, 502);
+        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
       }
 
       if (path === "/api/resolve-map" && method === "POST") {
