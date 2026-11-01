@@ -2046,6 +2046,21 @@
         }
       );
 
+      /* ⭐ لو طريقة الدفع اتحددت (كاش/تحويل/مقدم): اخفي الزرارين واكتفي بتأكيد — ممنوع تغييرها من هنا */
+      if (payment || paidInAdvance) {
+        paymentButtons.forEach((button) => {
+          button.style.display = 'none';
+        });
+        const payWrap = node.querySelector('.payment-buttons');
+        if (payWrap && !payWrap.querySelector('.pay-locked')) {
+          const locked = document.createElement('div');
+          locked.className = 'pay-locked';
+          locked.textContent = paidInAdvance ? '✅ مدفوع مقدمًا' : '✅ تم تحديد الدفع: ' + paymentLabel(payment);
+          locked.style.cssText = 'width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;background:#dcfce7;color:#166534;border:1px solid #86efac;text-align:center;font-weight:900;font-size:15px;';
+          payWrap.appendChild(locked);
+        }
+      }
+
       node.classList.toggle(
         'is-done',
         delivered
@@ -4815,12 +4830,10 @@
         };
 
         try {
-          const response = await masterFetch('/api/master/order/update', {
+          const response = await masterFetch('/api/master/order/update-by-number', {
             method: 'POST',
             body: JSON.stringify({
-              orderId: target.id,
-              // أرسل كل معرّفات نسخ الفاتورة نفسها حتى يحدّث الـ Worker النسخ المحددة فقط.
-              invoiceCopyIds: uniqueTargets.map((copy) => Number(copy.id)).filter((id) => Number.isInteger(id) && id > 0),
+              order_number: String(updatedOrder.order_number || ''),
               order: payloadForTarget
             })
           });
