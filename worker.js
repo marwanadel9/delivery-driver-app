@@ -1184,6 +1184,16 @@ export default {
         path === "/api/master/order/update" &&
         request.method === "POST"
       ) {
+        // وضع الكمبيوتر هو المصدر الوحيد لتعديل الفواتير.
+        // نوقف التعديل من واجهة الماستر مع الإبقاء على بقية وظائف الماستر
+        // مثل قراءة البيانات وحالات التسليم وحركات المناديب.
+        return json(
+          {
+            error: "تم إيقاف تعديل الفواتير من الماستر. التعديل متاح من برنامج الكمبيوتر فقط."
+          },
+          403
+        );
+
         const auth =
           await requireMaster(
             request,
@@ -1270,74 +1280,78 @@ export default {
           return json(
             {
               error:
-                [
-                  rpcData && rpcData.message,
-                  rpcData && rpcData.details,
-                  rpcData && rpcData.hint,
-                  rpcData && rpcData.code ? "Code: " + rpcData.code : null,
-                  rpcData && rpcData.error
-                ].filter(Boolean).join(" | ") || "تعذر تعديل الفاتورة"
+                (rpcData &&
+                  rpcData.message) ||
+                (rpcData &&
+                  rpcData.hint) ||
+                (rpcData &&
+                  rpcData.error) ||
+                "تعذر تعديل الفاتورة"
             },
             400
           );
         }
 
-        // مزامنة صريحة لطريقة الدفع على كل نسخ هذه الفاتورة المحددة بالمعرّفات.
-        // لا نعتمد هنا على تطابق رقم الفاتورة وحده، حتى لا نمس فاتورة أخرى قد تحمل رقمًا مشابهًا.
-        if (Object.prototype.hasOwnProperty.call(order, "payment_method")) {
-          const rawPaymentMethod = String(order.payment_method ?? "").trim();
-          const paymentMethod = rawPaymentMethod ? normalizePayment(rawPaymentMethod) : null;
-          if (rawPaymentMethod && !paymentMethod) {
-            return json({ error: "طريقة الدفع غير صحيحة. اختر كاش أو تحويل بنكي." }, 400);
-          }
-          const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-          if (!serviceKey) {
-            return json({ error: "إعداد مزامنة طريقة الدفع غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
-          }
-          const rawIds = Array.isArray(body.invoiceCopyIds) ? body.invoiceCopyIds : [orderId];
-          const copyIds = Array.from(new Set(rawIds.concat([orderId]).map(Number).filter((id) => Number.isInteger(id) && id > 0)));
-          if (!copyIds.length || copyIds.length > 20) {
-            return json({ error: "تعذر تحديد نسخ الفاتورة المراد تحديثها" }, 400);
-          }
-          const serviceHeaders = {
-            apikey: serviceKey,
-            Authorization: "Bearer " + serviceKey,
-            "Content-Type": "application/json",
-            Prefer: "return=minimal"
-          };
-          // تحديث نسخ الفاتورة بواسطة معرّفاتها فقط. ممنوع استخدام order_number هنا
-          // لأنه قد يتكرر بين عملاء أو تواريخ مختلفة ويؤدي إلى خلط الفواتير.
-          const syncFields = [
-            "customer_name", "phone", "emirate", "area",
-            "chicken_weights", "chicken_qtys", "plate_names", "plate_qtys",
-            "total", "location_url", "note", "appointment_coordinator",
-            "payment_method", "delivery_status", "gate_photo_url", "gate_photo_urls",
-            "driver_notes", "delivery_fee", "paid_in_advance", "bank_transfer_received",
-            "order_details", "notes"
+        // حدّث نسخة أرشيف الماستر أيضًا؛ واجهة MASTER تقرأ الفواتير من هذا الأرشيف.
+        // بدون هذه الخطوة قد تظهر القيم القديمة مرة أخرى بعد إعادة فتح الفاتورة.
+        const invoiceNumber = String(
+          (rpcData && (rpcData.order_number || rpcData.invoice_number)) ||
+          order.order_number ||
+          order.invoice_number ||
+          ""
+        ).trim();
+
+        if (invoiceNumber) {
+          const archivePatchBody = {};
+          const archiveFields = [
+            "customer_name",
+            "phone",
+            "emirate",
+            "area",
+            "chicken_weights",
+            "chicken_qtys",
+            "plate_names",
+            "plate_qtys",
+            "total",
+            "location_url",
+            "note",
+            "appointment_coordinator",
+            "payment_method",
+            "delivery_status",
+            "gate_photo_url",
+            "gate_photo_urls",
+            "driver_notes",
+            "delivery_fee",
+            "paid_in_advance",
+            "bank_transfer_received"
           ];
-          const syncPatch = {};
-          for (const field of syncFields) {
-            if (Object.prototype.hasOwnProperty.call(order, field)) syncPatch[field] = order[field];
+
+          for (const field of archiveFields) {
+            if (rpcData && Object.prototype.hasOwnProperty.call(rpcData, field)) {
+              archivePatchBody[field] = rpcData[field];
+            }
           }
-          syncPatch.payment_method = paymentMethod;
-          syncPatch.bank_transfer_received = paymentMethod === "bank_transfer" && order.bank_transfer_received === true;
-          const syncBody = JSON.stringify(syncPatch);
-          const idFilter = "in.(" + copyIds.join(",") + ")";
-          const ordersSyncResponse = await supabaseRequest(
-            "/rest/v1/orders?id=" + encodeURIComponent(idFilter),
-            { method: "PATCH", headers: serviceHeaders, body: syncBody }
+
+          const archivePatchResponse = await supabaseRequest(
+            "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(invoiceNumber),
+            {
+              method: "PATCH",
+              headers: {
+                apikey: env.SUPABASE_ANON_KEY,
+                Authorization: "Bearer " + auth.token,
+                "Content-Type": "application/json",
+                Prefer: "return=minimal"
+              },
+              body: JSON.stringify(archivePatchBody)
+            }
           );
-          if (!ordersSyncResponse.ok) {
-            const syncError = await ordersSyncResponse.json().catch(function () { return null; });
-            return json({ error: (syncError && (syncError.message || syncError.hint || syncError.error)) || "تعذر تحديث نسخ المناديب المحددة" }, 502);
-          }
-          const archiveSyncResponse = await supabaseRequest(
-            "/rest/v1/master_orders_archive?id=" + encodeURIComponent(idFilter),
-            { method: "PATCH", headers: serviceHeaders, body: syncBody }
-          );
-          if (!archiveSyncResponse.ok) {
-            const syncError = await archiveSyncResponse.json().catch(function () { return null; });
-            return json({ error: (syncError && (syncError.message || syncError.hint || syncError.error)) || "تم تحديث الطلبات لكن تعذر تحديث نسخ الماستر المحددة" }, 502);
+
+          if (!archivePatchResponse.ok) {
+            const archiveError = await archivePatchResponse.json().catch(function () { return null; });
+            return json({
+              error: (archiveError && (archiveError.message || archiveError.hint || archiveError.error)) ||
+                "تم تعديل الطلب، لكن تعذر تحديث نسخة أرشيف الماستر"
+            }, 502);
           }
         }
 
@@ -2097,59 +2111,6 @@ export default {
         } catch (e) {
           return json({ ok: false, error: String(e && e.message || e) }, 500);
         }
-      }
-
-      if (path === "/api/master/order/update-by-number" && request.method === "POST") {
-        const auth = await requireMaster(request, env);
-        if (auth.error) return json({ error: auth.error }, auth.status);
-        return json({ error: "تم إيقاف التعديل برقم الفاتورة وحده لحماية الفواتير المتشابهة. حدّث نسخة البرنامج لاستخدام التعديل بالمعرّف." }, 410);
-      }
-
-      if (path === "/api/master/delete-by-date" && request.method === "POST") {
-        const auth = await requireMaster(request, env);
-        if (auth.error) return json({ error: auth.error }, auth.status);
-        const body = await request.json().catch(function () { return {}; });
-        const d = String(body.date || "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: "تاريخ غير صحيح" }, 400);
-        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
-        const H = { apikey: svc, Authorization: "Bearer " + svc, Prefer: "return=representation" };
-        const from = d + "T00:00:00";
-        const toD = new Date(new Date(d + "T00:00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
-        const to = toD + "T00:00:00";
-        const filt = "created_at=gte." + encodeURIComponent(from) + "&created_at=lt." + encodeURIComponent(to);
-        const r1 = await supabaseRequest("/rest/v1/orders?" + filt, { method: "DELETE", headers: H });
-        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?" + filt, { method: "DELETE", headers: H });
-        const c1 = Array.isArray(await r1.clone().json().catch(() => [])) ? 1 : 0;
-        return json({ success: true, orders_cleared: r1.ok, archive_cleared: r2.ok, date: d });
-      }
-
-      if (path === "/api/master/dedupe" && request.method === "POST") {
-        const auth = await requireMaster(request, env);
-        if (auth.error) return json({ error: auth.error }, auth.status);
-        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!svc) return json({ error: "إعداد التنضيف غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
-        const H = { apikey: svc, Authorization: "Bearer " + svc };
-        async function dedupeTable(table, withSheet) {
-          const cols = withSheet ? "id,order_number,sheet_name" : "id,order_number";
-          const res = await supabaseRequest("/rest/v1/" + table + "?select=" + cols + "&order=id.asc", { headers: H });
-          const rows = await res.json().catch(function () { return []; });
-          if (!res.ok || !Array.isArray(rows)) return { error: "تعذر قراءة " + table };
-          const keep = new Map();
-          for (const r of rows) {
-            const key = (withSheet ? String(r.sheet_name) + "|" : "") + String(r.order_number);
-            keep.set(key, r.id);
-          }
-          const del = rows
-            .filter((r) => keep.get((withSheet ? String(r.sheet_name) + "|" : "") + String(r.order_number)) !== r.id)
-            .map((r) => r.id);
-          if (!del.length) return { removed: 0 };
-          const dres = await supabaseRequest("/rest/v1/" + table + "?id=in.(" + del.join(",") + ")", { method: "DELETE", headers: H });
-          return { removed: del.length, ok: dres.ok };
-        }
-        const o = await dedupeTable("orders", true);
-        const a = await dedupeTable("master_orders_archive", false);
-        return json({ success: true, orders: o, archive: a });
       }
 
       if (
