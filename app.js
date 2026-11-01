@@ -2006,8 +2006,9 @@
       const paymentSection =
         node.querySelector('.payment-section');
 
-      if (paymentSection && paidInAdvance) {
-        paymentSection.style.display = 'none';
+      if (paymentSection) {
+        // المدفوع مقدمًا يحدده الكمبيوتر فقط؛ لا تظهر اختيارات الدفع للمندوب.
+        paymentSection.style.display = paidInAdvance ? 'none' : '';
       }
 
       const paymentCurrent =
@@ -2015,11 +2016,12 @@
           '.payment-current'
         );
 
-      if (paymentCurrent && !paidInAdvance) {
-        paymentCurrent.textContent =
-          payment
+      if (paymentCurrent) {
+        paymentCurrent.textContent = paidInAdvance
+          ? '✅ مدفوع مقدمًا — يحدده الكمبيوتر'
+          : payment
             ? `طريقة الدفع الحالية: ${paymentLabel(payment)}`
-            : 'لم يتم تحديد طريقة الدفع';
+            : 'يرجى تحديد طريقة الدفع';
       }
 
       const paymentButtons =
@@ -2027,35 +2029,39 @@
           '.payment-btn'
         );
 
-      paymentButtons.forEach((button) => {
-        const method = normalizePayment(button.dataset.payment);
-        button.classList.toggle('selected', method === payment);
-        button.disabled = true;
-        button.style.display = 'none';
-      });
-      const payWrapReadOnly = node.querySelector('.payment-buttons');
-      if (payWrapReadOnly && !payWrapReadOnly.querySelector('.pay-locked')) {
-        const locked = document.createElement('div');
-        locked.className = 'pay-locked';
-        locked.textContent = paidInAdvance ? '✅ مدفوع مقدمًا' : (payment ? 'طريقة الدفع: ' + paymentLabel(payment) : 'طريقة الدفع يحددها الكمبيوتر');
-        locked.style.cssText = 'width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;text-align:center;font-weight:900;font-size:15px;';
-        payWrapReadOnly.appendChild(locked);
-      }
+      paymentButtons.forEach(
+        (button) => {
+          const method =
+            normalizePayment(
+              button.dataset.payment
+            );
 
-      /* ⭐ لو طريقة الدفع اتحددت (كاش/تحويل/مقدم): اخفي الزرارين واكتفي بتأكيد — ممنوع تغييرها من هنا */
-      if (payment || paidInAdvance) {
-        paymentButtons.forEach((button) => {
-          button.style.display = 'none';
-        });
-        const payWrap = node.querySelector('.payment-buttons');
-        if (payWrap && !payWrap.querySelector('.pay-locked')) {
-          const locked = document.createElement('div');
-          locked.className = 'pay-locked';
-          locked.textContent = paidInAdvance ? '✅ مدفوع مقدمًا' : '✅ تم تحديد الدفع: ' + paymentLabel(payment);
-          locked.style.cssText = 'width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;background:#dcfce7;color:#166534;border:1px solid #86efac;text-align:center;font-weight:900;font-size:15px;';
-          payWrap.appendChild(locked);
+          button.classList.toggle(
+            'selected',
+            method === payment
+          );
+
+          button.disabled =
+            delivered || paidInAdvance;
+          button.style.display = paidInAdvance ? 'none' : '';
+
+          button.addEventListener(
+            'click',
+            () =>
+              setPayment(
+                order,
+                method,
+                button,
+                paymentButtons
+              )
+          );
         }
-      }
+      );
+
+      // يظل للمندوب حق إعادة اختيار الكاش أو التحويل البنكي.
+      // لا تظهر اختيارات الدفع عند كون الفاتورة مدفوعة مقدمًا؛ هذا القرار للكمبيوتر فقط.
+      const oldPayLock = node.querySelector('.pay-locked');
+      if (oldPayLock) oldPayLock.remove();
 
       node.classList.toggle(
         'is-done',
@@ -2283,11 +2289,14 @@
         }
       );
 
+      order.delivery_status =
+        'delivered';
+
       toast(
-        'تم إرسال طلب اعتماد التسليم إلى الإدارة بنجاح ✅'
+        'تم تسجيل التسليم بنجاح ✅'
       );
-      button.disabled = true;
-      button.textContent = '⏳ بانتظار اعتماد الكمبيوتر';
+
+      render();
     } catch (error) {
       if (
         error.message ===
