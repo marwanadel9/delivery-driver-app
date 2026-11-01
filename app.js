@@ -2027,33 +2027,20 @@
           '.payment-btn'
         );
 
-      paymentButtons.forEach(
-        (button) => {
-          const method =
-            normalizePayment(
-              button.dataset.payment
-            );
-
-          button.classList.toggle(
-            'selected',
-            method === payment
-          );
-
-          button.disabled =
-            delivered || paidInAdvance;
-
-          button.addEventListener(
-            'click',
-            () =>
-              setPayment(
-                order,
-                method,
-                button,
-                paymentButtons
-              )
-          );
-        }
-      );
+      paymentButtons.forEach((button) => {
+        const method = normalizePayment(button.dataset.payment);
+        button.classList.toggle('selected', method === payment);
+        button.disabled = true;
+        button.style.display = 'none';
+      });
+      const payWrapReadOnly = node.querySelector('.payment-buttons');
+      if (payWrapReadOnly && !payWrapReadOnly.querySelector('.pay-locked')) {
+        const locked = document.createElement('div');
+        locked.className = 'pay-locked';
+        locked.textContent = paidInAdvance ? '✅ مدفوع مقدمًا' : (payment ? 'طريقة الدفع: ' + paymentLabel(payment) : 'طريقة الدفع يحددها الكمبيوتر');
+        locked.style.cssText = 'width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;text-align:center;font-weight:900;font-size:15px;';
+        payWrapReadOnly.appendChild(locked);
+      }
 
       /* ⭐ لو طريقة الدفع اتحددت (كاش/تحويل/مقدم): اخفي الزرارين واكتفي بتأكيد — ممنوع تغييرها من هنا */
       if (payment || paidInAdvance) {
@@ -2296,14 +2283,11 @@
         }
       );
 
-      order.delivery_status =
-        'delivered';
-
       toast(
-        'تم تسجيل التسليم بنجاح ✅'
+        'تم إرسال طلب اعتماد التسليم إلى الإدارة بنجاح ✅'
       );
-
-      render();
+      button.disabled = true;
+      button.textContent = '⏳ بانتظار اعتماد الكمبيوتر';
     } catch (error) {
       if (
         error.message ===
