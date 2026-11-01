@@ -535,6 +535,15 @@
 
   function showOrders() {
     try { faStartGps(); } catch (e) {}
+    /* تحديث تلقائي كل 45 ثانية — تعديلات الماستر/البرنامج توصل للمندوب لوحدها */
+    try {
+      if (!showOrders._auto) {
+        showOrders._auto = true;
+        setInterval(() => {
+          try { if (!document.body.classList.contains('driver-invoice-open')) loadOrders(); } catch (e) {}
+        }, 45000);
+      }
+    } catch (e) {}
     const loginView =
       $('login-view');
 
