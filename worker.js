@@ -1184,16 +1184,6 @@ export default {
         path === "/api/master/order/update" &&
         request.method === "POST"
       ) {
-        // وضع الكمبيوتر هو المصدر الوحيد لتعديل الفواتير.
-        // نوقف التعديل من واجهة الماستر مع الإبقاء على بقية وظائف الماستر
-        // مثل قراءة البيانات وحالات التسليم وحركات المناديب.
-        return json(
-          {
-            error: "تم إيقاف تعديل الفواتير من الماستر. التعديل متاح من برنامج الكمبيوتر فقط."
-          },
-          403
-        );
-
         const auth =
           await requireMaster(
             request,
@@ -1280,16 +1270,61 @@ export default {
           return json(
             {
               error:
-                (rpcData &&
-                  rpcData.message) ||
-                (rpcData &&
-                  rpcData.hint) ||
-                (rpcData &&
-                  rpcData.error) ||
-                "تعذر تعديل الفاتورة"
+                [
+                  rpcData && rpcData.message,
+                  rpcData && rpcData.details,
+                  rpcData && rpcData.hint,
+                  rpcData && rpcData.code ? "Code: " + rpcData.code : null,
+                  rpcData && rpcData.error
+                ].filter(Boolean).join(" | ") || "تعذر تعديل الفاتورة"
             },
             400
           );
+        }
+
+        // مزامنة صريحة لطريقة الدفع على كل نسخ هذه الفاتورة المحددة بالمعرّفات.
+        // لا نعتمد هنا على تطابق رقم الفاتورة وحده، حتى لا نمس فاتورة أخرى قد تحمل رقمًا مشابهًا.
+        if (Object.prototype.hasOwnProperty.call(order, "payment_method")) {
+          const paymentMethod = normalizePayment(order.payment_method);
+          if (!paymentMethod) {
+            return json({ error: "طريقة الدفع غير صحيحة. اختر كاش أو تحويل بنكي." }, 400);
+          }
+          const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+          if (!serviceKey) {
+            return json({ error: "إعداد مزامنة طريقة الدفع غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
+          }
+          const rawIds = Array.isArray(body.invoiceCopyIds) ? body.invoiceCopyIds : [orderId];
+          const copyIds = Array.from(new Set(rawIds.concat([orderId]).map(Number).filter((id) => Number.isInteger(id) && id > 0)));
+          if (!copyIds.length || copyIds.length > 20) {
+            return json({ error: "تعذر تحديد نسخ الفاتورة المراد تحديثها" }, 400);
+          }
+          const serviceHeaders = {
+            apikey: serviceKey,
+            Authorization: "Bearer " + serviceKey,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal"
+          };
+          const paymentBody = JSON.stringify({
+            payment_method: paymentMethod,
+            bank_transfer_received: paymentMethod === "bank_transfer" ? (order.bank_transfer_received === true) : false
+          });
+          const idFilter = "in.(" + copyIds.join(",") + ")";
+          const ordersPaymentResponse = await supabaseRequest(
+            "/rest/v1/orders?id=" + encodeURIComponent(idFilter),
+            { method: "PATCH", headers: serviceHeaders, body: paymentBody }
+          );
+          if (!ordersPaymentResponse.ok) {
+            const paymentError = await ordersPaymentResponse.json().catch(function () { return null; });
+            return json({ error: (paymentError && (paymentError.message || paymentError.hint || paymentError.error)) || "تعذر تحديث طريقة الدفع في نسخ المندوبين" }, 502);
+          }
+          const archivePaymentResponse = await supabaseRequest(
+            "/rest/v1/master_orders_archive?id=" + encodeURIComponent(idFilter),
+            { method: "PATCH", headers: serviceHeaders, body: paymentBody }
+          );
+          if (!archivePaymentResponse.ok) {
+            const paymentError = await archivePaymentResponse.json().catch(function () { return null; });
+            return json({ error: (paymentError && (paymentError.message || paymentError.hint || paymentError.error)) || "تم تحديث المندوبين لكن تعذر تحديث أرشيف الماستر" }, 502);
+          }
         }
 
         // حدّث نسخة أرشيف الماستر أيضًا؛ واجهة MASTER تقرأ الفواتير من هذا الأرشيف.
@@ -1337,8 +1372,8 @@ export default {
             {
               method: "PATCH",
               headers: {
-                apikey: env.SUPABASE_ANON_KEY,
-                Authorization: "Bearer " + auth.token,
+                apikey: env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY,
+                Authorization: "Bearer " + (env.SUPABASE_SERVICE_ROLE_KEY || auth.token),
                 "Content-Type": "application/json",
                 Prefer: "return=minimal"
               },
@@ -1959,7 +1994,8 @@ export default {
               ? body.orders
               : [];
 
-        // عند إرسال clear_gate_photos=true، احذف الملفات والروابط قبل حفظ المزامنة.
+        // لا نحذف صور التخزين قبل نجاح حفظ المزامنة؛ حتى لا يؤدي طلب قديم
+        // أو فاشل إلى حذف صور فاتورة أحدث.
         const clearInvoices = Array.from(new Set(
           orders
             .filter(function (order) { return order && (order.clear_gate_photos === true || order.clear_gate_photos === 1 || String(order.clear_gate_photos).toLowerCase() === "true"); })
@@ -1967,13 +2003,6 @@ export default {
             .filter(function (number) { return /^[a-zA-Z0-9_-]{1,80}$/.test(number); })
         ));
         const deletedPhotoCounts = {};
-        try {
-          for (const invoiceNumber of clearInvoices) {
-            deletedPhotoCounts[invoiceNumber] = await clearGatePhotosForInvoice(invoiceNumber, env);
-          }
-        } catch (photoError) {
-          return json({ error: photoError.message || "فشل حذف صور البوابة؛ لم تكتمل المزامنة" }, 502);
-        }
 
         const rpcResponse =
           await supabaseRequest(
@@ -2018,11 +2047,38 @@ export default {
           );
         }
 
+        // حذف ملفات الصور يتم بعد نجاح RPC فقط، وفقط عندما يؤكد رد قاعدة البيانات
+        // عدم وجود أي تحديثات قديمة تم رفضها. عند غياب عداد الرفض نحتفظ بالملفات بأمان.
+        let skippedOldRevision = null;
+        if (rpcData && typeof rpcData === "object") {
+          const rpcResult = Array.isArray(rpcData) ? (rpcData[0] || {}) : rpcData;
+          const rawSkipped = rpcResult.skipped_old_revision;
+          if (rawSkipped !== undefined && rawSkipped !== null && Number.isFinite(Number(rawSkipped))) {
+            skippedOldRevision = Number(rawSkipped);
+          }
+        }
+
+        let photosDeletionSkipped = false;
+        if (clearInvoices.length && skippedOldRevision === 0) {
+          try {
+            for (const invoiceNumber of clearInvoices) {
+              deletedPhotoCounts[invoiceNumber] = await clearGatePhotosForInvoice(invoiceNumber, env);
+            }
+          } catch (photoError) {
+            // نجاح حفظ الفاتورة لا يُلغى بسبب فشل تنظيف ملفات الصور.
+            photosDeletionSkipped = true;
+          }
+        } else if (clearInvoices.length) {
+          photosDeletionSkipped = true;
+        }
+
         return json({
           success: true,
           data: rpcData,
-          gate_photos_cleared: clearInvoices.length,
-          gate_photo_files_deleted: deletedPhotoCounts
+          gate_photos_cleared: skippedOldRevision === 0 ? clearInvoices.length : 0,
+          gate_photo_files_deleted: deletedPhotoCounts,
+          gate_photo_file_deletion_skipped: photosDeletionSkipped,
+          skipped_old_revision: skippedOldRevision
         });
       }
 
@@ -2111,6 +2167,78 @@ export default {
         } catch (e) {
           return json({ ok: false, error: String(e && e.message || e) }, 500);
         }
+      }
+
+      if (path === "/api/master/order/update-by-number" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(function () { return {}; });
+        const orderNumber = String(body.order_number || "").trim();
+        const patch = body.order && typeof body.order === "object" ? body.order : null;
+        if (!orderNumber || !patch) return json({ error: "بيانات غير مكتملة" }, 400);
+        delete patch.id;
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
+        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
+        const bodyStr = JSON.stringify(patch);
+        const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: bodyStr });
+        if (!r1.ok) {
+          const e1 = await r1.json().catch(function () { return null; });
+          return json({ error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ الطلبات" }, 502);
+        }
+        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: bodyStr });
+        if (!r2.ok) {
+          const e2 = await r2.json().catch(function () { return null; });
+          return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
+        }
+        return json({ success: true, updated: orderNumber });
+      }
+
+      if (path === "/api/master/delete-by-date" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(function () { return {}; });
+        const d = String(body.date || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: "تاريخ غير صحيح" }, 400);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
+        const H = { apikey: svc, Authorization: "Bearer " + svc, Prefer: "return=representation" };
+        const from = d + "T00:00:00";
+        const toD = new Date(new Date(d + "T00:00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
+        const to = toD + "T00:00:00";
+        const filt = "created_at=gte." + encodeURIComponent(from) + "&created_at=lt." + encodeURIComponent(to);
+        const r1 = await supabaseRequest("/rest/v1/orders?" + filt, { method: "DELETE", headers: H });
+        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?" + filt, { method: "DELETE", headers: H });
+        const c1 = Array.isArray(await r1.clone().json().catch(() => [])) ? 1 : 0;
+        return json({ success: true, orders_cleared: r1.ok, archive_cleared: r2.ok, date: d });
+      }
+
+      if (path === "/api/master/dedupe" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "إعداد التنضيف غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
+        const H = { apikey: svc, Authorization: "Bearer " + svc };
+        async function dedupeTable(table, withSheet) {
+          const cols = withSheet ? "id,order_number,sheet_name" : "id,order_number";
+          const res = await supabaseRequest("/rest/v1/" + table + "?select=" + cols + "&order=id.asc", { headers: H });
+          const rows = await res.json().catch(function () { return []; });
+          if (!res.ok || !Array.isArray(rows)) return { error: "تعذر قراءة " + table };
+          const keep = new Map();
+          for (const r of rows) {
+            const key = (withSheet ? String(r.sheet_name) + "|" : "") + String(r.order_number);
+            keep.set(key, r.id);
+          }
+          const del = rows
+            .filter((r) => keep.get((withSheet ? String(r.sheet_name) + "|" : "") + String(r.order_number)) !== r.id)
+            .map((r) => r.id);
+          if (!del.length) return { removed: 0 };
+          const dres = await supabaseRequest("/rest/v1/" + table + "?id=in.(" + del.join(",") + ")", { method: "DELETE", headers: H });
+          return { removed: del.length, ok: dres.ok };
+        }
+        const o = await dedupeTable("orders", true);
+        const a = await dedupeTable("master_orders_archive", false);
+        return json({ success: true, orders: o, archive: a });
       }
 
       if (
