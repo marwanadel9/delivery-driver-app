@@ -1135,7 +1135,7 @@ export default {
         if (!orderResponse.ok) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة" }, 502);
         if (!Array.isArray(orderRows) || !orderRows.length) return json({ error: "الفاتورة غير موجودة ضمن طلبات حسابك" }, 404);
         const order = orderRows[0];
-        if (order.paid_in_advance === true) return json({ error: "تم تسجيل الفاتورة مدفوعة مقدمًا من الكمبيوتر" }, 409);
+        // الدفع مقدمًا لا يمنع التسليم؛ الكمبيوتر يحدد حالة الدفع فقط.
         if (String(order.delivery_status || "").toLowerCase() === "delivered" || String(order.delivery_status || "").includes("تم التسليم")) {
           return json({ success: true, already_delivered: true, delivery_status: order.delivery_status });
         }
