@@ -42,6 +42,19 @@ function getBearerToken(request) {
   return header.slice(7).trim();
 }
 
+async function makeSharedInvoiceKey(row) {
+  // مفتاح مشترك مشتق من بيانات الفاتورة التي تتطابق بين نسختي المندوبين.
+  const created = row && row.created_at ? new Date(row.created_at).getTime() : 0;
+  const canonical = [
+    String(row && row.order_number || "").trim().toUpperCase(),
+    String(Number.isFinite(created) ? created : 0),
+    String(row && row.customer_name || "").trim().replace(/\s+/g, " ").toLocaleLowerCase(),
+    String(Number(row && row.total || 0).toFixed(2))
+  ].join("|");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
+  return Array.from(new Uint8Array(digest)).map(function (byte) { return byte.toString(16).padStart(2, "0"); }).join("");
+}
+
 async function supabaseRequest(path, options) {
   const opts = options || {};
 
@@ -764,43 +777,35 @@ export default {
         const orderIds = Array.isArray(body.order_ids)
           ? body.order_ids.map(function (value) { return String(value == null ? "" : value).trim(); })
           : [];
-        const validOrderId = function (value) {
-          return typeof value === "string" && value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/.test(value);
-        };
+        const validOrderId = function (value) { return /^[0-9]+$/.test(value); };
         if (!orderIds.length || orderIds.some(function (id) { return !validOrderId(id); }) || new Set(orderIds).size !== orderIds.length) {
           return json({ error: "قائمة معرفات الفواتير غير صحيحة" }, 400);
         }
 
-        // نتحقق أن المعرفات ضمن فواتير المندوب الحالي، لكن سجل الترتيب نفسه عالمي حسب orders.id.
         const sheet = auth.driver.sheet_name;
-        const ordersCheck = await supabaseRequest(
-          "/rest/v1/orders?select=id&sheet_name=eq." + encodeURIComponent(sheet) + "&id=in.(" + orderIds.join(",") + ")",
+        const ordersResponse = await supabaseRequest(
+          "/rest/v1/orders?select=id,order_number,created_at,customer_name,total&sheet_name=eq." + encodeURIComponent(sheet) + "&id=in.(" + orderIds.join(",") + ")",
           { headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey } }
         );
-        const ownedOrders = await ordersCheck.json().catch(function () { return []; });
-        if (!ordersCheck.ok || !Array.isArray(ownedOrders) || ownedOrders.length !== orderIds.length) {
-          return json({ error: "بعض الفواتير لا تخص حساب المندوب الحالي", detail: Array.isArray(ownedOrders) ? undefined : ownedOrders }, 403);
+        const ownedOrders = await ordersResponse.json().catch(function () { return []; });
+        if (!ordersResponse.ok || !Array.isArray(ownedOrders) || ownedOrders.length !== orderIds.length) {
+          return json({ error: "تعذر التحقق من فواتير المندوب الحالي", detail: ownedOrders }, 403);
         }
-
+        const byId = new Map(ownedOrders.map(function (row) { return [String(row.id), row]; }));
         const now = new Date().toISOString();
-        const sortRows = orderIds.map(function (orderId, index) {
-          return {
-            order_id: orderId,
-            driver_user_id: auth.user.id,
-            sheet_name: sheet,
-            sort_position: index + 1,
-            updated_at: now
-          };
-        });
+        const sortRows = [];
+        for (let index = 0; index < orderIds.length; index++) {
+          const row = byId.get(orderIds[index]);
+          if (!row) return json({ error: "لم يتم العثور على إحدى الفواتير" }, 404);
+          sortRows.push({ invoice_key: await makeSharedInvoiceKey(row), sort_position: index + 1, updated_at: now });
+        }
         const saveResponse = await supabaseRequest(
-          "/rest/v1/driver_invoice_order?on_conflict=order_id",
+          "/rest/v1/driver_invoice_order_shared?on_conflict=invoice_key",
           { method: "POST", headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(sortRows) }
         );
         const savedRows = await saveResponse.json().catch(function () { return []; });
-        if (!saveResponse.ok) {
-          return json({ error: "تعذر حفظ الترتيب الموحد - HTTP " + saveResponse.status, detail: savedRows }, 500);
-        }
-        return json({ success: true, saved: orderIds.length, scope: "global_order_id" });
+        if (!saveResponse.ok) return json({ error: "تعذر حفظ الترتيب المشترك - HTTP " + saveResponse.status, detail: savedRows }, 500);
+        return json({ success: true, saved: sortRows.length, scope: "shared_invoice_fingerprint" });
       }
 
       if (
@@ -888,19 +893,20 @@ export default {
           }
         }
 
-        // تحميل الترتيب العالمي: لا نفلتر حسب المندوب أو الورقة؛ المفتاح هو orders.id فقط.
+        // تحميل الترتيب المشترك باستخدام بصمة الفاتورة، وليس orders.id لأن لكل مندوب id مختلفاً.
         if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
           const sortResponse = await supabaseRequest(
-            "/rest/v1/driver_invoice_order?select=order_id,sort_position&order_id=in.(" + safeOrders.map(function (row) { return String(row.id); }).join(",") + ")",
+            "/rest/v1/driver_invoice_order_shared?select=invoice_key,sort_position",
             { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
           );
           const sortRows = await sortResponse.json().catch(function () { return []; });
           if (sortResponse.ok && Array.isArray(sortRows)) {
-            const positionMap = new Map(sortRows.map(function (row) { return [String(row.order_id), Number(row.sort_position)]; }));
-            safeOrders.forEach(function (row) {
-              const position = positionMap.get(String(row.id));
+            const positionMap = new Map(sortRows.map(function (row) { return [String(row.invoice_key), Number(row.sort_position)]; }));
+            for (const row of safeOrders) {
+              const key = await makeSharedInvoiceKey(row);
+              const position = positionMap.get(key);
               if (Number.isFinite(position) && position > 0) row._driver_sort_position = position;
-            });
+            }
           }
         }
 
