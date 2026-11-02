@@ -754,6 +754,51 @@ export default {
         });
       }
 
+      if (path === "/api/orders/reorder" && request.method === "POST") {
+        const auth = await requireDriver(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "إعداد حفظ ترتيب الفواتير غير مكتمل: أضف SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
+        const body = await request.json().catch(function () { return {}; });
+        const orderId = Number(body.orderId);
+        const direction = String(body.direction || "");
+        const sheet = auth.driver.sheet_name;
+        if (!Number.isInteger(orderId) || orderId <= 0 || !["up", "down"].includes(direction)) {
+          return json({ error: "بيانات ترتيب الفاتورة غير صحيحة" }, 400);
+        }
+        const adminHeaders = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY, "Content-Type": "application/json" };
+        const ownedResponse = await supabaseRequest("/rest/v1/orders?id=eq." + orderId + "&sheet_name=eq." + encodeURIComponent(sheet) + "&select=id", { headers: adminHeaders });
+        const ownedRows = await ownedResponse.json().catch(function () { return []; });
+        if (!ownedResponse.ok) return json({ error: "تعذر التحقق من ملكية الفاتورة" }, 502);
+        if (!Array.isArray(ownedRows) || !ownedRows.length) return json({ error: "هذه الفاتورة ليست ضمن فواتير حسابك" }, 403);
+
+        const allResponse = await supabaseRequest("/rest/v1/orders?sheet_name=eq." + encodeURIComponent(sheet) + "&select=id,order_number,invoice_number", { headers: adminHeaders });
+        const allRows = await allResponse.json().catch(function () { return []; });
+        if (!allResponse.ok || !Array.isArray(allRows)) return json({ error: "تعذر تحميل فواتير المندوب لترتيبها" }, 502);
+        const savedResponse = await supabaseRequest("/rest/v1/driver_invoice_order?sheet_name=eq." + encodeURIComponent(sheet) + "&select=order_id,position&order=position.asc", { headers: adminHeaders });
+        const savedRows = await savedResponse.json().catch(function () { return []; });
+        if (!savedResponse.ok) return json({ error: "جدول ترتيب الفواتير غير جاهز. نفّذ ملف SQL المرفق أولاً." }, 500);
+        const savedMap = new Map((Array.isArray(savedRows) ? savedRows : []).map(function (row) { return [Number(row.order_id), Number(row.position)]; }));
+        const invoiceNum = function (row) { const m = String(row.order_number || row.invoice_number || "").match(/\d+/); return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER; };
+        const ordered = allRows.slice().sort(function (a, b) {
+          const ap = savedMap.has(Number(a.id)) ? savedMap.get(Number(a.id)) : Number.MAX_SAFE_INTEGER;
+          const bp = savedMap.has(Number(b.id)) ? savedMap.get(Number(b.id)) : Number.MAX_SAFE_INTEGER;
+          if (ap !== bp) return ap - bp;
+          return invoiceNum(a) - invoiceNum(b);
+        });
+        const from = ordered.findIndex(function (row) { return Number(row.id) === orderId; });
+        const to = direction === "up" ? from - 1 : from + 1;
+        if (from < 0) return json({ error: "الفاتورة غير موجودة في قائمة المندوب" }, 404);
+        if (to >= 0 && to < ordered.length) { const temp = ordered[from]; ordered[from] = ordered[to]; ordered[to] = temp; }
+        const payload = ordered.map(function (row, index) { return { sheet_name: sheet, order_id: Number(row.id), position: index + 1 }; });
+        const saveResponse = await supabaseRequest("/rest/v1/driver_invoice_order?on_conflict=sheet_name,order_id", {
+          method: "POST",
+          headers: Object.assign({}, adminHeaders, { Prefer: "resolution=merge-duplicates,return=minimal" }),
+          body: JSON.stringify(payload)
+        });
+        if (!saveResponse.ok) { const detail = await saveResponse.text().catch(function () { return ""; }); return json({ error: "تعذر حفظ ترتيب الفواتير: " + detail.slice(0, 220) }, 502); }
+        return json({ success: true, positions: payload.map(function (row) { return { order_id: row.order_id, position: row.position }; }) });
+      }
+
       if (
         path === "/api/orders" &&
         request.method === "GET"
@@ -824,34 +869,37 @@ export default {
           if (canCall) return cleaned;
           return Object.assign({}, cleaned, { phone: "" });
         });
-        const driverServiceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
-        const driverServiceHeaders = driverServiceKey
-          ? { apikey: driverServiceKey, ...(driverServiceKey.startsWith("sb_secret_") ? {} : { Authorization: "Bearer " + driverServiceKey }) }
-          : null;
-        if (safeOrders.length && driverServiceHeaders) {
-          const sortResponse = await supabaseRequest(
-            "/rest/v1/driver_invoice_order?sheet_name=eq." + encodeURIComponent(sheet) + "&select=order_id,sort_position",
-            { headers: driverServiceHeaders }
-          );
-          const sortRows = await sortResponse.json().catch(function () { return []; });
-          if (sortResponse.ok && Array.isArray(sortRows)) {
-            const sortMap = new Map(sortRows.map(function (row) { return [Number(row.order_id), Number(row.sort_position)]; }));
-            safeOrders.forEach(function (row) {
-              const savedPosition = sortMap.get(Number(row.id));
-              if (Number.isFinite(savedPosition)) row.driver_sort_order = savedPosition;
-            });
-          }
+        if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
           const ids = safeOrders.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
           if (ids.length) {
             const departureResponse = await supabaseRequest(
               "/rest/v1/driver_departures?order_id=in.(" + ids.join(",") + ")&select=order_id,departed_at",
-              { headers: driverServiceHeaders }
+              { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
             );
             const departureRows = await departureResponse.json().catch(function () { return []; });
             if (departureResponse.ok && Array.isArray(departureRows)) {
               const departureMap = new Map(departureRows.map(function (row) { return [Number(row.order_id), row.departed_at]; }));
               safeOrders.forEach(function (row) { row.driver_departure_at = departureMap.get(Number(row.id)) || null; });
             }
+          }
+        }
+
+        if (env.SUPABASE_SERVICE_ROLE_KEY && safeOrders.length) {
+          const sortResponse = await supabaseRequest("/rest/v1/driver_invoice_order?sheet_name=eq." + encodeURIComponent(sheet) + "&select=order_id,position", {
+            headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY }
+          });
+          const sortRows = await sortResponse.json().catch(function () { return []; });
+          if (sortResponse.ok && Array.isArray(sortRows)) {
+            const sortMap = new Map(sortRows.map(function (row) { return [Number(row.order_id), Number(row.position)]; }));
+            safeOrders.forEach(function (row) { if (sortMap.has(Number(row.id))) row.driver_sort_order = sortMap.get(Number(row.id)); });
+            safeOrders.sort(function (a, b) {
+              const ap = Number.isFinite(Number(a.driver_sort_order)) ? Number(a.driver_sort_order) : Number.MAX_SAFE_INTEGER;
+              const bp = Number.isFinite(Number(b.driver_sort_order)) ? Number(b.driver_sort_order) : Number.MAX_SAFE_INTEGER;
+              if (ap !== bp) return ap - bp;
+              const an = Number(String(a.order_number || a.invoice_number || "").match(/\d+/)?.[0] || Number.MAX_SAFE_INTEGER);
+              const bn = Number(String(b.order_number || b.invoice_number || "").match(/\d+/)?.[0] || Number.MAX_SAFE_INTEGER);
+              return an - bn;
+            });
           }
         }
 
@@ -1119,41 +1167,6 @@ export default {
           synced_orders: Array.isArray(updatedOrders) ? updatedOrders.length : duplicateRows.length,
           synced_master: Array.isArray(archiveData) ? archiveData.length : 0
         });
-      }
-
-      if (path === "/api/orders/reorder" && request.method === "POST") {
-        const auth = await requireDriver(request, env);
-        if (auth.error) return json({ error: auth.error }, auth.status);
-        const body = await request.json().catch(function () { return {}; });
-        const orderIds = Array.isArray(body.order_ids) ? body.order_ids.map(Number) : [];
-        if (!orderIds.length || orderIds.some(function (id) { return !Number.isInteger(id) || id <= 0; }) || new Set(orderIds).size !== orderIds.length) {
-          return json({ error: "قائمة الفواتير غير صحيحة" }, 400);
-        }
-        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
-        if (!serviceKey) return json({ error: "إعداد حفظ ترتيب الفواتير غير مكتمل" }, 500);
-        const serviceHeaders = { apikey: serviceKey };
-        if (!serviceKey.startsWith("sb_secret_")) serviceHeaders.Authorization = "Bearer " + serviceKey;
-        const ownedResponse = await supabaseRequest(
-          "/rest/v1/orders?id=in.(" + orderIds.join(",") + ")&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) + "&select=id",
-          { headers: serviceHeaders }
-        );
-        const ownedRows = await ownedResponse.json().catch(function () { return null; });
-        if (!ownedResponse.ok || !Array.isArray(ownedRows)) return json({ error: "تعذر التحقق من فواتير المندوب" }, 502);
-        const ownedIds = new Set(ownedRows.map(function (row) { return Number(row.id); }));
-        if (ownedIds.size !== orderIds.length || orderIds.some(function (id) { return !ownedIds.has(id); })) {
-          return json({ error: "لا يمكن ترتيب فواتير لا تخص حسابك" }, 403);
-        }
-        const records = orderIds.map(function (id, index) {
-          return { order_id: id, driver_user_id: auth.user.id, sheet_name: auth.driver.sheet_name, sort_position: index, updated_at: new Date().toISOString() };
-        });
-        const saveResponse = await supabaseRequest("/rest/v1/driver_invoice_order?on_conflict=order_id", {
-          method: "POST",
-          headers: Object.assign({}, serviceHeaders, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
-          body: JSON.stringify(records)
-        });
-        const saveData = await saveResponse.json().catch(function () { return null; });
-        if (!saveResponse.ok) return json({ error: (saveData && (saveData.message || saveData.hint || saveData.error)) || "تعذر حفظ ترتيب الفواتير. تأكد من تنفيذ SQL الخاص بجدول الترتيب." }, 502);
-        return json({ success: true, saved: records.length });
       }
 
       if (
