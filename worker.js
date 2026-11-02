@@ -893,6 +893,32 @@ export default {
           }
         }
 
+        /* ⭐ سد ثغرة الموقع الناقص: لو نسخة الفاتورة عند المندوب مفيهاش location_url
+           (نسخة قديمة اتعملت قبل ما الموقع يتسجل، وإعادة المزامنة مش بتحدثها)،
+           املأه تلقائيًا من أي نسخة تانية لنفس رقم الفاتورة عند المندوبين التانيين */
+        if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
+          const locNumbers = Array.from(new Set(safeOrders.map(function (row) { return String(row.order_number || "").trim(); }).filter(Boolean)));
+          if (locNumbers.length) {
+            const locResponse = await supabaseRequest(
+              "/rest/v1/orders?order_number=in.(" + locNumbers.map(function (v) { return encodeURIComponent(v); }).join(",") + ")&select=order_number,location_url",
+              { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
+            );
+            const locRows = await locResponse.json().catch(function () { return []; });
+            if (locResponse.ok && Array.isArray(locRows)) {
+              const locMap = new Map();
+              for (const r of locRows) {
+                const u = String(r.location_url || "").trim();
+                const k = String(r.order_number || "").trim();
+                if (u && k && !locMap.has(k)) locMap.set(k, u);
+              }
+              for (const row of safeOrders) {
+                const k = String(row.order_number || "").trim();
+                if (k && !String(row.location_url || "").trim() && locMap.has(k)) row.location_url = locMap.get(k);
+              }
+            }
+          }
+        }
+
         // تحميل الترتيب المشترك باستخدام بصمة الفاتورة، وليس orders.id لأن لكل مندوب id مختلفاً.
         if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
           const sortResponse = await supabaseRequest(
