@@ -1,41 +1,4 @@
-/* ⭐ زرار الموقع — صف مستقل بعرض كامل (زي التصميم القديم الشغّال) لا يعتمد على order-actions ولا على CSS الحالات */
-      let locationButton = node.querySelector('[data-f="location_url"]');
-      if (locationUrl) {
-        if (!locationButton) {
-          locationButton = document.createElement('a');
-          locationButton.className = 'location-btn';
-          locationButton.setAttribute('data-f', 'location_url');
-          locationButton.innerHTML = '<span>📍</span><strong>فتح الموقع</strong>';
-        }
-        locationButton.href = locationUrl;
-        locationButton.setAttribute('data-location-url', locationUrl);
-        locationButton.target = '_blank';
-        locationButton.rel = 'noopener noreferrer';
-        locationButton.removeAttribute('hidden');
-        locationButton.style.cssText = 'display:flex!important;align-items:center;justify-content:center;gap:6px;width:100%;min-height:44px;padding:0 10px;border-radius:13px;font-size:11px;font-weight:800;text-decoration:none;border:1px solid #bfdbfe;color:#1d4ed8;background:#eff6ff;';
-        let locRow = node.querySelector('.fa-loc-row');
-        if (!locRow) {
-          locRow = document.createElement('div');
-          locRow.className = 'fa-loc-row';
-          locRow.style.cssText = 'display:flex;width:100%;box-sizing:border-box;margin:8px 0 0;';
-          const actionsEl = node.querySelector('.order-actions');
-          if (actionsEl && actionsEl.parentNode) { actionsEl.parentNode.insertBefore(locRow, actionsEl.nextSibling); }
-          else { node.appendChild(locRow); }
-        }
-        if (locationButton.parentNode !== locRow) { locRow.appendChild(locationButton); }
-      } else if (locationButton) {
-        locationButton.setAttribute('hidden', '');
-        locationButton.removeAttribute('data-location-url');
-      }
-      /* ⭐ تشخيص مرئي مرة واحدة: يوضح على الشاشة حالة الموقع — ابعت سكرين منه */
-      if (!window.__faLocDiagDone && orderNumber) {
-        window.__faLocDiagDone = true;
-        const diagLocKeys = Object.keys(order || {}).filter(function (k) { return /loc|map|url/i.test(k); });
-        const diagMsg = locationUrl
-          ? ('\u2705 رابط الموقع وصل: ' + String(locationUrl).slice(0, 45))
-          : ('\u26a0\ufe0f مفيش رابط موقع في بيانات ' + orderNumber + ' | الحقول: ' + diagLocKeys.join(', '));
-        setTimeout(function () { try { toast(diagMsg); } catch (e) {} }, 900);
-      }(() => {
+(() => {
   'use strict';
 
   const SESSION_KEY = 'driver_session';
@@ -1747,23 +1710,43 @@
         }
       }
 
-      const locationButton =
-        node.querySelector(
-          '[data-f="location_url"]'
-        );
-
-      if (locationButton) {
-        if (locationUrl) {
-          locationButton.href = locationUrl;
-          locationButton.setAttribute('data-location-url', locationUrl);
-          locationButton.target = '_blank';
-          locationButton.rel = 'noopener noreferrer';
-          locationButton.hidden = false;
-          locationButton.style.removeProperty('display');
-        } else {
-          locationButton.hidden = true;
-          locationButton.removeAttribute('data-location-url');
+      /* ⭐ زرار الموقع — صف مستقل بعرض كامل (زي التصميم القديم الشغّال) لا يعتمد على order-actions ولا على CSS الحالات */
+      let locationButton = node.querySelector('[data-f="location_url"]');
+      if (locationUrl) {
+        if (!locationButton) {
+          locationButton = document.createElement('a');
+          locationButton.className = 'location-btn';
+          locationButton.setAttribute('data-f', 'location_url');
+          locationButton.innerHTML = '<span>📍</span><strong>فتح الموقع</strong>';
         }
+        locationButton.href = locationUrl;
+        locationButton.setAttribute('data-location-url', locationUrl);
+        locationButton.target = '_blank';
+        locationButton.rel = 'noopener noreferrer';
+        locationButton.removeAttribute('hidden');
+        locationButton.style.cssText = 'display:flex!important;align-items:center;justify-content:center;gap:6px;width:100%;min-height:44px;padding:0 10px;border-radius:13px;font-size:11px;font-weight:800;text-decoration:none;border:1px solid #bfdbfe;color:#1d4ed8;background:#eff6ff;';
+        let locRow = node.querySelector('.fa-loc-row');
+        if (!locRow) {
+          locRow = document.createElement('div');
+          locRow.className = 'fa-loc-row';
+          locRow.style.cssText = 'display:flex;width:100%;box-sizing:border-box;margin:8px 0 0;';
+          const actionsEl = node.querySelector('.order-actions');
+          if (actionsEl && actionsEl.parentNode) { actionsEl.parentNode.insertBefore(locRow, actionsEl.nextSibling); }
+          else { node.appendChild(locRow); }
+        }
+        if (locationButton.parentNode !== locRow) { locRow.appendChild(locationButton); }
+      } else if (locationButton) {
+        locationButton.setAttribute('hidden', '');
+        locationButton.removeAttribute('data-location-url');
+      }
+      /* ⭐ تشخيص مرئي مرة واحدة: يوضح على الشاشة حالة الموقع — ابعت سكرين منه */
+      if (!window.__faLocDiagDone && orderNumber) {
+        window.__faLocDiagDone = true;
+        const diagLocKeys = Object.keys(order || {}).filter(function (k) { return /loc|map|url/i.test(k); });
+        const diagMsg = locationUrl
+          ? ('✅ رابط الموقع وصل: ' + String(locationUrl).slice(0, 45))
+          : ('⚠️ مفيش رابط موقع في بيانات ' + orderNumber + ' | الحقول: ' + diagLocKeys.join(', '));
+        setTimeout(function () { try { toast(diagMsg); } catch (e) {} }, 900);
       }
 
       // Villa gate photos: support multiple URLs while keeping compatibility with the old single URL.
