@@ -5124,26 +5124,16 @@
     }
   }
 
-  /* ⭐ زرار الرجوع للخلف: يقفل الفاتورة المفتوحة أو صورة البوابة بدل ما يخرج من التطبيق */
-  window.addEventListener('popstate', function () {
+  /* ⭐ منطق الرجوع الموحّد: يقفل صورة البوابة أو الفاتورة المفتوحة ويرجع true لو في حاجة اتقفلت */
+  window.__faBack = function () {
     const photo = document.getElementById('faPhotoView');
-    if (photo) { photo.remove(); return; }
+    if (photo) { photo.remove(); return true; }
     const closeBtn = document.querySelector('.order-card.is-fullscreen-invoice .invoice-fullscreen-close');
-    if (closeBtn) { closeBtn.click(); }
-  });
+    if (closeBtn) { closeBtn.click(); return true; }
+    return false;
+  };
 
-  /* فتح الفاتورة المكبرة = إضافة حالة في التاريخ عشان زرار الرجوع يقفلها */
-  document.addEventListener('click', function (e) {
-    const t = e.target && e.target.closest ? e.target.closest('.invoice-expand-toggle') : null;
-    if (!t) { return; }
-    setTimeout(function () {
-      if (document.querySelector('.order-card.is-fullscreen-invoice')) {
-        try { history.pushState({ faInv: Date.now() }, ''); } catch (err) {}
-      }
-    }, 60);
-  }, true);
-
-  /* ⭐ صور البوابة: عارض داخلي فوق التطبيق بدل التنقل لمتابعة/شاشة بيضاء — والرجوع يقفله */
+  /* ⭐ صور البوابة: عارض داخلي فوق التطبيق (الضغط عليه يقفله) — بدون تنقل ولا شاشة بيضاء */
   document.addEventListener('click', function (e) {
     const a = e.target && e.target.closest ? e.target.closest('a.gate-photo-btn') : null;
     if (!a) { return; }
@@ -5159,9 +5149,23 @@
     im.setAttribute('style', 'max-width:100%;max-height:100%;object-fit:contain;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5);');
     ov.appendChild(im);
     document.body.appendChild(ov);
-    try { history.pushState({ faPhoto: Date.now() }, ''); } catch (err) {}
     ov.addEventListener('click', function () { ov.remove(); });
   }, true);
+
+  /* ⭐ تثبيت ظهور زرار الموقع: يظهر فقط جوه الفاتورة المفتوحة — مهما حصل في CSS أو إعادة الرسم */
+  setInterval(function () {
+    const cards = document.querySelectorAll('.order-card');
+    for (let ci = 0; ci < cards.length; ci += 1) {
+      const btn = cards[ci].querySelector('.location-btn');
+      if (!btn) { continue; }
+      if (cards[ci].classList.contains('is-fullscreen-invoice')) {
+        btn.style.setProperty('display', 'flex', 'important');
+        btn.style.setProperty('visibility', 'visible', 'important');
+      } else {
+        btn.style.setProperty('display', 'none', 'important');
+      }
+    }
+  }, 400);
 
   boot();
 })();
