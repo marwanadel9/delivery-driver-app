@@ -793,7 +793,7 @@ export default {
         );
         if (!deleteResponse.ok) {
           const detail = await deleteResponse.text().catch(function () { return ""; });
-          return json({ error: "تعذر تحديث ترتيب الفواتير", database_status: deleteResponse.status, detail: detail.slice(0, 700) }, 500);
+          return json({ error: "تعذر تحديث ترتيب الفواتير (DELETE) - HTTP " + deleteResponse.status + " - " + detail.slice(0, 500), database_status: deleteResponse.status, detail: detail.slice(0, 700) }, 500);
         }
 
         const sortRows = orderIds.map(function (orderId, index) {
@@ -811,7 +811,7 @@ export default {
         );
         if (!saveResponse.ok) {
           const detail = await saveResponse.text().catch(function () { return ""; });
-          return json({ error: "تعذر حفظ ترتيب الفواتير", database_status: saveResponse.status, detail: detail.slice(0, 700) }, 500);
+          return json({ error: "تعذر حفظ ترتيب الفواتير (INSERT) - HTTP " + saveResponse.status + " - " + detail.slice(0, 500), database_status: saveResponse.status, detail: detail.slice(0, 700) }, 500);
         }
         return json({ success: true, saved: orderIds.length });
       }
