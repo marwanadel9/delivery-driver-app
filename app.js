@@ -1725,7 +1725,7 @@
       }
 
       // تشخيص مؤقت لسبب اختفاء زر موقع العميل — لا يغيّر بيانات الفاتورة أو وظائفها.
-      if (locationButton && locationButton.hidden) {
+      if (!locationButton || locationButton.hidden) {
         const oldLocationDebug = node.querySelector('.location-debug-panel');
         if (oldLocationDebug) oldLocationDebug.remove();
 
