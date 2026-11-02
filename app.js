@@ -455,26 +455,19 @@
             ? data.orders
             : [];
 
-      state.orders = orders.sort((a, b) => {
-        const getInvoiceNumber = (order) => {
-          const value =
-            order?.order_number ??
-            order?.invoice_number ??
-            order?.invoiceNo ??
-            '';
-
-          const match =
-            String(value).match(/\d+/);
-
-          return match
-            ? Number(match[0])
-            : Number.MAX_SAFE_INTEGER;
+      state.orders = orders.slice().sort((a, b) => {
+        const aManual = Number(a.driver_sort_order);
+        const bManual = Number(b.driver_sort_order);
+        const aHasManual = Number.isFinite(aManual);
+        const bHasManual = Number.isFinite(bManual);
+        if (aHasManual && bHasManual && aManual !== bManual) return aManual - bManual;
+        if (aHasManual !== bHasManual) return aHasManual ? -1 : 1;
+        const invoiceNumber = (order) => {
+          const value = order?.order_number ?? order?.invoice_number ?? order?.invoiceNo ?? '';
+          const match = String(value).match(/\d+/);
+          return match ? Number(match[0]) : Number.MAX_SAFE_INTEGER;
         };
-
-        return (
-          getInvoiceNumber(a) -
-          getInvoiceNumber(b)
-        );
+        return invoiceNumber(a) - invoiceNumber(b);
       });
 
       state.sheet =
@@ -952,6 +945,10 @@
       .order-card.is-compact .info-item { padding:5px 7px!important; gap:2px!important; }
       .order-card.is-compact .info-item strong { line-height:1.3!important; }
       .order-card.is-compact .order-total { margin-top:4px!important; padding:7px 9px!important; }
+      .order-card.is-compact .invoice-sort-controls { display:flex!important; flex-direction:column!important; align-items:center!important; justify-content:center!important; gap:3px!important; flex:0 0 34px!important; margin-inline-start:6px!important; }
+      .order-card.is-compact .invoice-sort-controls button { display:flex!important; pointer-events:auto!important; align-items:center!important; justify-content:center!important; width:32px!important; height:30px!important; min-height:30px!important; padding:0!important; border:1px solid #bbf7d0!important; border-radius:8px!important; background:#f0fdf4!important; color:#166534!important; font-size:19px!important; font-weight:900!important; line-height:1!important; cursor:pointer!important; }
+      .order-card.is-compact .invoice-sort-controls button:disabled { opacity:.3!important; cursor:not-allowed!important; }
+      .order-card.is-fullscreen-invoice .invoice-sort-controls { display:none!important; }
       .order-card .invoice-expand-toggle { display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;margin:8px 0;padding:8px 10px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer; }
       .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
       html.driver-invoice-open, body.driver-invoice-open { overflow:hidden!important; overscroll-behavior:none!important; }
@@ -1064,6 +1061,51 @@
           .firstElementChild
           .cloneNode(true);
       node.classList.add('is-compact');
+
+      // أسهم ترتيب الفاتورة تظهر في البطاقة الخارجية فقط وتختفي عند فتح التفاصيل.
+      const sortControls = document.createElement('div');
+      sortControls.className = 'invoice-sort-controls';
+      const upButton = document.createElement('button');
+      upButton.type = 'button';
+      upButton.textContent = '↑';
+      upButton.setAttribute('aria-label', 'تحريك الفاتورة لأعلى');
+      const downButton = document.createElement('button');
+      downButton.type = 'button';
+      downButton.textContent = '↓';
+      downButton.setAttribute('aria-label', 'تحريك الفاتورة لأسفل');
+      const moveInvoice = async (direction, button) => {
+        if (node.classList.contains('is-fullscreen-invoice')) return;
+        const currentIndex = state.orders.findIndex((item) => String(item.id) === String(order.id));
+        const nextIndex = currentIndex + direction;
+        if (currentIndex < 0 || nextIndex < 0 || nextIndex >= state.orders.length) return;
+        const moved = state.orders[currentIndex];
+        state.orders[currentIndex] = state.orders[nextIndex];
+        state.orders[nextIndex] = moved;
+        state.orders.forEach((item, index) => { item.driver_sort_order = index; });
+        render();
+        try {
+          await apiFetch('/api/orders/reorder', {
+            method: 'POST',
+            body: JSON.stringify({ order_ids: state.orders.map((item) => Number(item.id)) })
+          });
+          toast('تم حفظ ترتيب الفواتير ✅');
+        } catch (error) {
+          await loadOrders();
+          toast(error.message || 'تعذر حفظ ترتيب الفواتير', true);
+        }
+      };
+      upButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        moveInvoice(-1, upButton);
+      });
+      downButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        moveInvoice(1, downButton);
+      });
+      sortControls.append(upButton, downButton);
+      node.insertBefore(sortControls, node.firstChild);
 
       // زر فتح التفاصيل يبقى ظاهرًا في البطاقة المختصرة.
       const expandButton = document.createElement('button');
