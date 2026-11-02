@@ -2,24 +2,16 @@
    location-fix.js — فتح موقع العميل: يصلح كل أشكال الروابط تلقائيًا
    ============================================================ */
 (function () {
-  /* المعالج الرئيسي: يستقبل أي رابط مكسور ويرجع لينك Google Maps نظيف */
   function fix(u) {
     if (!u) return '';
     u = String(u).trim();
-    /* فك الترميز المتكرر (روابط مخزنة مرتين مشفرة) */
     for (var i = 0; i < 4; i++) {
       try { var d = decodeURIComponent(u); if (d === u) break; u = d; } catch (e) { break; }
     }
     u = u.replace(/&amp;/gi, '&').replace(/\s+/g, ' ').trim();
-
-    /* نصوص مالهاش لازمة بدل الرابط */
     if (/^(Open Location|موقع العميل|لا يوجد|null|undefined|#|-|0)$/i.test(u)) return '';
-
-    /* 1) إحداثيات مباشرة: 25.37, 55.43 */
     var m = u.match(/(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/);
     if (m) return 'https://www.google.com/maps/search/?api=1&query=' + m[1] + ',' + m[2];
-
-    /* 2) روابط intent:// القديمة */
     if (/^intent:\/\//i.test(u)) {
       var c = u.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/) || u.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
       if (c) return 'https://www.google.com/maps/search/?api=1&query=' + c[1] + ',' + c[2];
@@ -27,23 +19,13 @@
       if (f) { try { return fix(decodeURIComponent(f[1])); } catch (e) {} }
       return fix(u.replace(/^intent:\/\//i, 'https://'));
     }
-
-    /* 3) geo:25.37,55.43 */
     if (/^geo:/i.test(u)) return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(u.slice(4).split('?')[0]);
-
-    /* 4) بدون بروتوكول */
     if (!/^[a-z]+:/i.test(u)) u = 'https://' + u;
-
-    /* 5) لينكات قوقل القصيرة والعادية */
     if (/^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(u)) return u;
     if (/google\.com\/maps/i.test(u) || /maps\.google\./i.test(u)) return u;
-
-    /* 6) أي https صالح */
     return /^https?:\/\//i.test(u) ? u : '';
   }
   window.FAFixLocation = fix;
-
-  /* تنضيف كل الروابط في الصفحة تلقائيًا — حتى اللي بتتضاف بعدين */
   function clean(root) {
     var links = root.querySelectorAll ? root.querySelectorAll('a[href]') : [];
     for (var i = 0; i < links.length; i++) {
