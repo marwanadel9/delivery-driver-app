@@ -1,5 +1,6 @@
 /* ============================================================
-   location-fix.js — فتح موقع العميل: يصلح كل أشكال الروابط تلقائيًا
+   location-fix.js v3 — فتح موقع العميل + إظهار زر الموقع تلقائيًا
+   يصلح كل أشكال الروابط، ويظهر الزرار على أي موبايل/أي WebView
    ============================================================ */
 (function () {
   function fix(u) {
@@ -9,7 +10,7 @@
       try { var d = decodeURIComponent(u); if (d === u) break; u = d; } catch (e) { break; }
     }
     u = u.replace(/&amp;/gi, '&').replace(/\s+/g, ' ').trim();
-    if (/^(Open Location|موقع العميل|لا يوجد|null|undefined|#|-|0)$/i.test(u)) return '';
+    if (/^(Open Location|موقع العميل|لا يوجد|null|undefined|#|-|0|ززين)$/i.test(u)) return '';
     var m = u.match(/(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/);
     if (m) return 'https://www.google.com/maps/search/?api=1&query=' + m[1] + ',' + m[2];
     if (/^intent:\/\//i.test(u)) {
@@ -26,23 +27,70 @@
     return /^https?:\/\//i.test(u) ? u : '';
   }
   window.FAFixLocation = fix;
-  function clean(root) {
-    var links = root.querySelectorAll ? root.querySelectorAll('a[href]') : [];
-    for (var i = 0; i < links.length; i++) {
-      var a = links[i];
-      var raw = a.getAttribute('data-location-url') || a.getAttribute('href') || '';
-      var isLoc = a.getAttribute('data-f') === 'location_url' || a.classList.contains('location-btn')
-        || /maps|goo\.gl|google\.com\/maps|geo:|intent:|^\s*-?\d+\.\d+\s*,/i.test(raw);
-      if (!isLoc) continue;
-      var ok = fix(raw);
-      if (ok) { a.setAttribute('href', ok); a.setAttribute('data-location-url', ok); a.setAttribute('target', '_blank'); }
-      else { a.setAttribute('href', '#'); a.setAttribute('data-location-url', ''); }
+
+  function isLocLink(a) {
+    var raw = a.getAttribute('data-location-url') || a.getAttribute('href') || '';
+    return a.getAttribute('data-f') === 'location_url' || a.classList.contains('location-btn')
+      || /maps|goo\.gl|google\.com\/maps|geo:|intent:|^\s*-?\d+\.\d+\s*,/i.test(raw);
+  }
+
+  /* ⭐ قلب المنطق: الزرار يظهر لما يكون فيه رابط صحيح — ويختفي لما مفيش */
+  function applyOne(a) {
+    if (!a || a.nodeType !== 1 || !isLocLink(a)) return;
+    var raw = a.getAttribute('data-location-url') || a.getAttribute('href') || '';
+    var ok = fix(raw);
+    if (ok) {
+      a.setAttribute('href', ok);
+      a.setAttribute('data-location-url', ok);
+      a.setAttribute('target', '_blank');
+      a.removeAttribute('hidden');           /* يظهر على أي موبايل حتى لو app.js نسيه */
+      a.style.display = '';
+      a.style.visibility = 'visible';
+      a.style.opacity = '1';
+    } else {
+      a.setAttribute('href', '#');
+      a.setAttribute('data-location-url', '');
+      a.setAttribute('hidden', '');
     }
   }
+
+  function clean(root) {
+    if (!root) return;
+    if (root.nodeType === 1 && typeof root.matches === 'function' && root.matches('a[href]')) applyOne(root);
+    if (!root.querySelectorAll) return;
+    var links = root.querySelectorAll('a[href]');
+    for (var i = 0; i < links.length; i++) applyOne(links[i]);
+  }
+
+  /* ⭐ كسر حظر الـ CSS بتاع البطاقة المختصرة على زرار الموقع بس */
+  function injectCss() {
+    if (document.getElementById('fa-locfix-css')) return;
+    var st = document.createElement('style');
+    st.id = 'fa-locfix-css';
+    st.textContent = '.order-card.is-compact .location-btn{display:flex!important;pointer-events:auto!important;visibility:visible!important;opacity:1!important}';
+    (document.head || document.documentElement).appendChild(st);
+  }
+
+  injectCss();
   clean(document);
-  new MutationObserver(function (list) {
+
+  /* ⭐ المراقب بيشوف childList + تغييرات href/data-location-url/hidden — عشان أي ترتيب تحميل يتصلح */
+  var mo = new MutationObserver(function (list) {
     for (var i = 0; i < list.length; i++) {
-      for (var j = 0; j < list[i].addedNodes.length; j++) clean(list[i].addedNodes[j]);
+      var m = list[i];
+      if (m.type === 'attributes') { applyOne(m.target); continue; }
+      for (var j = 0; j < m.addedNodes.length; j++) clean(m.addedNodes[j]);
     }
-  }).observe(document.body, { childList: true, subtree: true });
+  });
+  mo.observe(document.body, {
+    childList: true, subtree: true,
+    attributes: true, attributeFilter: ['href', 'data-location-url', 'hidden']
+  });
+
+  /* ⭐ فحص دوري كل 3 ثوانٍ — يصلّح أي زرار اتخبى بسبب ترتيب التحميل أو كاش قديم */
+  setInterval(function () {
+    injectCss();
+    var links = document.querySelectorAll('a[data-f="location_url"],a.location-btn');
+    for (var i = 0; i < links.length; i++) applyOne(links[i]);
+  }, 3000);
 })();
