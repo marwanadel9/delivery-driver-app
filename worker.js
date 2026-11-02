@@ -757,90 +757,46 @@ export default {
       if (path === "/api/driver/order/reorder" && request.method === "POST") {
         const auth = await requireDriver(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
-        if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "إعداد حفظ ترتيب الفواتير غير مكتمل: أضف SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
+        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "إعداد حفظ ترتيب الفواتير غير مكتمل: أضف SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
 
         const body = await request.json().catch(function () { return {}; });
-        // orders.id في قاعدة البيانات BIGINT؛ لا نستخدم order_number مثل F001 هنا.
-        const rawOrderIds = Array.isArray(body.order_ids) ? body.order_ids : [];
-        const orderIds = rawOrderIds.map(function (value) {
-          const text = String(value == null ? "" : value).trim();
-          return /^\d+$/.test(text) ? text : "";
-        });
-
-        if (
-          !orderIds.length ||
-          orderIds.some(function (id) {
-            if (!id) return true;
-            const numeric = Number(id);
-            return !Number.isSafeInteger(numeric) || numeric <= 0;
-          }) ||
-          new Set(orderIds).size !== orderIds.length
-        ) {
-          return json({
-            error: "معرّف داخلي غير صحيح. يجب إرسال orders.id الرقمي وليس رقم الفاتورة F001.",
-            received_count: rawOrderIds.length,
-            invalid_ids: rawOrderIds.filter(function (value, index) { return !orderIds[index]; }).slice(0, 5)
-          }, 400);
+        const orderIds = Array.isArray(body.order_ids)
+          ? body.order_ids.map(function (value) { return String(value == null ? "" : value).trim(); })
+          : [];
+        const validId = function (value) { return /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0; };
+        if (!orderIds.length || orderIds.length > 2000 || orderIds.some(function (id) { return !validId(id); }) || new Set(orderIds).size !== orderIds.length) {
+          return json({ error: "قائمة الفواتير أو أرقامها غير صحيحة" }, 400);
         }
 
-        const sheet = auth.driver.sheet_name;
-        const userId = auth.user.id;
-        const serviceHeaders = {
-          apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-          Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY
-        };
-
-        // نتأكد أن كل المعرفات موجودة ضمن قائمة هذا المندوب قبل الحفظ.
+        const headers = { apikey: serviceKey, Authorization: "Bearer " + serviceKey };
         const ordersCheck = await supabaseRequest(
-          "/rest/v1/orders?select=id&sheet_name=eq." + encodeURIComponent(sheet) +
-            "&id=in.(" + orderIds.join(",") + ")",
-          { headers: serviceHeaders }
+          "/rest/v1/orders?select=id&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) + "&id=in.(" + orderIds.join(",") + ")",
+          { headers: headers }
         );
-        const ownedOrders = await ordersCheck.json().catch(function () { return null; });
-        if (!ordersCheck.ok) {
-          const detail = ownedOrders && (ownedOrders.message || ownedOrders.details || ownedOrders.hint || ownedOrders.code)
-            ? JSON.stringify(ownedOrders).slice(0, 700)
-            : "HTTP " + ordersCheck.status;
-          return json({ error: "تعذر التحقق من معرّفات الفواتير: " + detail }, 500);
-        }
-        if (!Array.isArray(ownedOrders) || ownedOrders.length !== orderIds.length) {
-          return json({
-            error: "بعض معرّفات الفواتير غير موجودة ضمن قائمة المندوب الحالي.",
-            sent_ids: orderIds.length,
-            matched_ids: Array.isArray(ownedOrders) ? ownedOrders.length : 0
-          }, 403);
+        const ownedOrders = await ordersCheck.json().catch(function () { return []; });
+        if (!ordersCheck.ok || !Array.isArray(ownedOrders) || ownedOrders.length !== orderIds.length) {
+          return json({ error: "بعض الفواتير لا تخص قائمة المندوب الحالي" }, 403);
         }
 
-        // order_id هو المفتاح الأساسي الفعلي للجدول؛ نستخدم UPSERT عليه مباشرة.
-        // هذا يتجنب DELETE ثم INSERT ويمنع فشل الحفظ بسبب تعارض المفتاح الأساسي.
-        const now = new Date().toISOString();
+        // كل رقم هو موضع فعلي في القائمة: نقل الفاتورة إلى الموضع المطلوب
+        // ثم تحديث مواضع بقية الفواتير دفعة واحدة. المفتاح order_id يجعل الترتيب مشتركًا.
         const sortRows = orderIds.map(function (orderId, index) {
           return {
-            driver_user_id: userId,
-            sheet_name: sheet,
             order_id: Number(orderId),
+            driver_user_id: auth.user.id,
+            sheet_name: auth.driver.sheet_name,
             sort_position: index + 1,
-            updated_at: now
+            updated_at: new Date().toISOString()
           };
         });
         const saveResponse = await supabaseRequest(
           "/rest/v1/driver_invoice_order?on_conflict=order_id",
-          {
-            method: "POST",
-            headers: Object.assign({}, serviceHeaders, {
-              "Content-Type": "application/json",
-              Prefer: "resolution=merge-duplicates,return=minimal"
-            }),
-            body: JSON.stringify(sortRows)
-          }
+          { method: "POST", headers: Object.assign({}, headers, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }), body: JSON.stringify(sortRows) }
         );
         if (!saveResponse.ok) {
           const detail = await saveResponse.text().catch(function () { return ""; });
-          return json({
-            error: "فشل حفظ ترتيب الفواتير في Supabase: HTTP " + saveResponse.status + " - " + detail.slice(0, 700),
-            database_status: saveResponse.status,
-            detail: detail.slice(0, 700)
-          }, 500);
+          return json({ error: "تعذر حفظ ترتيب الفواتير - HTTP " + saveResponse.status + " - " + detail.slice(0, 500), database_status: saveResponse.status }, 500);
         }
         return json({ success: true, saved: orderIds.length });
       }
@@ -930,19 +886,22 @@ export default {
           }
         }
 
-        // تحميل ترتيب هذا المندوب فقط من جدول driver_invoice_order.
+        // قراءة ترتيب موحد لكل فاتورة حسب orders.id، وليس حسب حساب المندوب.
         if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
-          const sortResponse = await supabaseRequest(
-            "/rest/v1/driver_invoice_order?select=order_id,sort_position&driver_user_id=eq." + encodeURIComponent(auth.user.id) + "&sheet_name=eq." + encodeURIComponent(sheet),
-            { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
-          );
-          const sortRows = await sortResponse.json().catch(function () { return []; });
-          if (sortResponse.ok && Array.isArray(sortRows)) {
-            const positionMap = new Map(sortRows.map(function (row) { return [String(row.order_id), Number(row.sort_position)]; }));
-            safeOrders.forEach(function (row) {
-              const position = positionMap.get(String(row.id));
-              if (Number.isFinite(position) && position > 0) row._driver_sort_position = position;
-            });
+          const ids = safeOrders.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isSafeInteger(id) && id > 0; });
+          if (ids.length) {
+            const sortResponse = await supabaseRequest(
+              "/rest/v1/driver_invoice_order?select=order_id,sort_position&order_id=in.(" + ids.join(",") + ")",
+              { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
+            );
+            const sortRows = await sortResponse.json().catch(function () { return []; });
+            if (sortResponse.ok && Array.isArray(sortRows)) {
+              const positionMap = new Map(sortRows.map(function (row) { return [String(row.order_id), Number(row.sort_position)]; }));
+              safeOrders.forEach(function (row) {
+                const position = positionMap.get(String(row.id));
+                if (Number.isFinite(position) && position > 0) row._driver_sort_position = position;
+              });
+            }
           }
         }
 
