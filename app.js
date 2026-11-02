@@ -1773,9 +1773,10 @@
           gatePhotoBox.appendChild(gatePhotoButton);
         });
 
-        const insertBefore = node.querySelector('.payment-current, .payment-buttons, .payment-options, .btn-deliver');
-        if (insertBefore && insertBefore.parentNode) {
-          insertBefore.parentNode.insertBefore(gatePhotoBox, insertBefore);
+        /* ⭐ الحاوية ابن مباشر للكارت قبل .order-actions — مش جوه قسم الدفع (اللي بيختفي للمدفوع مقدم) */
+        const photoAnchor = node.querySelector('.order-actions') || node.querySelector('.btn-deliver');
+        if (photoAnchor && photoAnchor.parentNode) {
+          photoAnchor.parentNode.insertBefore(gatePhotoBox, photoAnchor);
         } else {
           node.appendChild(gatePhotoBox);
         }
