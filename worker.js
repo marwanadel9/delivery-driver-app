@@ -760,9 +760,15 @@ export default {
         if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "إعداد حفظ ترتيب الفواتير غير مكتمل: أضف SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
 
         const body = await request.json().catch(function () { return {}; });
-        const orderIds = Array.isArray(body.order_ids) ? body.order_ids.map(Number) : [];
-        if (!orderIds.length || orderIds.some(function (id) { return !Number.isSafeInteger(id) || id <= 0; }) || new Set(orderIds).size !== orderIds.length) {
-          return json({ error: "قائمة أرقام الفواتير غير صحيحة" }, 400);
+        const orderIds = Array.isArray(body.order_ids)
+          ? body.order_ids.map(function (value) { return String(value == null ? "" : value).trim(); })
+          : [];
+        // معرف orders.id قد يكون UUID أو رقمًا؛ لا نحوله إلى Number حتى لا يصبح NaN أو يفقد دقته.
+        const validOrderId = function (value) {
+          return /^(?:[1-9]\\d*|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.test(value);
+        };
+        if (!orderIds.length || orderIds.some(function (id) { return !validOrderId(id); }) || new Set(orderIds).size !== orderIds.length) {
+          return json({ error: "قائمة أرقام الفواتير غير صحيحة", received_count: orderIds.length, invalid_ids: orderIds.filter(function (id) { return !validOrderId(id); }).slice(0, 5) }, 400);
         }
 
         const sheet = auth.driver.sheet_name;
