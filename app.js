@@ -1034,7 +1034,7 @@
     try {
       await apiFetch('/api/driver/order/reorder', {
         method: 'POST',
-        body: JSON.stringify({ order_ids: state.orders.map((item) => Number(item.id)) })
+        body: JSON.stringify({ order_ids: state.orders.map((item) => String(item.id ?? "").trim()) })
       });
     } catch (error) {
       // ارجاع القائمة لو لم يتم حفظ الترتيب في الخادم.
