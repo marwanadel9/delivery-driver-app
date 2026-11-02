@@ -765,7 +765,7 @@ export default {
           : [];
         // معرف orders.id قد يكون UUID أو رقمًا؛ لا نحوله إلى Number حتى لا يصبح NaN أو يفقد دقته.
         const validOrderId = function (value) {
-          return /^(?:[1-9]\\d*|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.test(value);
+          return /^(?:[1-9]\d*|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.test(value);
         };
         if (!orderIds.length || orderIds.some(function (id) { return !validOrderId(id); }) || new Set(orderIds).size !== orderIds.length) {
           return json({ error: "قائمة أرقام الفواتير غير صحيحة", received_count: orderIds.length, invalid_ids: orderIds.filter(function (id) { return !validOrderId(id); }).slice(0, 5) }, 400);
