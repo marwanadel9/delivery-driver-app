@@ -7,8 +7,7 @@
     session: null,
     orders: [],
     filter: 'pending',
-    sheet: '',
-    activeRequests: 0
+    sheet: ''
   };
 
   const $ = (id) => document.getElementById(id);
@@ -320,7 +319,6 @@
     const requestController = new AbortController();
     const requestTimeout = setTimeout(() => requestController.abort(), 30000);
     let response;
-    state.activeRequests += 1;
     try {
       response = await fetch(path, {
         ...options,
@@ -334,7 +332,6 @@
       throw error;
     } finally {
       clearTimeout(requestTimeout);
-      state.activeRequests = Math.max(0, state.activeRequests - 1);
     }
 
     if (
@@ -1685,17 +1682,33 @@
         }
       }
 
-      const locationValue =
-        firstValue(
-          order,
-          [
-            'location_url',
-            'locationUrl',
-            'location',
-            'map_url',
-            'mapUrl'
-          ]
-        );
+      // اختَر أول حقل يحتوي رابط موقع صالحًا، وليس أول حقل غير فارغ فقط.
+      // بعض السجلات تحتوي location='Open Location' بينما الرابط الفعلي موجود في map_url.
+      const locationKeys = [
+        'location_url',
+        'locationUrl',
+        'map_url',
+        'mapUrl',
+        'location'
+      ];
+      let locationValue = '';
+      let locationUrl = '';
+      for (const key of locationKeys) {
+        const candidate = order?.[key];
+        if (candidate === null || candidate === undefined || String(candidate).trim() === '') continue;
+        let normalized = '';
+        try {
+          if (typeof window.FAFixLocation === 'function') {
+            normalized = window.FAFixLocation(candidate) || '';
+          }
+        } catch (_) {}
+        if (!normalized) normalized = safeUrl(candidate);
+        if (normalized) {
+          locationValue = candidate;
+          locationUrl = normalized;
+          break;
+        }
+      }
 
       const locationButton =
         node.querySelector(
@@ -1703,79 +1716,17 @@
         );
 
       if (locationButton) {
-        const locationUrl =
-          safeUrl(locationValue);
-
         if (locationUrl) {
-          locationButton.href =
-            locationUrl;
-
-          locationButton.target =
-            '_blank';
-
-          locationButton.rel =
-            'noopener noreferrer';
-
-          locationButton.hidden =
-            false;
+          locationButton.href = locationUrl;
+          locationButton.setAttribute('data-location-url', locationUrl);
+          locationButton.target = '_blank';
+          locationButton.rel = 'noopener noreferrer';
+          locationButton.hidden = false;
+          locationButton.style.removeProperty('display');
         } else {
-          locationButton.hidden =
-            true;
+          locationButton.hidden = true;
+          locationButton.removeAttribute('data-location-url');
         }
-      }
-
-      // تشخيص مؤقت لسبب اختفاء زر موقع العميل — لا يغيّر بيانات الفاتورة أو وظائفها.
-      if (!locationButton || locationButton.hidden) {
-        const oldLocationDebug = node.querySelector('.location-debug-panel');
-        if (oldLocationDebug) oldLocationDebug.remove();
-
-        const debugPanel = document.createElement('details');
-        debugPanel.className = 'location-debug-panel';
-        debugPanel.style.cssText = 'display:block;margin:10px 0;padding:12px;border:2px solid #d97706;border-radius:12px;background:#fffbeb;color:#78350f;direction:rtl;text-align:right;font-size:12px;line-height:1.8;overflow-wrap:anywhere;';
-
-        const debugTitle = document.createElement('summary');
-        debugTitle.textContent = '🛠 تشخيص زر الموقع — اضغط لعرض التفاصيل';
-        debugTitle.style.cssText = 'font-weight:900;cursor:pointer;font-size:13px;';
-        debugPanel.appendChild(debugTitle);
-
-        const locationFields = Object.keys(order || {}).filter((key) =>
-          /location|map|google|latitude|longitude|(^|_)lat($|_)|(^|_)lng($|_)/i.test(key)
-        );
-        const rawFields = {};
-        locationFields.forEach((key) => {
-          const value = order[key];
-          try {
-            rawFields[key] = typeof value === 'string' ? value.slice(0, 500) : JSON.stringify(value);
-          } catch (_) {
-            rawFields[key] = String(value);
-          }
-        });
-
-        const debugData = {
-          invoice: firstValue(order, ['order_number', 'orderNumber', 'invoice_no', 'invoice_number', 'invoiceNo', 'id']),
-          order_id: order?.id ?? null,
-          detected_value: locationValue == null ? null : String(locationValue).slice(0, 500),
-          detected_value_type: locationValue === null ? 'null' : typeof locationValue,
-          location_fields_received: rawFields,
-          safe_url_result: safeUrl(locationValue),
-          location_fix_loaded: typeof window.FAFixLocation === 'function',
-          button_found: Boolean(locationButton),
-          button_hidden: locationButton ? locationButton.hidden : null,
-          page: window.location.href,
-          user_agent: navigator.userAgent
-        };
-
-        const debugText = document.createElement('pre');
-        debugText.textContent = JSON.stringify(debugData, null, 2);
-        debugText.style.cssText = 'white-space:pre-wrap;direction:ltr;text-align:left;margin:10px 0 0;font:11px/1.6 monospace;overflow-wrap:anywhere;';
-        debugPanel.appendChild(debugText);
-
-        const actions = node.querySelector('.order-actions');
-        if (actions?.parentNode) actions.parentNode.insertBefore(debugPanel, actions.nextSibling);
-        else node.appendChild(debugPanel);
-      } else {
-        const oldLocationDebug = node.querySelector('.location-debug-panel');
-        if (oldLocationDebug) oldLocationDebug.remove();
       }
 
       // Villa gate photos: support multiple URLs while keeping compatibility with the old single URL.
@@ -5109,94 +5060,6 @@
     );
   }
 
-
-  // فحص إصدار الموقع كل 60 ثانية، مع تأجيل إعادة التحميل حتى تصبح الجلسة آمنة.
-  const APP_UPDATE_CHECK_MS = 60 * 1000;
-  const APP_UPDATE_BUILD = '2026.11.02.1';
-  const APP_UPDATE_VERSION_URL = '/version.json';
-  const APP_UPDATE_BUILD_KEY = 'farujalzain_app_build';
-  let appUpdateCurrentBuild = APP_UPDATE_BUILD;
-  let appUpdatePendingBuild = '';
-  let appUpdateCheckRunning = false;
-
-  function isAppUpdateSafeNow() {
-    if (document.hidden) return false;
-    if (state.activeRequests > 0) return false;
-
-    // لا نعيد التحميل أثناء فتح تفاصيل فاتورة أو أثناء تعديل حقول.
-    if (document.body.classList.contains('driver-invoice-open')) return false;
-    if (document.querySelector('.is-fullscreen-invoice')) return false;
-
-    const active = document.activeElement;
-    if (active && (
-      active.isContentEditable ||
-      /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)
-    )) return false;
-
-    // لا نقطع اتصال الووكي توكي/الصوت أثناء الكلام أو المكالمة الفعلية.
-    const voice = window.FAVoice;
-    if (voice) {
-      if (voice.talking || voice.starting) return false;
-      if (voice.micStream && voice.micStream.getAudioTracks().some(
-        (track) => track.readyState === 'live' && track.enabled
-      )) return false;
-
-      const remoteAudio = voice.audioEls && Object.values(voice.audioEls);
-      if (remoteAudio && remoteAudio.some((audio) =>
-        audio && !audio.paused && !audio.ended
-      )) return false;
-    }
-
-    return true;
-  }
-
-  async function checkAppUpdate() {
-    if (appUpdateCheckRunning) return;
-    appUpdateCheckRunning = true;
-
-    try {
-      const response = await fetch(
-        `${APP_UPDATE_VERSION_URL}?_=${Date.now()}`,
-        { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } }
-      );
-      if (!response.ok) return;
-
-      const info = await response.json();
-      const latestBuild = String(info?.build || info?.version || '').trim();
-      if (!latestBuild) return;
-
-      if (latestBuild === appUpdateCurrentBuild) return;
-      appUpdatePendingBuild = latestBuild;
-
-      if (!isAppUpdateSafeNow()) return;
-
-      // إعادة تحميل الصفحة تحفظ جلسة الدخول في localStorage وتحمّل الملفات الجديدة.
-      try { localStorage.setItem(APP_UPDATE_BUILD_KEY, latestBuild); } catch (_) {}
-      window.location.reload();
-    } catch (_) {
-      // انقطاع الإنترنت لا يوقف التطبيق؛ يعاد الفحص بعد دقيقة.
-    } finally {
-      appUpdateCheckRunning = false;
-    }
-  }
-
-  function startAppUpdateMonitor() {
-    // الإصدار الموجود في الخادم هو المرجع؛ لا نفرض تحديثًا عند أول تشغيل.
-    checkAppUpdate();
-    window.setInterval(checkAppUpdate, APP_UPDATE_CHECK_MS);
-
-    // إذا انتهت المكالمة أو أُغلقت الفاتورة، طبّق التحديث المنتظر قريبًا.
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && appUpdatePendingBuild) checkAppUpdate();
-    });
-    document.addEventListener('pointerup', () => {
-      if (appUpdatePendingBuild) checkAppUpdate();
-    }, { passive: true });
-    document.addEventListener('focusout', () => {
-      if (appUpdatePendingBuild) checkAppUpdate();
-    });
-  }
-
   function loadStoredSession() {
     try {
       const raw =
@@ -5229,7 +5092,6 @@
 
   function boot() {
     setupEvents();
-    startAppUpdateMonitor();
 
     const masterSession =
       loadStoredMasterSession();
