@@ -764,41 +764,43 @@ export default {
         const orderIds = Array.isArray(body.order_ids)
           ? body.order_ids.map(function (value) { return String(value == null ? "" : value).trim(); })
           : [];
-        const validId = function (value) { return /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0; };
-        if (!orderIds.length || orderIds.length > 2000 || orderIds.some(function (id) { return !validId(id); }) || new Set(orderIds).size !== orderIds.length) {
-          return json({ error: "قائمة الفواتير أو أرقامها غير صحيحة" }, 400);
+        const validOrderId = function (value) {
+          return typeof value === "string" && value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/.test(value);
+        };
+        if (!orderIds.length || orderIds.some(function (id) { return !validOrderId(id); }) || new Set(orderIds).size !== orderIds.length) {
+          return json({ error: "قائمة معرفات الفواتير غير صحيحة" }, 400);
         }
 
-        const headers = { apikey: serviceKey, Authorization: "Bearer " + serviceKey };
+        // نتحقق أن المعرفات ضمن فواتير المندوب الحالي، لكن سجل الترتيب نفسه عالمي حسب orders.id.
+        const sheet = auth.driver.sheet_name;
         const ordersCheck = await supabaseRequest(
-          "/rest/v1/orders?select=id&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) + "&id=in.(" + orderIds.join(",") + ")",
-          { headers: headers }
+          "/rest/v1/orders?select=id&sheet_name=eq." + encodeURIComponent(sheet) + "&id=in.(" + orderIds.join(",") + ")",
+          { headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey } }
         );
         const ownedOrders = await ordersCheck.json().catch(function () { return []; });
         if (!ordersCheck.ok || !Array.isArray(ownedOrders) || ownedOrders.length !== orderIds.length) {
-          return json({ error: "بعض الفواتير لا تخص قائمة المندوب الحالي" }, 403);
+          return json({ error: "بعض الفواتير لا تخص حساب المندوب الحالي", detail: Array.isArray(ownedOrders) ? undefined : ownedOrders }, 403);
         }
 
-        // كل رقم هو موضع فعلي في القائمة: نقل الفاتورة إلى الموضع المطلوب
-        // ثم تحديث مواضع بقية الفواتير دفعة واحدة. المفتاح order_id يجعل الترتيب مشتركًا.
+        const now = new Date().toISOString();
         const sortRows = orderIds.map(function (orderId, index) {
           return {
-            order_id: Number(orderId),
+            order_id: orderId,
             driver_user_id: auth.user.id,
-            sheet_name: auth.driver.sheet_name,
+            sheet_name: sheet,
             sort_position: index + 1,
-            updated_at: new Date().toISOString()
+            updated_at: now
           };
         });
         const saveResponse = await supabaseRequest(
           "/rest/v1/driver_invoice_order?on_conflict=order_id",
-          { method: "POST", headers: Object.assign({}, headers, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }), body: JSON.stringify(sortRows) }
+          { method: "POST", headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(sortRows) }
         );
+        const savedRows = await saveResponse.json().catch(function () { return []; });
         if (!saveResponse.ok) {
-          const detail = await saveResponse.text().catch(function () { return ""; });
-          return json({ error: "تعذر حفظ ترتيب الفواتير - HTTP " + saveResponse.status + " - " + detail.slice(0, 500), database_status: saveResponse.status }, 500);
+          return json({ error: "تعذر حفظ الترتيب الموحد - HTTP " + saveResponse.status, detail: savedRows }, 500);
         }
-        return json({ success: true, saved: orderIds.length });
+        return json({ success: true, saved: orderIds.length, scope: "global_order_id" });
       }
 
       if (
@@ -886,22 +888,19 @@ export default {
           }
         }
 
-        // قراءة ترتيب موحد لكل فاتورة حسب orders.id، وليس حسب حساب المندوب.
+        // تحميل الترتيب العالمي: لا نفلتر حسب المندوب أو الورقة؛ المفتاح هو orders.id فقط.
         if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
-          const ids = safeOrders.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isSafeInteger(id) && id > 0; });
-          if (ids.length) {
-            const sortResponse = await supabaseRequest(
-              "/rest/v1/driver_invoice_order?select=order_id,sort_position&order_id=in.(" + ids.join(",") + ")",
-              { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
-            );
-            const sortRows = await sortResponse.json().catch(function () { return []; });
-            if (sortResponse.ok && Array.isArray(sortRows)) {
-              const positionMap = new Map(sortRows.map(function (row) { return [String(row.order_id), Number(row.sort_position)]; }));
-              safeOrders.forEach(function (row) {
-                const position = positionMap.get(String(row.id));
-                if (Number.isFinite(position) && position > 0) row._driver_sort_position = position;
-              });
-            }
+          const sortResponse = await supabaseRequest(
+            "/rest/v1/driver_invoice_order?select=order_id,sort_position&order_id=in.(" + safeOrders.map(function (row) { return String(row.id); }).join(",") + ")",
+            { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
+          );
+          const sortRows = await sortResponse.json().catch(function () { return []; });
+          if (sortResponse.ok && Array.isArray(sortRows)) {
+            const positionMap = new Map(sortRows.map(function (row) { return [String(row.order_id), Number(row.sort_position)]; }));
+            safeOrders.forEach(function (row) {
+              const position = positionMap.get(String(row.id));
+              if (Number.isFinite(position) && position > 0) row._driver_sort_position = position;
+            });
           }
         }
 
