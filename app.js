@@ -952,10 +952,12 @@
       .order-card.is-compact [role="button"],
       .order-card.is-compact [onclick] { display:none!important; pointer-events:none!important; }
       .order-card.is-compact { position:relative!important; padding:9px!important; gap:5px!important; cursor:pointer!important; }
-      .order-card.is-compact .driver-sort-controls { position:absolute!important;left:10px!important;top:9px!important;z-index:50!important;display:flex!important;flex-direction:column!important;gap:4px!important;direction:ltr!important;pointer-events:auto!important; }
-      .order-card.is-compact .driver-sort-btn { display:flex!important;align-items:center!important;justify-content:center!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;width:38px!important;height:36px!important;min-width:38px!important;min-height:36px!important;padding:0!important;margin:0!important;border:1px solid #86efac!important;border-radius:9px!important;background:#f0fdf4!important;color:#15803d!important;font-family:Arial,sans-serif!important;font-size:25px!important;font-weight:900!important;line-height:1!important;cursor:pointer!important;box-shadow:0 1px 3px rgba(22,101,52,.12)!important; }
-      .order-card.is-compact .driver-sort-btn:disabled { opacity:.4!important;cursor:not-allowed!important; }
-      .order-card.is-fullscreen-invoice .driver-sort-controls { display:none!important; }
+      .order-card.is-compact .driver-sort-controls { position:absolute!important;left:10px!important;top:9px!important;z-index:50!important;display:flex!important;align-items:center!important;justify-content:center!important;direction:ltr!important;pointer-events:auto!important;width:44px!important; }
+      .order-card.is-compact .driver-sort-input { display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;width:42px!important;height:38px!important;min-width:42px!important;box-sizing:border-box!important;padding:2px!important;margin:0!important;border:1px solid #86efac!important;border-radius:9px!important;background:#f0fdf4!important;color:#15803d!important;text-align:center!important;font-family:Arial,sans-serif!important;font-size:18px!important;font-weight:900!important;box-shadow:0 1px 3px rgba(22,101,52,.12)!important; }
+      .order-card.is-compact .driver-sort-display { display:none!important; }
+      .order-card.is-fullscreen-invoice .driver-sort-controls { position:static!important;display:flex!important;width:auto!important;justify-content:flex-start!important;margin:0 0 5px!important; }
+      .order-card.is-fullscreen-invoice .driver-sort-input { display:none!important; }
+      .order-card.is-fullscreen-invoice .driver-sort-display { display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:32px!important;height:30px!important;padding:0 8px!important;border:1px solid #cbd5e1!important;border-radius:8px!important;background:#f1f5f9!important;color:#334155!important;font-size:14px!important;font-weight:900!important; }
       .order-card.is-compact .order-card-head { margin:0!important; gap:4px!important; }
       .order-card.is-compact .customer-row { margin:0!important; padding:2px 0!important; gap:6px!important; }
       .order-card.is-compact .customer-location-grid { margin-top:3px!important; gap:4px!important; }
@@ -1018,28 +1020,37 @@
     document.head.appendChild(style);
   }
 
-  async function moveDriverOrder(order, direction, upButton, downButton) {
-    if (!order || order.id == null) return;
+  async function saveDriverOrderPosition(order, input) {
+    if (!order || order.id == null || !input) return;
+    const raw = toEnglishDigits(input.value).trim();
+    const requestedPosition = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(requestedPosition) || requestedPosition < 1 || requestedPosition > state.orders.length) {
+      input.value = order._driver_sort_position ? String(order._driver_sort_position) : '';
+      toast(`اكتب رقمًا من 1 إلى ${state.orders.length}`, true);
+      return;
+    }
+
+    const previousOrders = state.orders.slice();
+    const previousPositions = new Map(previousOrders.map((item) => [String(item.id), item._driver_sort_position]));
     const currentIndex = state.orders.findIndex((item) => String(item.id) === String(order.id));
-    const targetIndex = currentIndex + direction;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= state.orders.length) return;
-
-    const moved = state.orders[currentIndex];
-    state.orders[currentIndex] = state.orders[targetIndex];
-    state.orders[targetIndex] = moved;
+    if (currentIndex < 0) return;
+    const movedOrder = state.orders.splice(currentIndex, 1)[0];
+    state.orders.splice(requestedPosition - 1, 0, movedOrder);
+    state.orders.forEach((item, index) => { item._driver_sort_position = index + 1; });
     render();
-
-    const buttons = document.querySelectorAll('.driver-sort-btn');
-    buttons.forEach((button) => { button.disabled = true; });
     try {
       await apiFetch('/api/driver/order/reorder', {
         method: 'POST',
-        body: JSON.stringify({ order_ids: state.orders.map((item) => String(item.id ?? "").trim()) })
+        body: JSON.stringify({ order_ids: state.orders.map((item) => String(item.id)) })
       });
+      toast('تم حفظ ترتيب الفواتير');
     } catch (error) {
-      // ارجاع القائمة لو لم يتم حفظ الترتيب في الخادم.
-      state.orders[currentIndex] = state.orders[targetIndex];
-      state.orders[targetIndex] = moved;
+      state.orders = previousOrders;
+      state.orders.forEach((item) => {
+        const oldPosition = previousPositions.get(String(item.id));
+        if (oldPosition == null) delete item._driver_sort_position;
+        else item._driver_sort_position = oldPosition;
+      });
       render();
       toast(error.message || 'تعذر حفظ ترتيب الفواتير', true);
     }
@@ -1102,35 +1113,33 @@
           .cloneNode(true);
       node.classList.add('is-compact');
 
-      // أزرار ترتيب الفاتورة تظهر خارج التفاصيل على يسار البطاقة.
+      // رقم الترتيب قابل للتعديل خارج الفاتورة فقط، ويظهر للقراءة عند فتح التفاصيل.
       const sortControls = document.createElement('div');
       sortControls.className = 'driver-sort-controls';
-      sortControls.setAttribute('aria-label', 'ترتيب الفاتورة');
-      const upButton = document.createElement('button');
-      upButton.type = 'button';
-      upButton.className = 'driver-sort-btn driver-sort-up';
-      upButton.textContent = '↑';
-      upButton.title = 'تحريك الفاتورة لأعلى';
-      upButton.setAttribute('aria-label', 'تحريك الفاتورة لأعلى');
-      const downButton = document.createElement('button');
-      downButton.type = 'button';
-      downButton.className = 'driver-sort-btn driver-sort-down';
-      downButton.textContent = '↓';
-      downButton.title = 'تحريك الفاتورة لأسفل';
-      downButton.setAttribute('aria-label', 'تحريك الفاتورة لأسفل');
-      upButton.addEventListener('click', (event) => {
-        event.preventDefault();
+      sortControls.setAttribute('aria-label', 'رقم ترتيب الفاتورة');
+      const sortInput = document.createElement('input');
+      sortInput.type = 'number';
+      sortInput.min = '1';
+      sortInput.max = '9999';
+      sortInput.step = '1';
+      sortInput.inputMode = 'numeric';
+      sortInput.className = 'driver-sort-input';
+      sortInput.title = 'اكتب رقم ترتيب الفاتورة';
+      sortInput.setAttribute('aria-label', 'رقم ترتيب الفاتورة');
+      sortInput.placeholder = '#';
+      sortInput.value = Number.isFinite(Number(order._driver_sort_position)) && Number(order._driver_sort_position) > 0
+        ? String(order._driver_sort_position)
+        : '';
+      sortInput.addEventListener('click', (event) => { event.stopPropagation(); });
+      sortInput.addEventListener('keydown', (event) => {
         event.stopPropagation();
-        event.stopImmediatePropagation();
-        moveDriverOrder(order, -1, upButton, downButton);
+        if (event.key === 'Enter') { event.preventDefault(); sortInput.blur(); }
       });
-      downButton.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        moveDriverOrder(order, 1, upButton, downButton);
-      });
-      sortControls.append(upButton, downButton);
+      sortInput.addEventListener('change', () => saveDriverOrderPosition(order, sortInput));
+      const sortDisplay = document.createElement('span');
+      sortDisplay.className = 'driver-sort-display';
+      sortDisplay.textContent = sortInput.value || '—';
+      sortControls.append(sortInput, sortDisplay);
       node.insertBefore(sortControls, node.firstChild);
 
       // زر فتح التفاصيل يبقى ظاهرًا في البطاقة المختصرة.
