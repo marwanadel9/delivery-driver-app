@@ -787,7 +787,10 @@ export default {
           { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
         );
         const existing = await existingResponse.json().catch(function () { return []; });
-        if (!existingResponse.ok || !Array.isArray(existing)) return json({ error: "تعذر قراءة ترتيب الفواتير الحالي" }, 500);
+        if (!existingResponse.ok || !Array.isArray(existing)) {
+          const detail = Array.isArray(existing) ? "استجابة غير متوقعة من جدول ترتيب الفواتير" : (typeof existing === "object" && existing ? (existing.message || existing.details || existing.hint || JSON.stringify(existing)) : String(existing));
+          return json({ error: "تعذر قراءة ترتيب الفواتير الحالي", database_status: existingResponse.status, detail: String(detail).slice(0, 900) }, 500);
+        }
         const existingIds = new Set(existing.map(function (row) { return String(row.order_id); }));
 
         for (let index = 0; index < orderIds.length; index++) {
