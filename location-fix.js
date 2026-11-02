@@ -1,7 +1,7 @@
 /* ============================================================
    location-fix.js v4 — فتح موقع العميل + زرار يظهر على أي هاتف
    ============================================================ */
-console.log('FALocFix v4 deployed');
+console.log('FALocFix v4.1 deployed');
 /* FALocGuard v4 — زرار «فتح الموقع» يظهر على أي هاتف وأي إصدار:
    نستبدل <a> المخفي بـ <span> لا تمسه أي قاعدة CSS للإخفاء، ونتحكم في ظهاره بالرابط نفسه */
 (function(){
@@ -82,7 +82,7 @@ console.log('FALocFix v4 deployed');
     if(document.getElementById('fa-locfix-css-v4')) return;
     var st=document.createElement('style');
     st.id='fa-locfix-css-v4';
-    st.textContent='span.location-btn{display:flex!important;align-items:center;justify-content:center;pointer-events:auto!important;visibility:visible!important;opacity:1!important}';
+    st.textContent='.order-card.is-compact .order-actions{display:grid!important}.order-card.is-compact .location-btn{display:flex!important;pointer-events:auto!important;visibility:visible!important;opacity:1!important}';
     (document.head||document.documentElement).appendChild(st);
   }
   injectCss(); clean(document);
