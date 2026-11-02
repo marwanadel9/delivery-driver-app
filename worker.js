@@ -784,30 +784,34 @@ export default {
           return json({ error: "بعض الفواتير لا تخص حساب المندوب الحالي" }, 403);
         }
 
-        const existingResponse = await supabaseRequest(
-          "/rest/v1/driver_invoice_order?select=order_id,sort_position&driver_user_id=eq." + encodeURIComponent(userId) + "&sheet_name=eq." + encodeURIComponent(sheet),
-          { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
+        // لا نعتمد على قراءة الترتيب القديم؛ بعض إعدادات PostgREST/RLS تمنع SELECT
+        // رغم أن الكتابة مسموحة. نستبدل صفوف ترتيب هذا المندوب فقط دفعة واحدة.
+        const scopeFilter = "?driver_user_id=eq." + encodeURIComponent(userId) + "&sheet_name=eq." + encodeURIComponent(sheet);
+        const deleteResponse = await supabaseRequest(
+          "/rest/v1/driver_invoice_order" + scopeFilter,
+          { method: "DELETE", headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY, Prefer: "return=minimal" } }
         );
-        const existing = await existingResponse.json().catch(function () { return []; });
-        if (!existingResponse.ok || !Array.isArray(existing)) {
-          const detail = Array.isArray(existing) ? "استجابة غير متوقعة من جدول ترتيب الفواتير" : (typeof existing === "object" && existing ? (existing.message || existing.details || existing.hint || JSON.stringify(existing)) : String(existing));
-          return json({ error: "تعذر قراءة ترتيب الفواتير الحالي", database_status: existingResponse.status, detail: String(detail).slice(0, 900) }, 500);
+        if (!deleteResponse.ok) {
+          const detail = await deleteResponse.text().catch(function () { return ""; });
+          return json({ error: "تعذر تحديث ترتيب الفواتير", database_status: deleteResponse.status, detail: detail.slice(0, 700) }, 500);
         }
-        const existingIds = new Set(existing.map(function (row) { return String(row.order_id); }));
 
-        for (let index = 0; index < orderIds.length; index++) {
-          const orderId = orderIds[index];
-          const sortPosition = index + 1;
-          const filter = "?driver_user_id=eq." + encodeURIComponent(userId) + "&sheet_name=eq." + encodeURIComponent(sheet) + "&order_id=eq." + encodeURIComponent(orderId);
-          const payload = { driver_user_id: userId, sheet_name: sheet, order_id: orderId, sort_position: sortPosition, updated_at: new Date().toISOString() };
-          const saved = await supabaseRequest(
-            "/rest/v1/driver_invoice_order" + (existingIds.has(String(orderId)) ? filter : ""),
-            { method: existingIds.has(String(orderId)) ? "PATCH" : "POST", headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify(payload) }
-          );
-          if (!saved.ok) {
-            const detail = await saved.text().catch(function () { return ""; });
-            return json({ error: "تعذر حفظ ترتيب الفواتير", detail: detail.slice(0, 500) }, 500);
-          }
+        const sortRows = orderIds.map(function (orderId, index) {
+          return {
+            driver_user_id: userId,
+            sheet_name: sheet,
+            order_id: orderId,
+            sort_position: index + 1,
+            updated_at: new Date().toISOString()
+          };
+        });
+        const saveResponse = await supabaseRequest(
+          "/rest/v1/driver_invoice_order",
+          { method: "POST", headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify(sortRows) }
+        );
+        if (!saveResponse.ok) {
+          const detail = await saveResponse.text().catch(function () { return ""; });
+          return json({ error: "تعذر حفظ ترتيب الفواتير", database_status: saveResponse.status, detail: detail.slice(0, 700) }, 500);
         }
         return json({ success: true, saved: orderIds.length });
       }
