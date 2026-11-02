@@ -7,7 +7,8 @@
     session: null,
     orders: [],
     filter: 'pending',
-    sheet: ''
+    sheet: '',
+    activeRequests: 0
   };
 
   const $ = (id) => document.getElementById(id);
@@ -319,6 +320,7 @@
     const requestController = new AbortController();
     const requestTimeout = setTimeout(() => requestController.abort(), 30000);
     let response;
+    state.activeRequests += 1;
     try {
       response = await fetch(path, {
         ...options,
@@ -332,6 +334,7 @@
       throw error;
     } finally {
       clearTimeout(requestTimeout);
+      state.activeRequests = Math.max(0, state.activeRequests - 1);
     }
 
     if (
@@ -5052,6 +5055,94 @@
     );
   }
 
+
+  // فحص إصدار الموقع كل 60 ثانية، مع تأجيل إعادة التحميل حتى تصبح الجلسة آمنة.
+  const APP_UPDATE_CHECK_MS = 60 * 1000;
+  const APP_UPDATE_BUILD = '2026.11.02.1';
+  const APP_UPDATE_VERSION_URL = '/version.json';
+  const APP_UPDATE_BUILD_KEY = 'farujalzain_app_build';
+  let appUpdateCurrentBuild = APP_UPDATE_BUILD;
+  let appUpdatePendingBuild = '';
+  let appUpdateCheckRunning = false;
+
+  function isAppUpdateSafeNow() {
+    if (document.hidden) return false;
+    if (state.activeRequests > 0) return false;
+
+    // لا نعيد التحميل أثناء فتح تفاصيل فاتورة أو أثناء تعديل حقول.
+    if (document.body.classList.contains('driver-invoice-open')) return false;
+    if (document.querySelector('.is-fullscreen-invoice')) return false;
+
+    const active = document.activeElement;
+    if (active && (
+      active.isContentEditable ||
+      /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)
+    )) return false;
+
+    // لا نقطع اتصال الووكي توكي/الصوت أثناء الكلام أو المكالمة الفعلية.
+    const voice = window.FAVoice;
+    if (voice) {
+      if (voice.talking || voice.starting) return false;
+      if (voice.micStream && voice.micStream.getAudioTracks().some(
+        (track) => track.readyState === 'live' && track.enabled
+      )) return false;
+
+      const remoteAudio = voice.audioEls && Object.values(voice.audioEls);
+      if (remoteAudio && remoteAudio.some((audio) =>
+        audio && !audio.paused && !audio.ended
+      )) return false;
+    }
+
+    return true;
+  }
+
+  async function checkAppUpdate() {
+    if (appUpdateCheckRunning) return;
+    appUpdateCheckRunning = true;
+
+    try {
+      const response = await fetch(
+        `${APP_UPDATE_VERSION_URL}?_=${Date.now()}`,
+        { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } }
+      );
+      if (!response.ok) return;
+
+      const info = await response.json();
+      const latestBuild = String(info?.build || info?.version || '').trim();
+      if (!latestBuild) return;
+
+      if (latestBuild === appUpdateCurrentBuild) return;
+      appUpdatePendingBuild = latestBuild;
+
+      if (!isAppUpdateSafeNow()) return;
+
+      // إعادة تحميل الصفحة تحفظ جلسة الدخول في localStorage وتحمّل الملفات الجديدة.
+      try { localStorage.setItem(APP_UPDATE_BUILD_KEY, latestBuild); } catch (_) {}
+      window.location.reload();
+    } catch (_) {
+      // انقطاع الإنترنت لا يوقف التطبيق؛ يعاد الفحص بعد دقيقة.
+    } finally {
+      appUpdateCheckRunning = false;
+    }
+  }
+
+  function startAppUpdateMonitor() {
+    // الإصدار الموجود في الخادم هو المرجع؛ لا نفرض تحديثًا عند أول تشغيل.
+    checkAppUpdate();
+    window.setInterval(checkAppUpdate, APP_UPDATE_CHECK_MS);
+
+    // إذا انتهت المكالمة أو أُغلقت الفاتورة، طبّق التحديث المنتظر قريبًا.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && appUpdatePendingBuild) checkAppUpdate();
+    });
+    document.addEventListener('pointerup', () => {
+      if (appUpdatePendingBuild) checkAppUpdate();
+    }, { passive: true });
+    document.addEventListener('focusout', () => {
+      if (appUpdatePendingBuild) checkAppUpdate();
+    });
+  }
+
   function loadStoredSession() {
     try {
       const raw =
@@ -5084,6 +5175,7 @@
 
   function boot() {
     setupEvents();
+    startAppUpdateMonitor();
 
     const masterSession =
       loadStoredMasterSession();
