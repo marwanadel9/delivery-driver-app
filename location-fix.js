@@ -3,6 +3,7 @@
    يصلح كل أشكال الروابط، ويظهر الزرار على أي موبايل/أي WebView
    ============================================================ */
 (function () {
+  console.log('FALocFix v3 deployed');
   function fix(u) {
     if (!u) return '';
     u = String(u).trim();
