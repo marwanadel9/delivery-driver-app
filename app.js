@@ -1701,7 +1701,7 @@
         }
       }
 
-      /* ⭐ زرار الموقع — صف مستقل تحت الأزرار مباشرة (مضمون الظهور) — يظهر فقط جوه الفاتورة المفتوحة عبر المراقب */
+      /* ⭐ زرار الموقع — صف مستقل بعرض كامل */
       let locationButton = node.querySelector('[data-f="location_url"]');
       if (locationUrl) {
         if (!locationButton) {
@@ -1715,12 +1715,12 @@
         locationButton.target = '_blank';
         locationButton.rel = 'noopener noreferrer';
         locationButton.removeAttribute('hidden');
-        locationButton.style.cssText = 'display:none;align-items:center;justify-content:center;gap:6px;width:100%;min-height:44px;padding:0 10px;border-radius:13px;font-size:12px;font-weight:800;text-decoration:none;border:1px solid #bfdbfe;color:#1d4ed8;background:#eff6ff;box-sizing:border-box;';
+        locationButton.style.cssText = 'display:flex!important;align-items:center;justify-content:center;gap:6px;width:100%;min-height:44px;padding:0 10px;border-radius:13px;font-size:11px;font-weight:800;text-decoration:none;border:1px solid #bfdbfe;color:#1d4ed8;background:#eff6ff;';
         let locRow = node.querySelector('.fa-loc-row');
         if (!locRow) {
           locRow = document.createElement('div');
           locRow.className = 'fa-loc-row';
-          locRow.style.cssText = 'display:none;width:100%;box-sizing:border-box;margin:8px 0 0;';
+          locRow.style.cssText = 'display:flex;width:100%;box-sizing:border-box;margin:8px 0 0;';
           const actionsEl = node.querySelector('.order-actions');
           if (actionsEl && actionsEl.parentNode) { actionsEl.parentNode.insertBefore(locRow, actionsEl.nextSibling); }
           else { node.appendChild(locRow); }
@@ -1759,7 +1759,7 @@
       if (gatePhotoUrls.length) {
         const gatePhotoBox = document.createElement('div');
         gatePhotoBox.className = 'gate-photo-box';
-        gatePhotoBox.style.cssText = 'display:flex;flex-direction:column;gap:7px;width:100%;box-sizing:border-box;margin:10px 0;';
+        gatePhotoBox.style.cssText = 'display:flex !important;pointer-events:auto !important;flex-direction:column;gap:7px;width:100%;box-sizing:border-box;margin:10px 0;';
         gatePhotoUrls.forEach((gatePhotoUrl, index) => {
           const gatePhotoButton = document.createElement('a');
           gatePhotoButton.className = 'gate-photo-btn';
@@ -1769,7 +1769,7 @@
           gatePhotoButton.textContent = gatePhotoUrls.length > 1
             ? `📷 عرض صورة بوابة الفيلا (${index + 1} من ${gatePhotoUrls.length})`
             : '📷 عرض صورة بوابة الفيلا';
-          gatePhotoButton.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin:0;padding:11px 14px;border-radius:10px;background:#e8f2ff;color:#1455b8;border:1px solid #b9d4ff;text-align:center;font-weight:800;text-decoration:none;';
+          gatePhotoButton.style.cssText = 'display:block !important;pointer-events:auto !important;width:100%;box-sizing:border-box;margin:0;padding:11px 14px;border-radius:10px;background:#e8f2ff;color:#1455b8;border:1px solid #b9d4ff;text-align:center;font-weight:800;text-decoration:none;';
           gatePhotoBox.appendChild(gatePhotoButton);
         });
 
@@ -5159,20 +5159,7 @@
     ov.addEventListener('click', function () { ov.remove(); });
   }, true);
 
-  /* ⭐ تثبيت ظهور زرار الموقع: يظهر فقط جوه الفاتورة المفتوحة — مهما حصل في CSS أو إعادة الرسم */
-  setInterval(function () {
-    const cards = document.querySelectorAll('.order-card');
-    for (let ci = 0; ci < cards.length; ci += 1) {
-      const open = cards[ci].classList.contains('is-fullscreen-invoice');
-      const row = cards[ci].querySelector('.fa-loc-row');
-      const btn = cards[ci].querySelector('.location-btn');
-      if (row) { row.style.setProperty('display', open ? 'flex' : 'none', 'important'); }
-      if (btn && !btn.hasAttribute('hidden')) {
-        btn.style.setProperty('display', open ? 'flex' : 'none', 'important');
-        btn.style.setProperty('visibility', 'visible', 'important');
-      }
-    }
-  }, 400);
+
 
   boot();
 })();
