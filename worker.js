@@ -764,8 +764,10 @@ export default {
           ? body.order_ids.map(function (value) { return String(value == null ? "" : value).trim(); })
           : [];
         // معرف orders.id قد يكون UUID أو رقمًا؛ لا نحوله إلى Number حتى لا يصبح NaN أو يفقد دقته.
+        // نقبل معرفات الفواتير الرقمية وUUID وكذلك الأكواد النصية مثل F001.
+        // نرفض فقط القيم الفارغة والمحارف التي قد تكسر صيغة فلتر PostgREST.
         const validOrderId = function (value) {
-          return /^(?:[1-9]\d*|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.test(value);
+          return typeof value === "string" && value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/.test(value);
         };
         if (!orderIds.length || orderIds.some(function (id) { return !validOrderId(id); }) || new Set(orderIds).size !== orderIds.length) {
           return json({ error: "قائمة أرقام الفواتير غير صحيحة", received_count: orderIds.length, invalid_ids: orderIds.filter(function (id) { return !validOrderId(id); }).slice(0, 5) }, 400);
