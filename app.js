@@ -952,12 +952,12 @@
       .order-card.is-compact [role="button"],
       .order-card.is-compact [onclick] { display:none!important; pointer-events:none!important; }
       .order-card.is-compact { position:relative!important; padding:9px!important; gap:5px!important; cursor:pointer!important; }
-      .order-card.is-compact .driver-sort-controls { position:absolute!important;left:10px!important;top:9px!important;z-index:50!important;display:flex!important;align-items:center!important;justify-content:center!important;direction:ltr!important;pointer-events:auto!important;width:44px!important; }
-      .order-card.is-compact .driver-sort-input { display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;width:42px!important;height:38px!important;min-width:42px!important;box-sizing:border-box!important;padding:2px!important;margin:0!important;border:1px solid #86efac!important;border-radius:9px!important;background:#f0fdf4!important;color:#15803d!important;text-align:center!important;font-family:Arial,sans-serif!important;font-size:18px!important;font-weight:900!important;box-shadow:0 1px 3px rgba(22,101,52,.12)!important; }
-      .order-card.is-compact .driver-sort-display { display:none!important; }
-      .order-card.is-fullscreen-invoice .driver-sort-controls { position:static!important;display:flex!important;width:auto!important;justify-content:flex-start!important;margin:0 0 5px!important; }
-      .order-card.is-fullscreen-invoice .driver-sort-input { display:none!important; }
-      .order-card.is-fullscreen-invoice .driver-sort-display { display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:32px!important;height:30px!important;padding:0 8px!important;border:1px solid #cbd5e1!important;border-radius:8px!important;background:#f1f5f9!important;color:#334155!important;font-size:14px!important;font-weight:900!important; }
+      .driver-order-wrap { display:flex!important;flex-direction:column!important;width:100%!important;box-sizing:border-box!important;gap:0!important; }
+      .driver-sort-row { display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:8px!important;width:100%!important;box-sizing:border-box!important;margin:0 0 6px!important;padding:0 4px!important;direction:rtl!important; }
+      .driver-sort-label { color:#9a3412!important;font-size:13px!important;font-weight:900!important;white-space:nowrap!important; }
+      .driver-sort-input { width:76px!important;height:42px!important;box-sizing:border-box!important;border:2px solid #f97316!important;border-radius:10px!important;background:#fff7ed!important;color:#ea580c!important;text-align:center!important;direction:ltr!important;unicode-bidi:isolate!important;font-family:Arial,sans-serif!important;font-size:22px!important;font-weight:1000!important;outline:none!important; }
+      .driver-sort-input:focus { border-color:#c2410c!important;box-shadow:0 0 0 3px rgba(249,115,22,.18)!important; }
+      .driver-sort-input:disabled,.driver-sort-input[readonly] { opacity:.75!important;background:#ffedd5!important; }
       .order-card.is-compact .order-card-head { margin:0!important; gap:4px!important; }
       .order-card.is-compact .customer-row { margin:0!important; padding:2px 0!important; gap:6px!important; }
       .order-card.is-compact .customer-location-grid { margin-top:3px!important; gap:4px!important; }
@@ -1020,39 +1020,30 @@
     document.head.appendChild(style);
   }
 
-  async function saveDriverOrderPosition(order, input) {
-    if (!order || order.id == null || !input) return;
-    const raw = toEnglishDigits(input.value).trim();
-    const requestedPosition = Number(raw);
-    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(requestedPosition) || requestedPosition < 1 || requestedPosition > state.orders.length) {
-      input.value = order._driver_sort_position ? String(order._driver_sort_position) : '';
-      toast(`اكتب رقمًا من 1 إلى ${state.orders.length}`, true);
-      return;
-    }
-
-    const previousOrders = state.orders.slice();
-    const previousPositions = new Map(previousOrders.map((item) => [String(item.id), item._driver_sort_position]));
+  async function saveDriverOrderByNumber(order, input, requestedPosition) {
+    if (!order || order.id == null || input.disabled) return;
+    const oldOrders = state.orders.slice();
     const currentIndex = state.orders.findIndex((item) => String(item.id) === String(order.id));
     if (currentIndex < 0) return;
-    const movedOrder = state.orders.splice(currentIndex, 1)[0];
-    state.orders.splice(requestedPosition - 1, 0, movedOrder);
+    const position = Math.max(1, Math.min(state.orders.length, Math.trunc(Number(requestedPosition) || 1)));
+    const [moved] = state.orders.splice(currentIndex, 1);
+    state.orders.splice(position - 1, 0, moved);
     state.orders.forEach((item, index) => { item._driver_sort_position = index + 1; });
     render();
+    document.querySelectorAll('.driver-sort-input').forEach((el) => { el.disabled = true; });
     try {
-      await apiFetch('/api/driver/order/reorder', {
+      const result = await apiFetch('/api/driver/order/reorder', {
         method: 'POST',
-        body: JSON.stringify({ order_ids: state.orders.map((item) => String(item.id)) })
+        body: JSON.stringify({ order_ids: state.orders.map((item) => String(item.id ?? '').trim()) })
       });
-      toast('تم حفظ ترتيب الفواتير');
+      if (!result || result.success !== true) throw new Error(result?.error || 'لم يؤكد الخادم حفظ الترتيب');
+      toast('تم حفظ الترتيب الموحد');
     } catch (error) {
-      state.orders = previousOrders;
-      state.orders.forEach((item) => {
-        const oldPosition = previousPositions.get(String(item.id));
-        if (oldPosition == null) delete item._driver_sort_position;
-        else item._driver_sort_position = oldPosition;
-      });
+      state.orders = oldOrders;
       render();
       toast(error.message || 'تعذر حفظ ترتيب الفواتير', true);
+    } finally {
+      document.querySelectorAll('.driver-sort-input').forEach((el) => { el.disabled = false; });
     }
   }
 
@@ -1113,34 +1104,39 @@
           .cloneNode(true);
       node.classList.add('is-compact');
 
-      // رقم الترتيب قابل للتعديل خارج الفاتورة فقط، ويظهر للقراءة عند فتح التفاصيل.
-      const sortControls = document.createElement('div');
-      sortControls.className = 'driver-sort-controls';
-      sortControls.setAttribute('aria-label', 'رقم ترتيب الفاتورة');
+      // خانة رقم الترتيب خارج بطاقة الفاتورة، بالأرقام الإنجليزية واللون البرتقالي.
+      const sortRow = document.createElement('div');
+      sortRow.className = 'driver-sort-row';
+      const sortLabel = document.createElement('label');
+      sortLabel.className = 'driver-sort-label';
+      sortLabel.textContent = 'ترتيب الفاتورة';
       const sortInput = document.createElement('input');
+      sortInput.className = 'driver-sort-input';
       sortInput.type = 'number';
       sortInput.min = '1';
-      sortInput.max = '9999';
+      sortInput.max = String(state.orders.length || 1);
       sortInput.step = '1';
       sortInput.inputMode = 'numeric';
-      sortInput.className = 'driver-sort-input';
-      sortInput.title = 'اكتب رقم ترتيب الفاتورة';
-      sortInput.setAttribute('aria-label', 'رقم ترتيب الفاتورة');
-      sortInput.placeholder = '#';
-      sortInput.value = Number.isFinite(Number(order._driver_sort_position)) && Number(order._driver_sort_position) > 0
-        ? String(order._driver_sort_position)
-        : '';
-      sortInput.addEventListener('click', (event) => { event.stopPropagation(); });
+      sortInput.lang = 'en';
+      sortInput.dir = 'ltr';
+      sortInput.value = String(Math.max(1, Number(order._driver_sort_position) || state.orders.findIndex((item) => String(item.id) === String(order.id)) + 1));
+      sortInput.setAttribute('aria-label', 'رقم ترتيب الفاتورة بالأرقام الإنجليزية');
+      sortLabel.htmlFor = `driver-sort-${String(order.id).replace(/[^A-Za-z0-9_-]/g, '')}`;
+      sortInput.id = sortLabel.htmlFor;
+      sortInput.addEventListener('click', (event) => event.stopPropagation());
       sortInput.addEventListener('keydown', (event) => {
-        event.stopPropagation();
         if (event.key === 'Enter') { event.preventDefault(); sortInput.blur(); }
+        event.stopPropagation();
       });
-      sortInput.addEventListener('change', () => saveDriverOrderPosition(order, sortInput));
-      const sortDisplay = document.createElement('span');
-      sortDisplay.className = 'driver-sort-display';
-      sortDisplay.textContent = sortInput.value || '—';
-      sortControls.append(sortInput, sortDisplay);
-      node.insertBefore(sortControls, node.firstChild);
+      sortInput.addEventListener('change', () => {
+        const nextPosition = Number(sortInput.value);
+        if (!Number.isInteger(nextPosition) || nextPosition < 1) {
+          sortInput.value = String(state.orders.findIndex((item) => String(item.id) === String(order.id)) + 1);
+          return;
+        }
+        saveDriverOrderByNumber(order, sortInput, nextPosition);
+      });
+      sortRow.append(sortLabel, sortInput);
 
       // زر فتح التفاصيل يبقى ظاهرًا في البطاقة المختصرة.
       const expandButton = document.createElement('button');
@@ -1155,6 +1151,7 @@
       const closeInvoiceFullscreen = () => {
         node.classList.remove('is-fullscreen-invoice');
         node.classList.add('is-compact');
+        sortInput.disabled = false;
         document.body.classList.remove('driver-invoice-open');
         document.documentElement.classList.remove('driver-invoice-open');
         document.body.style.overflow = previousBodyOverflow;
@@ -1179,6 +1176,7 @@
         document.documentElement.style.overflow = 'hidden';
         node.classList.remove('is-compact');
         node.classList.add('is-fullscreen-invoice');
+        sortInput.disabled = true;
         fullscreenHead = document.createElement('div');
         fullscreenHead.className = 'invoice-fullscreen-head';
         const heading = document.createElement('strong');
@@ -1872,13 +1870,16 @@
       node.addEventListener('click', (event) => {
         if (node.classList.contains('is-fullscreen-invoice')) return;
         // لا تفتح الفاتورة عند الضغط على أسهم الترتيب.
-        if (event.target && event.target.closest && event.target.closest('.driver-sort-controls')) return;
+        if (event.target && event.target.closest && event.target.closest('.driver-sort-row')) return;
         event.preventDefault();
         event.stopPropagation();
         toggleInvoiceDetails();
       }, true);
 
-      list.appendChild(node);
+      const orderWrap = document.createElement('div');
+      orderWrap.className = 'driver-order-wrap';
+      orderWrap.append(sortRow, node);
+      list.appendChild(orderWrap);
     }
 
     updateStats();
