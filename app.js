@@ -456,10 +456,12 @@
             : [];
 
       state.orders = orders.sort((a, b) => {
-        const ap = Number(a?.driver_sort_order);
-        const bp = Number(b?.driver_sort_order);
-        const hasSavedPositions = Number.isFinite(ap) && Number.isFinite(bp);
-        if (hasSavedPositions && ap !== bp) return ap - bp;
+        const ap = Number(a?._driver_sort_position);
+        const bp = Number(b?._driver_sort_position);
+        const aHasPosition = Number.isFinite(ap) && ap > 0;
+        const bHasPosition = Number.isFinite(bp) && bp > 0;
+        if (aHasPosition && bHasPosition && ap !== bp) return ap - bp;
+        if (aHasPosition !== bHasPosition) return aHasPosition ? -1 : 1;
         const getInvoiceNumber = (order) => {
           const value =
             order?.order_number ??
@@ -949,12 +951,11 @@
       .order-card.is-compact label,
       .order-card.is-compact [role="button"],
       .order-card.is-compact [onclick] { display:none!important; pointer-events:none!important; }
-      .order-card.is-compact .driver-order-move-controls { display:flex!important; pointer-events:auto!important; }
-      .order-card.is-compact .driver-order-move { display:flex!important; pointer-events:auto!important; }
-      .order-card.is-compact { padding:9px!important; gap:5px!important; cursor:pointer!important; }
-      .driver-order-move-controls { position:absolute!important;left:10px!important;top:8px!important;z-index:50!important;display:flex!important;flex-direction:column!important;gap:5px!important;direction:ltr!important; }
-      .driver-order-move { width:40px!important;height:38px!important;min-width:40px!important;min-height:38px!important;padding:0!important;border:1px solid #a7f3d0!important;border-radius:10px!important;background:#ecfdf5!important;color:#15803d!important;font-size:23px!important;font-weight:900!important;line-height:1!important;display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;box-shadow:0 1px 3px rgba(0,0,0,.10)!important; }
-      .driver-order-move:disabled { opacity:.35!important;cursor:not-allowed!important; }
+      .order-card.is-compact { position:relative!important; padding:9px!important; gap:5px!important; cursor:pointer!important; }
+      .order-card.is-compact .driver-sort-controls { position:absolute!important;left:10px!important;top:9px!important;z-index:50!important;display:flex!important;flex-direction:column!important;gap:4px!important;direction:ltr!important;pointer-events:auto!important; }
+      .order-card.is-compact .driver-sort-btn { display:flex!important;align-items:center!important;justify-content:center!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;width:38px!important;height:36px!important;min-width:38px!important;min-height:36px!important;padding:0!important;margin:0!important;border:1px solid #86efac!important;border-radius:9px!important;background:#f0fdf4!important;color:#15803d!important;font-family:Arial,sans-serif!important;font-size:25px!important;font-weight:900!important;line-height:1!important;cursor:pointer!important;box-shadow:0 1px 3px rgba(22,101,52,.12)!important; }
+      .order-card.is-compact .driver-sort-btn:disabled { opacity:.4!important;cursor:not-allowed!important; }
+      .order-card.is-fullscreen-invoice .driver-sort-controls { display:none!important; }
       .order-card.is-compact .order-card-head { margin:0!important; gap:4px!important; }
       .order-card.is-compact .customer-row { margin:0!important; padding:2px 0!important; gap:6px!important; }
       .order-card.is-compact .customer-location-grid { margin-top:3px!important; gap:4px!important; }
@@ -994,7 +995,6 @@
       .invoice-fullscreen-close { border:0;border-radius:10px;background:#dcfce7;color:#166534;min-width:42px;min-height:40px;padding:8px 12px;font:inherit;font-size:14px;font-weight:900;cursor:pointer; }
       .order-card.is-fullscreen-invoice .btn-deliver { position:sticky!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;z-index:15!important;min-height:52px!important;box-shadow:0 -5px 18px rgba(255,255,255,.95)!important; }
       .order-card.is-fullscreen-invoice .invoice-expand-toggle { display:none!important; }
-      .order-card.is-fullscreen-invoice .driver-order-move-controls { display:none!important; pointer-events:none!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; direction:rtl!important; gap:8px!important; width:100%!important; min-width:0!important; align-items:start!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables.single-table { grid-template-columns:minmax(0,1fr)!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables > .products-section { display:block!important; width:100%!important; min-width:0!important; padding:7px!important; border:1px solid #cfe0f5!important; border-radius:10px!important; background:#fff!important; box-sizing:border-box!important; overflow:hidden!important; }
@@ -1020,36 +1020,28 @@
 
   async function moveDriverOrder(order, direction, upButton, downButton) {
     if (!order || order.id == null) return;
-    const visible = getFilteredOrders();
-    const index = visible.findIndex((item) => String(item.id) === String(order.id));
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (index < 0 || targetIndex < 0 || targetIndex >= visible.length) return;
-    if (upButton) upButton.disabled = true;
-    if (downButton) downButton.disabled = true;
+    const currentIndex = state.orders.findIndex((item) => String(item.id) === String(order.id));
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= state.orders.length) return;
+
+    const moved = state.orders[currentIndex];
+    state.orders[currentIndex] = state.orders[targetIndex];
+    state.orders[targetIndex] = moved;
+    render();
+
+    const buttons = document.querySelectorAll('.driver-sort-btn');
+    buttons.forEach((button) => { button.disabled = true; });
     try {
-      const result = await apiFetch('/api/orders/reorder', {
+      await apiFetch('/api/driver/order/reorder', {
         method: 'POST',
-        body: JSON.stringify({ orderId: order.id, direction })
+        body: JSON.stringify({ order_ids: state.orders.map((item) => Number(item.id)) })
       });
-      const positions = result.positions || [];
-      const positionMap = new Map(positions.map((row) => [String(row.order_id), Number(row.position)]));
-      state.orders.forEach((item) => {
-        if (positionMap.has(String(item.id))) item.driver_sort_order = positionMap.get(String(item.id));
-      });
-      state.orders.sort((a, b) => {
-        const ap = Number.isFinite(Number(a.driver_sort_order)) ? Number(a.driver_sort_order) : Number.MAX_SAFE_INTEGER;
-        const bp = Number.isFinite(Number(b.driver_sort_order)) ? Number(b.driver_sort_order) : Number.MAX_SAFE_INTEGER;
-        if (ap !== bp) return ap - bp;
-        const an = Number(String(a.order_number || a.invoice_number || '').match(/\d+/)?.[0] || Number.MAX_SAFE_INTEGER);
-        const bn = Number(String(b.order_number || b.invoice_number || '').match(/\d+/)?.[0] || Number.MAX_SAFE_INTEGER);
-        return an - bn;
-      });
-      render();
-      toast(direction === 'up' ? 'تم تحريك الفاتورة لأعلى وحفظ الترتيب ✅' : 'تم تحريك الفاتورة لأسفل وحفظ الترتيب ✅');
     } catch (error) {
-      if (upButton) upButton.disabled = false;
-      if (downButton) downButton.disabled = false;
-      toast(error.message || 'تعذر تغيير ترتيب الفاتورة', true);
+      // ارجاع القائمة لو لم يتم حفظ الترتيب في الخادم.
+      state.orders[currentIndex] = state.orders[targetIndex];
+      state.orders[targetIndex] = moved;
+      render();
+      toast(error.message || 'تعذر حفظ ترتيب الفواتير', true);
     }
   }
 
@@ -1109,24 +1101,37 @@
           .firstElementChild
           .cloneNode(true);
       node.classList.add('is-compact');
-      // أزرار ترتيب الفاتورة على يسار البطاقة الخارجية.
-      node.style.position = 'relative';
-      const moveControls = document.createElement('div');
-      moveControls.className = 'driver-order-move-controls';
-      const moveUp = document.createElement('button');
-      moveUp.type = 'button';
-      moveUp.className = 'driver-order-move driver-order-move-up';
-      moveUp.textContent = '↑';
-      moveUp.title = 'تحريك الفاتورة لأعلى';
-      moveUp.setAttribute('aria-label', 'تحريك الفاتورة لأعلى');
-      const moveDown = document.createElement('button');
-      moveDown.type = 'button';
-      moveDown.className = 'driver-order-move driver-order-move-down';
-      moveDown.textContent = '↓';
-      moveDown.title = 'تحريك الفاتورة لأسفل';
-      moveDown.setAttribute('aria-label', 'تحريك الفاتورة لأسفل');
-      moveControls.append(moveUp, moveDown);
-      node.appendChild(moveControls);
+
+      // أزرار ترتيب الفاتورة تظهر خارج التفاصيل على يسار البطاقة.
+      const sortControls = document.createElement('div');
+      sortControls.className = 'driver-sort-controls';
+      sortControls.setAttribute('aria-label', 'ترتيب الفاتورة');
+      const upButton = document.createElement('button');
+      upButton.type = 'button';
+      upButton.className = 'driver-sort-btn driver-sort-up';
+      upButton.textContent = '↑';
+      upButton.title = 'تحريك الفاتورة لأعلى';
+      upButton.setAttribute('aria-label', 'تحريك الفاتورة لأعلى');
+      const downButton = document.createElement('button');
+      downButton.type = 'button';
+      downButton.className = 'driver-sort-btn driver-sort-down';
+      downButton.textContent = '↓';
+      downButton.title = 'تحريك الفاتورة لأسفل';
+      downButton.setAttribute('aria-label', 'تحريك الفاتورة لأسفل');
+      upButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        moveDriverOrder(order, -1, upButton, downButton);
+      });
+      downButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        moveDriverOrder(order, 1, upButton, downButton);
+      });
+      sortControls.append(upButton, downButton);
+      node.insertBefore(sortControls, node.firstChild);
 
       // زر فتح التفاصيل يبقى ظاهرًا في البطاقة المختصرة.
       const expandButton = document.createElement('button');
@@ -1853,22 +1858,12 @@
         }
       }
 
-      // أزرار الترتيب لها أولوية على حدث فتح البطاقة.
-      moveUp.addEventListener('click', (event) => {
-        event.preventDefault(); event.stopPropagation();
-        event.stopImmediatePropagation();
-        moveDriverOrder(order, 'up', moveUp, moveDown);
-      });
-      moveDown.addEventListener('click', (event) => {
-        event.preventDefault(); event.stopPropagation();
-        event.stopImmediatePropagation();
-        moveDriverOrder(order, 'down', moveUp, moveDown);
-      });
-
-      // الضغط على السهم لا يفتح الفاتورة؛ أي مكان آخر في البطاقة يفتحها.
+      // البطاقة الخارجية كلها تفتح الفاتورة فقط؛ لا تعمل أي عناصر بداخلها قبل الفتح.
+      // عند فتح الفاتورة بالكامل، تبقى كل الأزرار الداخلية بوظائفها الأصلية.
       node.addEventListener('click', (event) => {
-        if (event.target && event.target.closest && event.target.closest('.driver-order-move-controls')) return;
         if (node.classList.contains('is-fullscreen-invoice')) return;
+        // لا تفتح الفاتورة عند الضغط على أسهم الترتيب.
+        if (event.target && event.target.closest && event.target.closest('.driver-sort-controls')) return;
         event.preventDefault();
         event.stopPropagation();
         toggleInvoiceDetails();
