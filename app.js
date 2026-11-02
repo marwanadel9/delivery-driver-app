@@ -1701,6 +1701,7 @@
         }
       }
 
+      /* ⭐ زرار الموقع — صف مستقل تحت الأزرار مباشرة (مضمون الظهور) — يظهر فقط جوه الفاتورة المفتوحة عبر المراقب */
       let locationButton = node.querySelector('[data-f="location_url"]');
       if (locationUrl) {
         if (!locationButton) {
@@ -1714,11 +1715,17 @@
         locationButton.target = '_blank';
         locationButton.rel = 'noopener noreferrer';
         locationButton.removeAttribute('hidden');
-        locationButton.style.removeProperty('display');
-        const actionsEl = node.querySelector('.order-actions');
-        if (actionsEl && locationButton.parentNode !== actionsEl) {
-          actionsEl.insertBefore(locationButton, actionsEl.firstChild);
+        locationButton.style.cssText = 'display:none;align-items:center;justify-content:center;gap:6px;width:100%;min-height:44px;padding:0 10px;border-radius:13px;font-size:12px;font-weight:800;text-decoration:none;border:1px solid #bfdbfe;color:#1d4ed8;background:#eff6ff;box-sizing:border-box;';
+        let locRow = node.querySelector('.fa-loc-row');
+        if (!locRow) {
+          locRow = document.createElement('div');
+          locRow.className = 'fa-loc-row';
+          locRow.style.cssText = 'display:none;width:100%;box-sizing:border-box;margin:8px 0 0;';
+          const actionsEl = node.querySelector('.order-actions');
+          if (actionsEl && actionsEl.parentNode) { actionsEl.parentNode.insertBefore(locRow, actionsEl.nextSibling); }
+          else { node.appendChild(locRow); }
         }
+        if (locationButton.parentNode !== locRow) { locRow.appendChild(locationButton); }
       } else if (locationButton) {
         locationButton.setAttribute('hidden', '');
         locationButton.removeAttribute('data-location-url');
@@ -5156,13 +5163,13 @@
   setInterval(function () {
     const cards = document.querySelectorAll('.order-card');
     for (let ci = 0; ci < cards.length; ci += 1) {
+      const open = cards[ci].classList.contains('is-fullscreen-invoice');
+      const row = cards[ci].querySelector('.fa-loc-row');
       const btn = cards[ci].querySelector('.location-btn');
-      if (!btn) { continue; }
-      if (cards[ci].classList.contains('is-fullscreen-invoice')) {
-        btn.style.setProperty('display', 'flex', 'important');
+      if (row) { row.style.setProperty('display', open ? 'flex' : 'none', 'important'); }
+      if (btn && !btn.hasAttribute('hidden')) {
+        btn.style.setProperty('display', open ? 'flex' : 'none', 'important');
         btn.style.setProperty('visibility', 'visible', 'important');
-      } else {
-        btn.style.setProperty('display', 'none', 'important');
       }
     }
   }, 400);
