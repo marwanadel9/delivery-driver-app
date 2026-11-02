@@ -2542,9 +2542,24 @@ export default {
         typeof env.ASSETS.fetch ===
           "function"
       ) {
-        return env.ASSETS.fetch(
-          request
-        );
+        /* ⭐ منع كاش ملفات الموقع (HTML/JS/CSS): كل موبايل يجيب الكود الجديد دايمًا —
+           بيمنع مشكلة «موبايل شغال بنسخة قديمة وموبايل لا» نهائيًا */
+        const assetResponse = await env.ASSETS.fetch(request);
+        if (assetResponse && assetResponse.status === 200) {
+          const contentType = String(assetResponse.headers.get("Content-Type") || "").toLowerCase();
+          if (contentType.indexOf("text/html") >= 0 || contentType.indexOf("javascript") >= 0 || contentType.indexOf("css") >= 0) {
+            const headers = new Headers(assetResponse.headers);
+            headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+            headers.set("Pragma", "no-cache");
+            headers.delete("ETag");
+            return new Response(assetResponse.body, {
+              status: assetResponse.status,
+              statusText: assetResponse.statusText,
+              headers: headers
+            });
+          }
+        }
+        return assetResponse;
       }
 
       return new Response(
