@@ -1557,6 +1557,22 @@
         }
       }
 
+      /* ⭐ إظهار الملاحظات خارج الفاتورة وداخلها: عنصر مستقل لا يخفيه CSS المختصر */
+      const faNoteItem = node.querySelector('.note-item');
+      if (faNoteItem) {
+        faNoteItem.style.setProperty('pointer-events', 'auto', 'important');
+        if (faNoteItem.parentNode !== node) {
+          const faTotalEl = node.querySelector('.order-total');
+          if (faTotalEl && faTotalEl.parentNode) { faTotalEl.parentNode.insertBefore(faNoteItem, faTotalEl); }
+          else { node.appendChild(faNoteItem); }
+        }
+        if (faNoteItem.textContent.trim() === '\u2014' || faNoteItem.textContent.trim() === '') {
+          faNoteItem.style.setProperty('display', 'none', 'important');
+        } else {
+          faNoteItem.style.setProperty('display', 'block', 'important');
+        }
+      }
+
       const deliveryFee = deliveryFeeFromOrder(order);
       const orderTotalRaw = Number(firstValue(order, ['total', 'grand_total', 'grandTotal', 'amount'])) || 0;
       const productsTotal = Math.max(0, orderTotalRaw - deliveryFee);
