@@ -823,10 +823,16 @@ export default {
         const sheet =
           auth.driver.sheet_name;
 
+        /* ⭐ المندوب يشوف فواتير اليوم فقط: الأرشيف اليومي يمنع تراكم
+           الفواتير المسلّمة القديمة في تبويب «تم التسليم» بعد كل مزامنة */
+        const todayStart =
+          new Date().toISOString().slice(0, 10) + "T00:00:00";
         const ordersPath =
           "/rest/v1/orders?sheet_name=eq." +
           encodeURIComponent(sheet) +
-          "&select=*";
+          "&select=*" +
+          "&created_at=gte." +
+          encodeURIComponent(todayStart);
 
         const ordersResponse =
           await supabaseRequest(
@@ -2679,10 +2685,12 @@ export default {
         if (!id || !patch) return json({ error: "بيانات غير صحيحة" }, 400);
         if (patch.status === "done" && !patch.done_at) patch.done_at = new Date().toISOString();
         patch.updated_at = new Date().toISOString();
-        const r = await supabaseRequest("/rest/v1/scheduled_collections?id=eq." + encodeURIComponent(id), {
-          method: "PATCH",
-          headers: { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify(patch)
+        /* Upsert: يسمح للماستر بإضافة موعد جديد أو تعديل موجود بالمسار نفسه */
+        const row = Object.assign({}, patch, { id: id });
+        const r = await supabaseRequest("/rest/v1/scheduled_collections?on_conflict=id", {
+          method: "POST",
+          headers: { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify(row)
         });
         if (!r.ok) { const e = await r.json().catch(function () { return null; }); return json({ error: (e && (e.message || e.hint || e.error)) || "تعذر تحديث الموعد" }, 502); }
         return json({ success: true, id: id });
