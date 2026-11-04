@@ -1177,6 +1177,17 @@
         node.classList.remove('is-compact');
         node.classList.add('is-fullscreen-invoice');
         sortInput.disabled = true;
+        /* ⭐ زرار رجوع الهاتف: ندفع حالة في التاريخ — الرجوع يقفل الفاتورة
+           ويرجع المندوب لنفس النقطة اللي كان واقف عليها في القايمة */
+        try { history.pushState({ faInv: 1 }, '', location.href); } catch (e) {}
+        if (!window.__faBackBound) {
+          window.__faBackBound = true;
+          window.addEventListener('popstate', function () {
+            if (!document.body.classList.contains('driver-invoice-open')) return;
+            const closeBtn = document.querySelector('.invoice-fullscreen-close');
+            if (closeBtn) { try { closeBtn.click(); } catch (e) {} }
+          });
+        }
         fullscreenHead = document.createElement('div');
         fullscreenHead.className = 'invoice-fullscreen-head';
         const heading = document.createElement('strong');
@@ -1529,7 +1540,7 @@
         cleanOrderNote(legacyDetails)
       );
 
-      /* ⭐ منسق الموعد يظهر للمندوب جوه الفاتورة — يتخبى بس لو فاضي */
+      /* ⭐ منسق الموعد يظهر للمندوب جوه الفاتورة — شارة كبيرة واضحة فوق الكارت + يتخبى بس لو فاضي */
       const coordinatorValue = firstValue(order, ['appointment_coordinator', 'coordinator', 'coordinator_name']);
       setText(node, 'appointment_coordinator', coordinatorValue);
       const coordinatorField = node.querySelector('[data-f="appointment_coordinator"]');
@@ -1537,6 +1548,19 @@
         const coordinatorRow = coordinatorField.closest('.info-item, .order-section, .detail-row, .field-row, .master-detail');
         if (coordinatorRow) coordinatorRow.style.display = 'none';
         else coordinatorField.style.display = 'none';
+      }
+      {
+        const coordinatorBadge = node.querySelector('.fa-coordinator-badge');
+        if (coordinatorBadge) coordinatorBadge.remove();
+        if (String(coordinatorValue || '').trim()) {
+          const badge = document.createElement('div');
+          badge.className = 'fa-coordinator-badge';
+          badge.style.cssText = 'display:flex!important;align-items:center;justify-content:center;gap:8px;width:100%;box-sizing:border-box;margin:2px 0 4px;padding:10px 12px;border-radius:12px;background:linear-gradient(135deg,#fef3c7,#fde68a);border:2.5px solid #d4a72c;color:#7c2d12;font-size:19px;font-weight:1000;line-height:1.4;text-align:center;box-shadow:0 3px 10px rgba(212,167,44,.35);';
+          badge.textContent = '📋 منسق الموعد: ' + String(coordinatorValue).trim();
+          const cardHead = node.querySelector('.order-card-head');
+          if (cardHead && cardHead.parentNode === node) node.insertBefore(badge, cardHead.nextSibling);
+          else node.insertBefore(badge, node.firstChild);
+        }
       }
 
       setText(
