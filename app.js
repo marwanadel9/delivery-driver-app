@@ -952,6 +952,7 @@
       .order-card.is-compact [role="button"],
       .order-card.is-compact [onclick] { display:none!important; pointer-events:none!important; }
       .order-card.is-compact { position:relative!important; padding:9px!important; gap:5px!important; cursor:pointer!important; }
+      .order-card.is-compact .fa-coordinator-badge{display:none!important}
       .driver-order-wrap { display:flex!important;flex-direction:column!important;width:100%!important;box-sizing:border-box!important;gap:0!important; }
       .driver-sort-row { display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:8px!important;width:100%!important;box-sizing:border-box!important;margin:0 0 6px!important;padding:0 4px!important;direction:rtl!important; }
       .driver-sort-label { color:#9a3412!important;font-size:13px!important;font-weight:900!important;white-space:nowrap!important; }
@@ -1557,9 +1558,16 @@
           badge.className = 'fa-coordinator-badge';
           badge.style.cssText = 'display:flex!important;align-items:center;justify-content:center;gap:8px;width:100%;box-sizing:border-box;margin:2px 0 4px;padding:10px 12px;border-radius:12px;background:linear-gradient(135deg,#fef3c7,#fde68a);border:2.5px solid #d4a72c;color:#7c2d12;font-size:19px;font-weight:1000;line-height:1.4;text-align:center;box-shadow:0 3px 10px rgba(212,167,44,.35);';
           badge.textContent = '📋 منسق الموعد: ' + String(coordinatorValue).trim();
-          const cardHead = node.querySelector('.order-card-head');
-          if (cardHead && cardHead.parentNode === node) node.insertBefore(badge, cardHead.nextSibling);
-          else node.insertBefore(badge, node.firstChild);
+          /* ⭐ الشيرة الكبيرة مكانها في سطر التفاصيل (مكان السهم) — مش فوق الكارت */
+          const coordRow = coordinatorField ? coordinatorField.closest('.info-item, .order-section, .detail-row, .field-row, .master-detail') : null;
+          if (coordRow && coordRow.parentNode) {
+            coordRow.style.display = 'none';
+            coordRow.parentNode.insertBefore(badge, coordRow.nextSibling);
+          } else {
+            const cardHead = node.querySelector('.order-card-head');
+            if (cardHead && cardHead.parentNode === node) node.insertBefore(badge, cardHead.nextSibling);
+            else node.insertBefore(badge, node.firstChild);
+          }
         }
       }
 
