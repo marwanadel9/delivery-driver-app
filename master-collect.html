@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f2e21">
+<title>فروج الزين — تحصيل مجدول (ماستر)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+body{background:linear-gradient(160deg,#f6f2e8,#efe9d8);min-height:100vh;color:#33301f}
+.wrap{max-width:900px;margin:0 auto;padding:16px}
+.card{background:#fffdf6;border:1.5px solid #e9e1cc;border-radius:16px;padding:18px;box-shadow:0 4px 14px rgba(70,58,20,.08);margin-bottom:14px}
+h1{font-size:20px;color:#16412f}
+.sub{font-size:12px;color:#968e6e;margin-top:4px}
+/* دخول الماستر */
+.lockbox{max-width:380px;margin:14vh auto 0;background:#fffdf6;border:2px solid #d4a72c;border-radius:18px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,.15);text-align:center}
+.lockbox .lg{width:70px;height:70px;border-radius:50%;background:linear-gradient(145deg,#2e8b62,#0f2e21);border:3px solid #d4a72c;display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 12px}
+.lockbox h2{color:#16412f;font-size:20px;margin-bottom:4px}
+.lockbox p{color:#968e6e;font-size:12.5px;margin-bottom:18px}
+input,select{background:#fff;border:1.5px solid #d9cfb2;color:#33301f;border-radius:10px;padding:11px 13px;font-size:14px;width:100%;outline:none;margin-bottom:10px}
+input:focus{border-color:#2e8b62;box-shadow:0 0 0 3px rgba(46,139,98,.12)}
+.btn{background:linear-gradient(145deg,#2e8b62,#1f5c40);color:#fff;border:0;border-radius:11px;padding:11px 18px;font-size:14px;font-weight:800;cursor:pointer}
+.btn.gray{background:#fff;color:#33301f;border:1.5px solid #d9cfb2}
+.btn.sm{padding:6px 12px;font-size:12px}
+.btn.full{width:100%}
+.err{color:#c53030;font-size:12.5px;min-height:18px;margin-top:8px}
+/* شريط الأدوات */
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.bar select{width:auto;padding:8px 10px;margin:0}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.pill{display:inline-block;padding:5px 13px;border-radius:20px;font-size:12.5px;font-weight:800}
+.pill.a{background:#fdf6e0;color:#a0720a;border:1px solid #f0dcae}
+.pill.b{background:#e8f1fd;color:#1d6fd1;border:1px solid #bfd8f5}
+.pill.g{background:#e5f7ee;color:#12805c;border:1px solid #b5e4cd}
+.pill.r{background:#fdecec;color:#c53030;border:1px solid #f5c1c1}
+/* الجدول */
+.tbl{overflow-x:auto;border:1px solid #d9cfb2;border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th{background:#f0ead6;color:#6b6557;font-weight:700;text-align:right;padding:9px 10px;border-bottom:2px solid #e9e1cc;font-size:12px;white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid #efe9d8;text-align:right;vertical-align:middle}
+.empty{text-align:center;color:#968e6e;padding:26px}
+.hdr{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.note{font-size:11.5px;color:#968e6e;margin-top:10px;line-height:1.8}
+.toast{position:fixed;bottom:18px;right:50%;transform:translateX(50%);background:#16412f;color:#fff;padding:11px 22px;border-radius:12px;font-size:13px;z-index:99;display:none;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+@media(max-width:600px){.wrap{padding:10px}td,th{padding:6px 7px;font-size:12px}}
+</style>
+<base target="_blank">
+</head>
+<body>
+
+<!-- 🔐 دخول الماستر -->
+<div class="lockbox" id="lockBox">
+  <div class="lg">🐔</div>
+  <h2>فروج الزين — الماستر</h2>
+  <p>قسم تحصيل مجدول — مسموح لحساب الماستر فقط</p>
+  <input id="mUser" placeholder="اسم المستخدم (zezo)" style="text-align:center" autocomplete="username">
+  <input id="mPass" type="password" placeholder="كلمة المرور" style="text-align:center" autocomplete="current-password">
+  <button class="btn full" onclick="mLogin()">🔓 دخول</button>
+  <div class="err" id="mErr"></div>
+</div>
+
+<!-- 📅 القسم -->
+<div class="wrap" id="collectApp" style="display:none">
+  <div class="card">
+    <div class="hdr">
+      <div>
+        <h1>📅 تحصيل مجدول</h1>
+        <div class="sub">مزامن لحظيًا مع برنامج الكمبيوتر — آخر تحديث: <span id="mLastUpd">—</span></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn sm gray" onclick="mLogout()">🚪 خروج</button>
+        <button class="btn sm" onclick="mLoadCollect()">🔄 تحديث</button>
+      </div>
+    </div>
+    <div class="bar">
+      <select id="mstClFilter" onchange="mLoadCollect()">
+        <option value="week">📆 هذا الأسبوع</option>
+        <option value="today">📅 اليوم فقط</option>
+        <option value="pend">⏳ المتبقي فقط</option>
+        <option value="all">🗂️ كل المواعيد</option>
+      </select>
+      <span id="mstClStats" class="pill b"></span>
+    </div>
+    <div class="stats" id="mKpis"></div>
+    <div class="tbl">
+      <table>
+        <thead><tr>
+          <th>يوم التحصيل</th><th>العميل</th><th>الهاتف</th><th>الإمارة</th><th>المبلغ</th><th>الطريقة</th><th>ملاحظة</th><th>الحالة</th><th></th>
+        </tr></thead>
+        <tbody id="mstClBody"></tbody>
+      </table>
+    </div>
+    <div class="note">✅ «تحصيل» = تم التحصيل من العميل — بينزل لبرنامج الكمبيوتر تلقائيًا مع أول مزامنة وبتتقفل فاتورته لو مربوطة.<br>➕ «بكرة» = تأجيل الموعد ليوم الغد.</div>
+  </div>
+</div>
+
+<div class="toast" id="mToast"></div>
+
+<script>
+/* ================= أدوات ================= */
+var M_TOKEN = '';
+function mToast(t){var e=document.getElementById('mToast');e.textContent=t;e.style.display='block';clearTimeout(e._h);e._h=setTimeout(function(){e.style.display='none'},2800);}
+function mFdate(s){if(!s)return'—';var d=new Date(s);return isNaN(d)?String(s):d.toLocaleDateString('ar-AE');}
+function mSaveSession(d){try{localStorage.setItem('master_session',JSON.stringify({access_token:d.access_token,username:d.username}));}catch(e){}}
+
+/* ================= الدخول ================= */
+async function mLogin(){
+  var u=document.getElementById('mUser').value.trim(), p=document.getElementById('mPass').value;
+  document.getElementById('mErr').textContent='';
+  if(!u||!p){document.getElementById('mErr').textContent='أدخل الاسم وكلمة المرور';return;}
+  try{
+    var r=await fetch('/api/master-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    var d=await r.json().catch(function(){return {};});
+    if(!r.ok){document.getElementById('mErr').textContent=d.error||'فشل الدخول';return;}
+    M_TOKEN=d.access_token; mSaveSession(d);
+    mShow();
+  }catch(e){document.getElementById('mErr').textContent='⚠️ '+e.message;}
+}
+function mLogout(){try{localStorage.removeItem('master_session');}catch(e){}M_TOKEN='';location.reload();}
+function mShow(){
+  document.getElementById('lockBox').style.display='none';
+  document.getElementById('collectApp').style.display='block';
+  mLoadCollect();
+}
+/* دخول تلقائي لو مسجل قبل كده */
+(function(){
+  try{
+    var s=JSON.parse(localStorage.getItem('master_session')||'null');
+    if(s&&s.access_token){M_TOKEN=s.access_token;mShow();}
+  }catch(e){}
+})();
+document.getElementById('mPass').addEventListener('keydown',function(e){if(e.key==='Enter')mLogin();});
+
+/* ================= البيانات ================= */
+async function mLoadCollect(){
+  var tb=document.getElementById('mstClBody');
+  if(!M_TOKEN){tb.innerHTML='<tr><td colspan="9" class="empty">⚠️ لازم تسجل دخول الماستر الأول</td></tr>';return;}
+  tb.innerHTML='<tr><td colspan="9" class="empty">⏳ جاري التحميل…</td></tr>';
+  try{
+    var r=await fetch('/api/master/collect',{headers:{'Authorization':'Bearer '+M_TOKEN}});
+    var d=await r.json().catch(function(){return {};});
+    if(r.status===401){mLogout();return;}
+    if(!r.ok){tb.innerHTML='<tr><td colspan="9" class="empty" style="color:#c53030">⚠️ '+(d.error||'تعذر التحميل — تأكد من رفع worker (20) وتشغيل SQL')+'</td></tr>';return;}
+    var rows=(d.collects||[]).slice().sort(function(a,b){return String(a.date).localeCompare(String(b.date));});
+    var mode=document.getElementById('mstClFilter').value;
+    var tdy=new Date().toLocaleDateString('en-CA');
+    var dow=new Date().getDay();
+    var mon=new Date(); mon.setDate(mon.getDate()-((dow+6)%7));
+    var monStr=mon.toLocaleDateString('en-CA');
+    var sun=new Date(mon); sun.setDate(sun.getDate()+6);
+    var sunStr=sun.toLocaleDateString('en-CA');
+    if(mode==='today')rows=rows.filter(function(x){return x.date===tdy;});
+    else if(mode==='week')rows=rows.filter(function(x){return x.date>=monStr&&x.date<=sunStr;});
+    else if(mode==='pend')rows=rows.filter(function(x){return x.status!=='done';});
+    var sum=function(a){return a.reduce(function(s,x){return s+(+x.amt||0);},0);};
+    var due=rows.filter(function(x){return x.status!=='done'&&x.date<=tdy;});
+    var next=rows.filter(function(x){return x.status!=='done'&&x.date>tdy;});
+    var done=rows.filter(function(x){return x.status==='done';});
+    document.getElementById('mstClStats').textContent='📋 المعروض: '+rows.length+' — 💰 '+sum(rows).toLocaleString()+' د';
+    document.getElementById('mKpis').innerHTML=
+      '<span class="pill r">⏰ مستحق/فائت: '+due.length+' ('+sum(due).toLocaleString()+' د)</span>'
+     +'<span class="pill b">🔜 قادم: '+next.length+' ('+sum(next).toLocaleString()+' د)</span>'
+     +'<span class="pill g">✅ تم: '+done.length+' ('+sum(done).toLocaleString()+' د)</span>';
+    document.getElementById('mLastUpd').textContent=new Date().toLocaleTimeString('ar-AE');
+    tb.innerHTML=rows.map(function(x){
+      var st=x.status==='done'
+        ?'<span class="pill g">✅ تم '+mFdate(x.done_at)+'</span>'
+        :(x.date<tdy?'<span class="pill r">⏰ فات موعده</span>'
+        :(x.date===tdy?'<span class="pill a">📅 مستحق اليوم</span>'
+        :'<span class="pill b">🔜 قادم</span>'));
+      var btns=x.status!=='done'
+        ?'<button class="btn sm" onclick="mClUpdate(\''+x.id+'\',{status:\'done\'})">✅ تحصيل</button> '
+        +' <button class="btn sm gray" title="تأجيل لبكرة" onclick="mClUpdate(\''+x.id+'\',{date:mTomorrow(\''+x.date+'\')})">➕ بكرة</button>'
+        :'';
+      return '<tr>'
+      +'<td style="white-space:nowrap"><b>'+mFdate(x.date)+'</b></td>'
+      +'<td>'+String(x.name||'')+'</td>'
+      +'<td style="direction:ltr;text-align:center">'+String(x.phone||'—')+'</td>'
+      +'<td style="text-align:center">'+String(x.emirate||'—')+'</td>'
+      +'<td style="text-align:center"><b>'+((+x.amt)?(+x.amt).toLocaleString()+' د':'—')+'</b></td>'
+      +'<td style="text-align:center">'+String(x.method||'💵 كاش')+'</td>'
+      +'<td>'+String(x.note||'')+'</td>'
+      +'<td style="text-align:center">'+st+'</td>'
+      +'<td style="white-space:nowrap">'+btns+'</td></tr>';
+    }).join('')||'<tr><td colspan="9" class="empty">📅 لا توجد مواعيد تحصيل — أضف من برنامج الكمبيوتر</td></tr>';
+  }catch(e){tb.innerHTML='<tr><td colspan="9" class="empty" style="color:#c53030">⚠️ '+e.message+'</td></tr>';}
+}
+function mTomorrow(ds){var d=new Date(String(ds||'').slice(0,10)+'T12:00:00');d.setDate(d.getDate()+1);return d.toLocaleDateString('en-CA');}
+async function mClUpdate(id,patch){
+  if(!M_TOKEN)return;
+  if(patch.status==='done'&&!confirm('✅ تأكيد تم التحصيل من العميل؟'))return;
+  try{
+    var r=await fetch('/api/master/collect-update',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+M_TOKEN},body:JSON.stringify({id:id,patch:patch})});
+    var d=await r.json().catch(function(){return {};});
+    if(!r.ok){mToast('⚠️ '+(d.error||'تعذر التحديث'));return;}
+    mToast('✅ تم الحفظ — هيتزامن مع الكمبيوتر');
+    mLoadCollect();
+  }catch(e){mToast('⚠️ '+e.message);}
+}
+/* تحديث تلقائي كل دقيقة */
+setInterval(function(){if(M_TOKEN)mLoadCollect();},60000);
+</script>
+</body>
+</html>
