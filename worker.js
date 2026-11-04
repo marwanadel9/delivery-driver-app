@@ -1390,10 +1390,15 @@ export default {
             "Content-Type": "application/json",
             Prefer: "return=minimal"
           };
-          const paymentBody = JSON.stringify({
+          const paymentPatch = {
             payment_method: paymentMethod,
             bank_transfer_received: paymentMethod === "bank_transfer" ? (order.bank_transfer_received === true) : false
-          });
+          };
+          // تاريخ الطلب جزء من بيانات الفاتورة ويجب أن يتزامن مع كل نسخة لدى المندوبين.
+          if (typeof order.created_at === "string" && !Number.isNaN(new Date(order.created_at).getTime())) {
+            paymentPatch.created_at = new Date(order.created_at).toISOString();
+          }
+          const paymentBody = JSON.stringify(paymentPatch);
           const idFilter = "in.(" + copyIds.join(",") + ")";
           const ordersPaymentResponse = await supabaseRequest(
             "/rest/v1/orders?id=" + encodeURIComponent(idFilter),
@@ -1444,13 +1449,20 @@ export default {
             "driver_notes",
             "delivery_fee",
             "paid_in_advance",
-            "bank_transfer_received"
+            "bank_transfer_received",
+            "created_at"
           ];
 
           for (const field of archiveFields) {
             if (rpcData && Object.prototype.hasOwnProperty.call(rpcData, field)) {
               archivePatchBody[field] = rpcData[field];
             }
+          }
+
+          // تاريخ الطلب الذي اختاره المستخدم في لوحة MASTER له الأولوية على
+          // أي تاريخ قديم يعيده RPC، ويجب أن يظل متطابقًا في أرشيف MASTER.
+          if (typeof order.created_at === "string" && !Number.isNaN(new Date(order.created_at).getTime())) {
+            archivePatchBody.created_at = new Date(order.created_at).toISOString();
           }
 
           // قيمة الدفع التي اختارها المستخدم في لوحة MASTER لها الأولوية على
