@@ -3234,33 +3234,19 @@
     const driver = String($('master-filter-driver')?.value || '').trim();
     const status = String($('master-filter-status')?.value || '').trim();
 
-    const hasExplicitSearch = Boolean(number || name || phone || date || driver || status);
     const today = masterDateInput(new Date());
 
     return getMasterUniqueOrders().filter((order) => {
       const orderNumber = String(order.order_number ?? order.id ?? '').toLowerCase();
       const customerName = String(order.customer_name ?? '').toLowerCase();
       const customerPhone = String(order.phone ?? '').toLowerCase();
+      const orderDate = masterDateInput(order.created_at);
 
-      // العرض الافتراضي: فواتير اليوم كلها، ومعها الفواتير القديمة غير المسلّمة
-      // والتحويلات البنكية التي لم يتم تأكيد استلامها. البحث بالتاريخ يعرض الأرشيف كاملًا.
-      if (!hasExplicitSearch) {
-        const orderDate = masterDateInput(order.created_at);
-        const delivered = isDelivered(order.delivery_status);
-        const transferPending =
-          !isPaidInAdvance(order) &&
-          normalizePayment(order.payment_method) === 'bank_transfer' &&
-          order.bank_transfer_received !== true;
-
-        // الفواتير القديمة ذات التحويل البنكي غير المستلم تُعرض في لوحة مستقلة على اليمين.
-        // فواتير اليوم تظل في الجدول الرئيسي، وكذلك الفواتير القديمة غير المسلّمة التي ليست تحويلًا معلقًا.
-        if (orderDate !== today && transferPending) {
-          return false;
-        }
-
-        if (orderDate !== today && delivered && !transferPending) {
-          return false;
-        }
+      // الجدول الرئيسي يعرض فواتير اليوم فقط بشكل افتراضي، حتى مع البحث بالاسم أو الرقم أو المندوب.
+      // لا يُسمح بعرض فواتير يوم آخر إلا عند اختيار تاريخ صريح من فلتر التاريخ.
+      // التحويلات القديمة غير المستلمة تبقى في قسمها المستقل ولا تُعرض هنا.
+      if (!date && orderDate !== today) {
+        return false;
       }
 
       if (number && !orderNumber.includes(number)) {
@@ -4632,10 +4618,8 @@
 
       if (failedTargets.length) {
         await loadMasterOrders();
-        const failedLabels = failedTargets
-          .map((item) => `${item.sheet} (#${item.id}): ${item.error || 'سبب الرفض غير متاح من الخادم'}`)
-          .join(' | ');
-        throw new Error(`تم تحديث ${successfulIds.size} من ${uniqueTargets.length} نسخة. تفاصيل فشل التحديث: ${failedLabels}`);
+        const failedLabels = failedTargets.map((item) => `${item.sheet} (#${item.id})`).join('، ');
+        throw new Error(`تم تحديث ${successfulIds.size} من ${uniqueTargets.length} نسخة. تعذر تحديث: ${failedLabels}. راجع اتصال قاعدة البيانات قبل إعادة المحاولة.`);
       }
 
       // Refresh from the source of truth after all updates so the master shows the newest state.
