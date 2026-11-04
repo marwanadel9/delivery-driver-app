@@ -1398,6 +1398,7 @@ export default {
           if (typeof order.created_at === "string" && !Number.isNaN(new Date(order.created_at).getTime())) {
             paymentPatch.created_at = new Date(order.created_at).toISOString();
           }
+          paymentPatch.updated_at = new Date().toISOString();
           const paymentBody = JSON.stringify(paymentPatch);
           const idFilter = "in.(" + copyIds.join(",") + ")";
           const ordersPaymentResponse = await supabaseRequest(
@@ -1459,6 +1460,7 @@ export default {
             }
           }
 
+          archivePatchBody.updated_at = new Date().toISOString();
           // تاريخ الطلب الذي اختاره المستخدم في لوحة MASTER له الأولوية على
           // أي تاريخ قديم يعيده RPC، ويجب أن يظل متطابقًا في أرشيف MASTER.
           if (typeof order.created_at === "string" && !Number.isNaN(new Date(order.created_at).getTime())) {
@@ -2376,6 +2378,7 @@ export default {
         // ونمسح نسخة المندوب (قبل التسليم فقط) ليُطلب منه إعادة الاختيار.
         const driverPatch = Object.assign({}, patch);
         const archivePatch = Object.assign({}, patch);
+        archivePatch.updated_at = new Date().toISOString();
         const stRaw = String(patch.delivery_status || "").toLowerCase();
         const isDelivered = stRaw === "delivered" || stRaw.includes("تم");
         const pmRaw = String(patch.payment_method || "").trim();
@@ -2410,6 +2413,7 @@ export default {
         const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
         const driverPatch = Object.assign({}, set);
         const archivePatch = Object.assign({}, set);
+        archivePatch.updated_at = new Date().toISOString();
         const stRaw = String(set.delivery_status || "").toLowerCase();
         const isDelivered = stRaw === "delivered" || stRaw.includes("تم");
         const pmRaw = String(set.payment_method || "").trim();
@@ -2568,6 +2572,120 @@ export default {
           deleted: orderNumber,
           orders_deleted: found.length
         });
+      }
+
+      /* ============================================================
+         ⭐ مزامنة ثنائية الاتجاه (ماستر ↔ كمبيوتر ↔ مناديب) + تحويلات + تحصيل مجدول
+         ============================================================ */
+
+      /* 1) حالة الفواتير من أرشيف الماستر → الكمبيوتر */
+      if (path === "/api/excel-master-state" && request.method === "GET") {
+        const secret = request.headers.get("X-Excel-Secret") || request.headers.get("X-Excel-Sync-Secret") || "";
+        if (secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
+        const r = await supabaseRequest(
+          "/rest/v1/master_orders_archive?select=order_number,customer_name,phone,emirate,area,total,note,payment_method,delivery_status,paid_in_advance,bank_transfer_received,updated_at&order=updated_at.desc&limit=2000",
+          { headers: { apikey: svc, Authorization: "Bearer " + svc } }
+        );
+        const rows = await r.json().catch(function () { return null; });
+        if (!r.ok || !Array.isArray(rows)) {
+          return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة حالة الماستر" }, 502);
+        }
+        return json({ orders: rows, server_now: new Date().toISOString() });
+      }
+
+      /* 2) تأكيد استلام التحويل من الكمبيوتر (مطابقة/استلام يدوي/تحصيل مجدول) → الماستر + المناديب */
+      if (path === "/api/excel-transfer-received" && request.method === "POST") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
+        const body = await request.json().catch(function () { return {}; });
+        const orderNumber = String(body.order_number || "").trim();
+        const received = body.received !== false;
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber)) return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
+        const patch = { bank_transfer_received: received };
+        patch.updated_at = new Date().toISOString();
+        const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(patch) });
+        if (!r1.ok) { const e1 = await r1.json().catch(function () { return null; }); return json({ error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ المناديب" }, 502); }
+        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(patch) });
+        if (!r2.ok) { const e2 = await r2.json().catch(function () { return null; }); return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث المناديب وتعذر تحديث أرشيف الماستر" }, 502); }
+        return json({ success: true, order_number: orderNumber, bank_transfer_received: received });
+      }
+
+      /* 3) مزامنة قسم «تحصيل مجدول» كامل من الكمبيوتر → جدول scheduled_collections */
+      if (path === "/api/collect-sync" && request.method === "POST") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
+        const body = await request.json().catch(function () { return null; });
+        const rows = Array.isArray(body) ? body : (body && Array.isArray(body.collects) ? body.collects : null);
+        if (!Array.isArray(rows)) return json({ error: "بيانات غير صحيحة" }, 400);
+        const now = new Date().toISOString();
+        const clean = rows.filter(function (r) { return r && r.id; }).map(function (r) {
+          return {
+            id: String(r.id), code: String(r.code || ""), name: String(r.name || ""),
+            phone: String(r.phone || ""), emirate: String(r.emirate || ""),
+            date: String(r.date || ""), amt: Number(r.amt) || 0,
+            method: String(r.method || ""), note: String(r.note || ""),
+            status: String(r.status || "pend"), done_at: String(r.done_at || ""),
+            src_inv: String(r.src_inv || ""), created_at: String(r.created_at || now), updated_at: now
+          };
+        });
+        if (clean.length) {
+          const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" };
+          const up = await supabaseRequest("/rest/v1/scheduled_collections?on_conflict=id", { method: "POST", headers: H, body: JSON.stringify(clean) });
+          if (!up.ok) { const eu = await up.json().catch(function () { return null; }); return json({ error: (eu && (eu.message || eu.hint || eu.error)) || "فشل حفظ التحصيل المجدول" }, 502); }
+        }
+        return json({ success: true, synced: clean.length });
+      }
+
+      /* 4) سحب التحصيل المجدول → الكمبيوتر (تعديلات الماستر تنزل للكمبيوتر) */
+      if (path === "/api/excel-collect" && request.method === "GET") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
+        const r = await supabaseRequest("/rest/v1/scheduled_collections?select=*&order=date.asc", { headers: { apikey: svc, Authorization: "Bearer " + svc } });
+        const rows = await r.json().catch(function () { return null; });
+        if (!r.ok || !Array.isArray(rows)) return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة التحصيل المجدول" }, 502);
+        return json({ collects: rows });
+      }
+
+      /* 5) قراءة التحصيل المجدول من صفحة الماستر */
+      if (path === "/api/master/collect" && request.method === "GET") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
+        const r = await supabaseRequest("/rest/v1/scheduled_collections?select=*&order=date.asc", { headers: { apikey: svc, Authorization: "Bearer " + svc } });
+        const rows = await r.json().catch(function () { return null; });
+        if (!r.ok || !Array.isArray(rows)) return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة التحصيل المجدول" }, 502);
+        return json({ collects: rows });
+      }
+
+      /* 6) تعديل موعد تحصيل من صفحة الماستر (تم التحصيل/تأجيل/ملاحظة) */
+      if (path === "/api/master/collect-update" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
+        const body = await request.json().catch(function () { return {}; });
+        const id = String(body.id || "").trim();
+        const patch = body.patch && typeof body.patch === "object" ? body.patch : null;
+        if (!id || !patch) return json({ error: "بيانات غير صحيحة" }, 400);
+        if (patch.status === "done" && !patch.done_at) patch.done_at = new Date().toISOString();
+        patch.updated_at = new Date().toISOString();
+        const r = await supabaseRequest("/rest/v1/scheduled_collections?id=eq." + encodeURIComponent(id), {
+          method: "PATCH",
+          headers: { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify(patch)
+        });
+        if (!r.ok) { const e = await r.json().catch(function () { return null; }); return json({ error: (e && (e.message || e.hint || e.error)) || "تعذر تحديث الموعد" }, 502); }
+        return json({ success: true, id: id });
       }
 
       if (
