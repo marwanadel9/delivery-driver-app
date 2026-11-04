@@ -4632,8 +4632,10 @@
 
       if (failedTargets.length) {
         await loadMasterOrders();
-        const failedLabels = failedTargets.map((item) => `${item.sheet} (#${item.id})`).join('، ');
-        throw new Error(`تم تحديث ${successfulIds.size} من ${uniqueTargets.length} نسخة. تعذر تحديث: ${failedLabels}. راجع اتصال قاعدة البيانات قبل إعادة المحاولة.`);
+        const failedLabels = failedTargets
+          .map((item) => `${item.sheet} (#${item.id}): ${item.error || 'سبب الرفض غير متاح من الخادم'}`)
+          .join(' | ');
+        throw new Error(`تم تحديث ${successfulIds.size} من ${uniqueTargets.length} نسخة. تفاصيل فشل التحديث: ${failedLabels}`);
       }
 
       // Refresh from the source of truth after all updates so the master shows the newest state.
