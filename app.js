@@ -4432,6 +4432,9 @@
           <label>المنطقة
             <input id="master-edit-area" type="text" value="${masterEscape(order.area || '')}">
           </label>
+          <label>تاريخ الطلب
+            <input id="master-edit-order-date" type="date" value="${masterEscape(masterDateInput(order.created_at))}" required>
+          </label>
         </div>
 
         <div class="master-edit-products">
@@ -4536,6 +4539,18 @@
 
       const gatePhotoUrls = masterReadGatePhotoUrlsFromEditor();
       const nextPayment = normalizePayment($('master-edit-payment')?.value ?? order.payment_method ?? '');
+      const selectedOrderDate = String($('master-edit-order-date')?.value || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedOrderDate)) {
+        throw new Error('يرجى اختيار تاريخ صحيح للطلب.');
+      }
+      // غيّر اليوم مع الحفاظ على ساعة ودقيقة تسجيل الفاتورة الأصلية.
+      const originalCreatedAt = new Date(order.created_at || Date.now());
+      const safeOriginalDate = Number.isNaN(originalCreatedAt.getTime()) ? new Date() : originalCreatedAt;
+      const dateParts = [safeOriginalDate.getHours(), safeOriginalDate.getMinutes(), safeOriginalDate.getSeconds()]
+        .map((part) => String(part).padStart(2, '0'));
+      const nextCreatedAtDate = new Date(`${selectedOrderDate}T${dateParts.join(':')}`);
+      if (Number.isNaN(nextCreatedAtDate.getTime())) throw new Error('تعذر قراءة تاريخ الطلب المحدد.');
+      const nextCreatedAt = nextCreatedAtDate.toISOString();
 
       const updatedOrder = {
         ...order,
@@ -4543,6 +4558,7 @@
         phone: $('master-edit-phone')?.value ?? order.phone ?? '',
         emirate: $('master-edit-emirate')?.value ?? order.emirate ?? '',
         area: $('master-edit-area')?.value ?? order.area ?? '',
+        created_at: nextCreatedAt,
         chicken_weights: chicken.chicken_weights,
         chicken_qtys: chicken.chicken_qtys,
         plate_names: cuts.plate_names,
@@ -4586,7 +4602,7 @@
           order_number: target.order_number ?? updatedOrder.order_number,
           invoice_number: target.invoice_number ?? updatedOrder.invoice_number,
           sheet_name: target.sheet_name,
-          created_at: target.created_at ?? updatedOrder.created_at,
+          created_at: updatedOrder.created_at,
           // When payment method changes, an old transfer confirmation must not carry over.
           bank_transfer_received: paymentChanged ? false : target.bank_transfer_received,
           gate_photo_urls: gatePhotoUrls,
