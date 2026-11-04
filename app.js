@@ -1161,7 +1161,12 @@
         fullscreenHead = null;
         expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
         expandButton.setAttribute('aria-expanded', 'false');
-        window.scrollTo({ top: savedScrollY, behavior: 'instant' });
+        /* ⭐ رجوع مضمون لنفس النقطة حتى لو حصل رندر أثناء فتح الفاتورة */
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            window.scrollTo({ top: savedScrollY, behavior: 'instant' });
+          });
+        });
       };
       const toggleInvoiceDetails = () => {
         if (node.classList.contains('is-fullscreen-invoice')) {
@@ -5296,11 +5301,27 @@
         + K(done.length + ' موعد', 'تم تحصيلها — ' + sum(done).toLocaleString('ar-EG-u-nu-latn') + ' درهم')
         + K(masterCollects.length.toLocaleString('ar-EG-u-nu-latn'), 'إجمالي المواعيد المسجلة');
     }
+    /* ⭐ شارة ذهبية على التبويب بعدد مواعيد اليوم المتبقية */
+    try {
+      const navBtn = document.querySelector('[data-master-view-tab="collect"]');
+      if (navBtn) {
+        let bdg = navBtn.querySelector('.fa-collect-bdg');
+        if (todayPend.length > 0) {
+          if (!bdg) {
+            bdg = document.createElement('span');
+            bdg.className = 'fa-collect-bdg';
+            bdg.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;margin-inline-start:6px;border-radius:11px;background:#d4a72c;color:#2b2105;font-size:11px;font-weight:900;';
+            navBtn.appendChild(bdg);
+          }
+          bdg.textContent = todayPend.length;
+        } else if (bdg) bdg.remove();
+      }
+    } catch (e) {}
     const box = $('master-collect-list');
     if (!box) return;
     box.innerHTML = list.map((r) => {
       const overdue = r.status === 'pend' && String(r.date).slice(0, 10) < today;
-      const st = r.status === 'done' ? '<span class="master-collect-pill g">✅ تم التحصيل</span>'
+      const st = r.status === 'done' ? '<span class="master-collect-pill g">✅ تم التحصيل' + (r.done_at ? ' · ' + String(r.done_at).slice(11, 16) : '') + '</span>'
         : overdue ? '<span class="master-collect-pill r">🔴 فات موعده</span>'
         : '<span class="master-collect-pill a">⏳ قادم</span>';
       const waPhone = String(r.phone || '').replace(/\D/g, '').replace(/^0/, '').replace(/^971/, '');
@@ -5309,8 +5330,9 @@
         ? '<button class="master-btn primary" type="button" onclick="masterCollectDone(\'' + r.id + '\')">✅ تم التحصيل</button>'
           + '<button class="master-btn secondary" type="button" onclick="masterCollectPostpone(\'' + r.id + '\')">➕ تأجيل لبكرة</button>'
         : '';
+      const isToday = String(r.date || '').slice(0, 10) === today;
       return '<tr class="' + (overdue ? 'overdue' : '') + '">'
-        + '<td><b>' + String(r.date || '').slice(0, 10) + '</b></td>'
+        + '<td><b' + (isToday && r.status === 'pend' ? ' style="color:#b45309;font-size:14px"' : '') + '>' + String(r.date || '').slice(0, 10) + (isToday && r.status === 'pend' ? ' 📌' : '') + '</b></td>'
         + '<td><b>' + String(r.name || '') + '</b></td>'
         + '<td style="direction:ltr;text-align:right">' + String(r.phone || '—') + '</td>'
         + '<td>' + String(r.emirate || '—') + '</td>'
@@ -5392,6 +5414,26 @@
     list.forEach((r) => lines.push('• ' + String(r.date || '').slice(0, 10) + ' | ' + r.name + ' | ' + (Number(r.amt) || 0) + ' د' + (r.note ? ' | ' + r.note : '')));
     try { navigator.clipboard.writeText(lines.join('\n')); } catch (e) {}
     mcToast('📋 اتنسخ — الصقه في الواتساب');
+  }
+
+
+  /* ⭐ حارس زرار رجوع الهاتف: جوه التطبيق الرجوع يقفل الفاتورة أو يفضل مكانه —
+     ميخرجش من التطبيق غير من شاشة الدخول */
+  if (!window.__faBackGuard) {
+    window.__faBackGuard = true;
+    try { history.pushState({ faApp: 1 }, '', location.href); } catch (e) {}
+    window.addEventListener('popstate', function () {
+      if (document.body.classList.contains('driver-invoice-open')) {
+        const closeBtn = document.querySelector('.invoice-fullscreen-close');
+        if (closeBtn) { try { closeBtn.click(); } catch (e) {} }
+        try { history.pushState({ faApp: 1 }, '', location.href); } catch (e) {}
+        return;
+      }
+      const ordersView = document.getElementById('orders-view');
+      if (ordersView && !ordersView.hidden) {
+        try { history.pushState({ faApp: 1 }, '', location.href); } catch (e) {}
+      }
+    });
   }
 
   boot();
