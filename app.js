@@ -2924,6 +2924,12 @@
             </div>
           </div>
           <div class="master-collect-box">
+            <div id="master-collect-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <button type="button" class="master-btn secondary" data-cm="today" onclick="masterCollectChip(this)">📅 اليوم</button>
+              <button type="button" class="master-btn secondary" data-cm="week" onclick="masterCollectChip(this)">📆 الأسبوع</button>
+              <button type="button" class="master-btn secondary" data-cm="pend" onclick="masterCollectChip(this)">⏳ المتبقي</button>
+              <button type="button" class="master-btn secondary" data-cm="all" onclick="masterCollectChip(this)">🗂️ الكل</button>
+            </div>
             <div class="master-collect-filters">
               <div class="fg" style="max-width:170px"><label>الفلتر</label><select id="master-collect-mode" onchange="renderMasterCollect()">
                 <option value="today">📅 اليوم فقط</option>
@@ -5286,6 +5292,42 @@
       .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   }
 
+  function masterCollectChip(btn) {
+    const chips = document.querySelectorAll('#master-collect-chips [data-cm]');
+    chips.forEach(function (c) {
+      const on = c === btn;
+      c.style.background = on ? 'linear-gradient(145deg,#2e8b62,#1f5c40)' : '';
+      c.style.color = on ? '#fff' : '';
+      c.style.borderColor = on ? 'transparent' : '';
+    });
+    const mode = btn.getAttribute('data-cm');
+    const sel = $('master-collect-mode');
+    if (sel) sel.value = mode;
+    renderMasterCollect();
+  }
+
+  function mcBeep() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      [[880, 0, 0.16], [1174.66, 0.15, 0.26]].forEach(function (t) {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = t[0];
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + t[1]);
+        g.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + t[1] + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t[1] + t[2]);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(ctx.currentTime + t[1]); o.stop(ctx.currentTime + t[1] + t[2] + 0.05);
+      });
+    } catch (e) {}
+  }
+
+  /* ⭐ تحديث تلقائي كل 45 ثانية طوال ما التبويب مفتوح */
+  setInterval(function () {
+    const page = document.querySelector('.master-page');
+    if (page && page.getAttribute('data-view') === 'collect') loadMasterCollects(false);
+  }, 45000);
+
   function renderMasterCollect() {
     const list = masterCollectFiltered();
     const today = masterDateInput(new Date());
@@ -5326,6 +5368,7 @@
         : '<span class="master-collect-pill a">⏳ قادم</span>';
       const waPhone = String(r.phone || '').replace(/\D/g, '').replace(/^0/, '').replace(/^971/, '');
       const wa = waPhone.length >= 7 ? '<a class="master-btn secondary" target="_blank" rel="noopener" href="https://wa.me/971' + waPhone + '">💬</a>' : '';
+      const call = waPhone.length >= 7 ? '<a class="master-btn secondary" href="tel:0' + waPhone + '">📞</a>' : '';
       const acts = r.status !== 'done'
         ? '<button class="master-btn primary" type="button" onclick="masterCollectDone(\'' + r.id + '\')">✅ تم التحصيل</button>'
           + '<button class="master-btn secondary" type="button" onclick="masterCollectPostpone(\'' + r.id + '\')">➕ تأجيل لبكرة</button>'
@@ -5340,11 +5383,11 @@
         + '<td>' + String(r.method || '—') + '</td>'
         + '<td>' + String(r.note || '') + '</td>'
         + '<td>' + st + '</td>'
-        + '<td><div class="master-collect-actions">' + acts + wa
+        + '<td><div class="master-collect-actions">' + acts + wa + call
         + '<button class="master-btn secondary" type="button" onclick="masterCollectNote(\'' + r.id + '\')">📝</button>'
         + '<button class="master-btn danger" type="button" onclick="masterCollectDelete(\'' + r.id + '\')">🗑️</button>'
         + '</div></td></tr>';
-    }).join('') || '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:24px">لا توجد مواعيد في هذا الفلتر — أضف أول موعد من الفوق</td></tr>';
+    }).join('') || '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:28px;font-size:14px;line-height:2">📅 لا توجد مواعيد هنا<br><span style="font-size:12px">أضف أول موعد من الأعلى — أو أضفه من برنامج الكمبيوتر (قسم «تحصيل مجدول») وهيظهر هنا تلقائيًا</span></td></tr>';
   }
 
   async function masterCollectPatch(id, patch) {
@@ -5358,7 +5401,7 @@
       alert('❌ ' + String((error && error.message) || error));
     }
   }
-  function masterCollectDone(id) { masterCollectPatch(id, { status: 'done', done_at: new Date().toISOString() }); }
+  function masterCollectDone(id) { mcBeep(); masterCollectPatch(id, { status: 'done', done_at: new Date().toISOString() }); }
   function masterCollectPostpone(id) {
     const row = masterCollects.find((r) => r.id === id);
     if (!row) return;
