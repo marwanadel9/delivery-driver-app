@@ -1360,9 +1360,20 @@ export default {
         // مزامنة صريحة لطريقة الدفع على كل نسخ هذه الفاتورة المحددة بالمعرّفات.
         // لا نعتمد هنا على تطابق رقم الفاتورة وحده، حتى لا نمس فاتورة أخرى قد تحمل رقمًا مشابهًا.
         if (Object.prototype.hasOwnProperty.call(order, "payment_method")) {
-          const paymentMethod = normalizePayment(order.payment_method);
-          if (!paymentMethod) {
-            return json({ error: "طريقة الدفع غير صحيحة. اختر كاش أو تحويل بنكي." }, 400);
+          // لوحة MASTER تسمح بترك طريقة الدفع غير محددة حتى يختارها المندوب.
+          // نخزنها كـ null، بينما يظل مسار المندوب /api/payment يقبل كاش أو تحويل فقط.
+          const rawPaymentMethod = order.payment_method;
+          const rawPaymentText = String(rawPaymentMethod == null ? "" : rawPaymentMethod).trim().toLowerCase();
+          const isUnselectedPayment =
+            rawPaymentMethod == null ||
+            rawPaymentText === "" ||
+            rawPaymentText === "غير محدد" ||
+            rawPaymentText === "غير محددة" ||
+            rawPaymentText === "unselected" ||
+            rawPaymentText === "not_set";
+          const paymentMethod = isUnselectedPayment ? null : normalizePayment(rawPaymentMethod);
+          if (!isUnselectedPayment && !paymentMethod) {
+            return json({ error: "طريقة الدفع غير صحيحة. القيم المقبولة: غير محدد أو كاش أو تحويل بنكي." }, 400);
           }
           const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
           if (!serviceKey) {
