@@ -2811,7 +2811,7 @@
                 <div class="master-old-transfer-title">التحويلات السابقة غير المستلمة</div>
                 <span class="master-old-transfer-count" id="master-old-transfer-count">٠</span>
               </div>
-              <div class="master-old-transfer-note">تظهر هنا التحويلات القديمة التي تحتاج مراجعة، بما فيها التحويلات التاريخية المسجلة لأمنه وخالد الفلاسي. فواتير اليوم موجودة في قسم الطلبات.</div>
+              <div class="master-old-transfer-note">تظهر هنا التحويلات القديمة التي تحتاج مراجعة. فواتير اليوم موجودة في قسم الطلبات.</div>
               <div class="master-old-transfer-stats" aria-label="إحصائيات التحويلات القديمة">
                 <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">عدد التحويلات المعلقة</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-count">٠</strong></div>
                 <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">إجمالي المبالغ غير المستلمة</span><strong class="master-old-transfer-stat-value money" id="master-old-transfer-stat-total">٠ درهم</strong></div>
@@ -3377,12 +3377,6 @@
       });
   }
 
-  // تحويلات تاريخية مضافة للعرض في صفحة الماستر فقط؛ لا تنشئ فواتير ولا تعدّل قاعدة البيانات.
-  const MASTER_HISTORICAL_TRANSFERS = [
-    { id: 'historical-amna-20260810', customer_name: 'أمنه', total: 378, transfer_date: '10/08/2026', received: false },
-    { id: 'historical-khaled-20260927', customer_name: 'خالد الفلاسي', total: 160, transfer_date: '27/09/2026', received: false }
-  ];
-
   function renderMasterOldPendingTransfers() {
     const list = $('master-old-transfer-list');
     const count = $('master-old-transfer-count');
@@ -3395,17 +3389,15 @@
     const yesterday = masterDateInput(yesterdayDate);
     const yesterdayOrders = orders.filter((order) => masterDateInput(order.created_at) === yesterday);
     const olderOrders = orders.filter((order) => masterDateInput(order.created_at) < yesterday);
-    const pendingHistoricalTransfers = MASTER_HISTORICAL_TRANSFERS.filter((transfer) => !transfer.received);
-    const totalPendingAmount = orders.reduce((sum, order) => sum + masterMoney(order.total), 0) + pendingHistoricalTransfers.reduce((sum, transfer) => sum + masterMoney(transfer.total), 0);
-    const totalPendingCount = orders.length + pendingHistoricalTransfers.length;
-    const historicalOlderCount = pendingHistoricalTransfers.length;
+    const totalPendingAmount = orders.reduce((sum, order) => sum + masterMoney(order.total), 0);
+    const totalPendingCount = orders.length;
     const moneyText = (value) => `${value.toLocaleString('ar-EG-u-nu-latn', { maximumFractionDigits: 2 })} درهم`;
 
     if (count) count.textContent = totalPendingCount.toLocaleString('ar-EG-u-nu-latn');
     if ($('master-old-transfer-stat-count')) $('master-old-transfer-stat-count').textContent = totalPendingCount.toLocaleString('ar-EG-u-nu-latn');
     if ($('master-old-transfer-stat-total')) $('master-old-transfer-stat-total').textContent = moneyText(totalPendingAmount);
     if ($('master-old-transfer-stat-yesterday')) $('master-old-transfer-stat-yesterday').textContent = yesterdayOrders.length.toLocaleString('ar-EG-u-nu-latn');
-    if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = (olderOrders.length + historicalOlderCount).toLocaleString('ar-EG-u-nu-latn');
+    if ($('master-old-transfer-stat-older')) $('master-old-transfer-stat-older').textContent = olderOrders.length.toLocaleString('ar-EG-u-nu-latn');
 
     list.innerHTML = '';
 
@@ -3435,37 +3427,6 @@
       });
     }
 
-    const historicalTitle = document.createElement('div');
-    historicalTitle.className = 'master-old-transfer-title';
-    historicalTitle.style.cssText = 'margin-top:14px;padding-top:12px;border-top:1px solid #e8edef;font-weight:900;color:#24343a';
-    historicalTitle.textContent = 'تحويلات تاريخية مضافة';
-    list.appendChild(historicalTitle);
-
-    MASTER_HISTORICAL_TRANSFERS.forEach((transfer) => {
-      const card = document.createElement('article');
-      card.className = 'master-old-transfer-card';
-      card.style.cssText = 'border-color:#c8ebd2;background:#f1fbf4';
-      card.innerHTML = `
-        <div class="master-old-transfer-card-top">
-          <span class="master-old-transfer-customer">${masterEscape(transfer.customer_name)}</span>
-          <span class="master-transfer-state ${transfer.received ? 'received' : 'waiting'}">${transfer.received ? '✓ تم الاستلام' : 'تحويل غير مؤكد'}</span>
-        </div>
-        <div class="master-old-transfer-meta">تاريخ التحويل: ${masterEscape(transfer.transfer_date)}</div>
-        <div class="master-old-transfer-amount">${masterEscape(formatTotal(transfer.total))}</div>
-        ${transfer.received ? '<span class="master-transfer-state received">تم تأكيد الاستلام</span>' : `<button class="master-transfer-btn pending" data-historical-transfer="${masterEscape(transfer.id)}">تأكيد استلام التحويل</button>`}
-      `;
-      const historicalButton = card.querySelector('[data-historical-transfer]');
-      if (historicalButton) {
-        historicalButton.addEventListener('click', () => {
-          const confirmed = window.confirm(`تأكيد استلام تحويل ${transfer.customer_name} بقيمة ${transfer.total} درهم بتاريخ ${transfer.transfer_date}؟`);
-          if (!confirmed) return;
-          transfer.received = true;
-          renderMasterOrders();
-          toast('تم تحديث حالة التحويل في العرض الحالي. يلزم ربطه بقاعدة البيانات لحفظه نهائيًا.');
-        });
-      }
-      list.appendChild(card);
-    });
   }
 
   function getMasterMonthlyBankTransfers() {
