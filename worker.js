@@ -1453,6 +1453,24 @@ export default {
             }
           }
 
+          // قيمة الدفع التي اختارها المستخدم في لوحة MASTER لها الأولوية على
+          // القيمة القديمة التي قد يعيدها RPC؛ لا نسمح بإرجاع "كاش" بعد اختيار "غير محدد".
+          if (Object.prototype.hasOwnProperty.call(order, "payment_method")) {
+            const archiveRawPayment = order.payment_method;
+            const archivePaymentText = String(archiveRawPayment == null ? "" : archiveRawPayment).trim().toLowerCase();
+            const archivePaymentUnselected =
+              archiveRawPayment == null ||
+              archivePaymentText === "" ||
+              archivePaymentText === "غير محدد" ||
+              archivePaymentText === "غير محددة" ||
+              archivePaymentText === "unselected" ||
+              archivePaymentText === "not_set";
+            archivePatchBody.payment_method = archivePaymentUnselected ? null : normalizePayment(archiveRawPayment);
+            archivePatchBody.bank_transfer_received = archivePatchBody.payment_method === "bank_transfer"
+              ? (order.bank_transfer_received === true)
+              : false;
+          }
+
           const archivePatchResponse = await supabaseRequest(
             "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(invoiceNumber),
             {
