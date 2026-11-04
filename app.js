@@ -2551,6 +2551,29 @@
       .master-page[data-view="balances"] #master-customer-balances{display:block}
       .master-page[data-view="departures"] .master-home-intro,.master-page[data-view="departures"] .master-stats,.master-page[data-view="departures"] .master-filters,.master-page[data-view="departures"] .master-orders-layout,.master-page[data-view="departures"] #master-customer-balances{display:none}
       .master-page[data-view="departures"] #master-driver-departures{display:block}
+#master-collect{display:none}
+.master-page[data-view="collect"] #master-collect{display:block}
+.master-page[data-view="collect"] .master-home-intro,.master-page[data-view="collect"] .master-stats,.master-page[data-view="collect"] .master-filters,.master-page[data-view="collect"] .master-orders-layout{display:none}
+.master-collect-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:0 0 14px}
+.master-collect-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px}
+.master-collect-kpi .n{font-size:22px;font-weight:900;color:#0f172a}
+.master-collect-kpi .l{font-size:12px;font-weight:800;color:#64748b;margin-top:3px}
+.master-collect-kpi.warn .n{color:#b91c1c}
+.master-collect-box{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:14px}
+.master-collect-box h3{margin:0 0 12px;font-size:16px;color:#0f172a}
+.master-collect-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.master-collect-filters .fg{flex:1;min-width:150px}
+.master-collect-filters label{display:block;font-size:12px;font-weight:800;color:#475569;margin-bottom:5px}
+.master-collect-table{width:100%;border-collapse:collapse;font-size:13px}
+.master-collect-table th{background:#f1f5f9;color:#475569;padding:10px;border-bottom:2px solid #e2e8f0;text-align:right;white-space:nowrap;font-size:12px}
+.master-collect-table td{padding:9px 10px;border-bottom:1px solid #eef2f7;vertical-align:middle}
+.master-collect-table tr.overdue td{background:#fef2f2}
+.master-collect-pill{display:inline-block;padding:3px 11px;border-radius:20px;font-size:11px;font-weight:800;white-space:nowrap}
+.master-collect-pill.g{background:#dcfce7;color:#166534}
+.master-collect-pill.a{background:#fef3c7;color:#92400e}
+.master-collect-pill.r{background:#fee2e2;color:#991b1b}
+.master-collect-actions{display:flex;gap:6px;flex-wrap:wrap}
+.master-collect-actions .master-btn{padding:6px 11px;font-size:12px}
       .master-monthly-transfers{display:none;background:#fff;border:1px solid #e2eaf2;border-radius:18px;padding:16px;box-shadow:0 8px 26px rgba(30,49,67,.05)}
       .master-page[data-view="monthly-transfers"] .master-home-intro,.master-page[data-view="monthly-transfers"] .master-stats,.master-page[data-view="monthly-transfers"] .master-filters,.master-page[data-view="monthly-transfers"] .master-orders-layout,.master-page[data-view="monthly-transfers"] #master-customer-balances,.master-page[data-view="monthly-transfers"] #master-driver-departures{display:none!important}
       .master-page[data-view="monthly-transfers"] #master-monthly-transfers{display:block!important}
@@ -2639,6 +2662,7 @@
           <button class="master-nav-btn" type="button" data-master-view-tab="monthly-transfers">📅 التحويلات الشهرية</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="balances">💰 أرصدة العملاء</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="departures">🚗 تحرك المندوبين</button>
+          <button class="master-nav-btn" type="button" data-master-view-tab="collect">📅 تحصيل مجدول</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="reports">📊 التقارير والإحصائيات</button>
         </nav>
 
@@ -2844,6 +2868,39 @@
             </table>
             </section>
           </div>
+        <section id="master-collect" aria-label="التحصيل المجدول">
+          <div class="master-collect-kpis" id="master-collect-kpis"></div>
+          <div class="master-collect-box">
+            <h3>➕ إضافة موعد تحصيل — بيظهر فورًا في برنامج الكمبيوتر</h3>
+            <div class="master-collect-filters">
+              <div class="fg" style="flex:2"><label>العميل</label><input id="mc-name" placeholder="اسم العميل" /></div>
+              <div class="fg"><label>الهاتف</label><input id="mc-phone" style="direction:ltr;text-align:left" /></div>
+              <div class="fg"><label>الإمارة</label><select id="mc-emi"><option>دبي</option><option>ابوظبي</option><option>الشارقه</option><option>عجمان</option><option>راس الخيمه</option><option>ام القيوين</option><option>الفجيره</option></select></div>
+              <div class="fg"><label>📅 يوم التحصيل</label><input id="mc-date" type="date" /></div>
+              <div class="fg" style="max-width:110px"><label>المبلغ (د)</label><input id="mc-amt" type="number" min="0" /></div>
+              <div class="fg" style="max-width:120px"><label>الطريقة</label><select id="mc-method"><option>💵 كاش</option><option>🏦 تحويل</option></select></div>
+              <div class="fg"><label>ملاحظة</label><input id="mc-note" placeholder="اختياري" /></div>
+              <button class="master-btn primary" type="button" onclick="masterCollectAdd()">➕ إضافة</button>
+            </div>
+          </div>
+          <div class="master-collect-box">
+            <div class="master-collect-filters">
+              <div class="fg" style="max-width:170px"><label>الفلتر</label><select id="master-collect-mode" onchange="renderMasterCollect()">
+                <option value="today">📅 اليوم فقط</option>
+                <option value="week" selected>📆 هذا الأسبوع</option>
+                <option value="pend">⏳ المتبقي فقط</option>
+                <option value="all">🗂️ كل المواعيد</option></select></div>
+              <div class="fg" style="flex:2"><label>🔍 بحث</label><input id="master-collect-q" placeholder="اسم / هاتف / ملاحظة" oninput="renderMasterCollect()" /></div>
+              <div style="flex:1"></div>
+              <button class="master-btn secondary" type="button" onclick="loadMasterCollects(true)">🔄 تحديث</button>
+              <button class="master-btn secondary" type="button" onclick="masterCollectCopy()">📋 نسخ واتساب</button>
+            </div>
+            <div style="overflow-x:auto"><table class="master-collect-table">
+              <thead><tr><th>يوم التحصيل</th><th>العميل</th><th>الهاتف</th><th>الإمارة</th><th>المبلغ</th><th>الطريقة</th><th>ملاحظة</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="master-collect-list"><tr><td colspan="9" style="text-align:center;color:#64748b;padding:24px">اضغط على القسم للتحميل…</td></tr></tbody>
+            </table></div>
+          </div>
+        </section>
         </main>
 
         <div class="master-modal" id="master-modal">
@@ -2918,7 +2975,7 @@
   }
 
   function setMasterView(view) {
-    const allowed = new Set(['home', 'orders', 'transfers', 'monthly-transfers', 'reports', 'balances', 'departures']);
+    const allowed = new Set(['home', 'orders', 'transfers', 'monthly-transfers', 'reports', 'balances', 'departures', 'collect']);
     const nextView = allowed.has(view) ? view : 'home';
     const page = $('master-page');
     if (!page) return;
@@ -2937,6 +2994,7 @@
     if (nextView === 'home') renderMasterHomeDashboard();
     if (nextView === 'balances') loadMasterCustomerBalances();
     if (nextView === 'departures') loadMasterDepartures();
+    if (nextView === 'collect') loadMasterCollects();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -5140,6 +5198,166 @@
   }, true);
 
 
+
+
+  /* ⭐ قسم التحصيل المجدول داخل الماستر — متزامن مع برنامج الكمبيوتر والمناديب */
+  let masterCollects = [];
+
+  function mcToast(message) {
+    try {
+      const t = $('toast');
+      if (!t) return;
+      t.textContent = message;
+      t.hidden = false;
+      clearTimeout(t._mc);
+      t._mc = setTimeout(() => { t.hidden = true; }, 3000);
+    } catch (e) {}
+  }
+
+  async function loadMasterCollects(manual) {
+    try {
+      const data = await masterFetch('/api/master/collect');
+      masterCollects = Array.isArray(data && data.collects) ? data.collects : [];
+      const dEl = $('mc-date');
+      if (dEl && !dEl.value) dEl.value = masterDateInput(new Date());
+      renderMasterCollect();
+      if (manual) mcToast('✅ اتحدّث — ' + masterCollects.length + ' موعد');
+    } catch (error) {
+      const box = $('master-collect-list');
+      if (box) box.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#b91c1c;padding:24px">تعذر تحميل المواعيد: ' + String((error && error.message) || error) + '</td></tr>';
+    }
+  }
+
+  function masterCollectFiltered() {
+    const mode = ($('master-collect-mode') && $('master-collect-mode').value) || 'week';
+    const q = (($('master-collect-q') && $('master-collect-q').value) || '').trim();
+    const today = masterDateInput(new Date());
+    const week = masterDateInput(new Date(Date.now() + 7 * 86400000));
+    return masterCollects
+      .filter((r) => r && r.status !== 'cancelled')
+      .filter((r) => {
+        const d = String(r.date || '').slice(0, 10);
+        if (mode === 'today' && d !== today) return false;
+        if (mode === 'week' && (d < today || d > week)) return false;
+        if (mode === 'pend' && r.status !== 'pend') return false;
+        if (q && !(String(r.name || '').includes(q) || String(r.phone || '').includes(q) || String(r.note || '').includes(q))) return false;
+        return true;
+      })
+      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  }
+
+  function renderMasterCollect() {
+    const list = masterCollectFiltered();
+    const today = masterDateInput(new Date());
+    const sum = (a) => a.reduce((s, r) => s + (Number(r.amt) || 0), 0);
+    const todayPend = list.filter((r) => r.status === 'pend' && String(r.date).slice(0, 10) === today);
+    const pend = list.filter((r) => r.status === 'pend');
+    const done = list.filter((r) => r.status === 'done');
+    const kpi = $('master-collect-kpis');
+    if (kpi) {
+      const K = (n, l, warn) => '<div class="master-collect-kpi' + (warn ? ' warn' : '') + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>';
+      kpi.innerHTML = K(todayPend.length + ' موعد', 'مستحق اليوم — ' + sum(todayPend).toLocaleString('ar-EG-u-nu-latn') + ' درهم', todayPend.length > 0)
+        + K(pend.length + ' موعد', 'متبقي — ' + sum(pend).toLocaleString('ar-EG-u-nu-latn') + ' درهم')
+        + K(done.length + ' موعد', 'تم تحصيلها — ' + sum(done).toLocaleString('ar-EG-u-nu-latn') + ' درهم')
+        + K(masterCollects.length.toLocaleString('ar-EG-u-nu-latn'), 'إجمالي المواعيد المسجلة');
+    }
+    const box = $('master-collect-list');
+    if (!box) return;
+    box.innerHTML = list.map((r) => {
+      const overdue = r.status === 'pend' && String(r.date).slice(0, 10) < today;
+      const st = r.status === 'done' ? '<span class="master-collect-pill g">✅ تم التحصيل</span>'
+        : overdue ? '<span class="master-collect-pill r">🔴 فات موعده</span>'
+        : '<span class="master-collect-pill a">⏳ قادم</span>';
+      const waPhone = String(r.phone || '').replace(/\D/g, '').replace(/^0/, '').replace(/^971/, '');
+      const wa = waPhone.length >= 7 ? '<a class="master-btn secondary" target="_blank" rel="noopener" href="https://wa.me/971' + waPhone + '">💬</a>' : '';
+      const acts = r.status !== 'done'
+        ? '<button class="master-btn primary" type="button" onclick="masterCollectDone(\'' + r.id + '\')">✅ تم التحصيل</button>'
+          + '<button class="master-btn secondary" type="button" onclick="masterCollectPostpone(\'' + r.id + '\')">➕ تأجيل لبكرة</button>'
+        : '';
+      return '<tr class="' + (overdue ? 'overdue' : '') + '">'
+        + '<td><b>' + String(r.date || '').slice(0, 10) + '</b></td>'
+        + '<td><b>' + String(r.name || '') + '</b></td>'
+        + '<td style="direction:ltr;text-align:right">' + String(r.phone || '—') + '</td>'
+        + '<td>' + String(r.emirate || '—') + '</td>'
+        + '<td><b>' + (Number(r.amt) || 0).toLocaleString('ar-EG-u-nu-latn') + ' د</b></td>'
+        + '<td>' + String(r.method || '—') + '</td>'
+        + '<td>' + String(r.note || '') + '</td>'
+        + '<td>' + st + '</td>'
+        + '<td><div class="master-collect-actions">' + acts + wa
+        + '<button class="master-btn secondary" type="button" onclick="masterCollectNote(\'' + r.id + '\')">📝</button>'
+        + '<button class="master-btn danger" type="button" onclick="masterCollectDelete(\'' + r.id + '\')">🗑️</button>'
+        + '</div></td></tr>';
+    }).join('') || '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:24px">لا توجد مواعيد في هذا الفلتر — أضف أول موعد من الفوق</td></tr>';
+  }
+
+  async function masterCollectPatch(id, patch) {
+    try {
+      await masterFetch('/api/master/collect-update', { method: 'POST', body: JSON.stringify({ id, patch }) });
+      const row = masterCollects.find((r) => r.id === id);
+      if (row) Object.assign(row, patch, { updated_at: new Date().toISOString() });
+      renderMasterCollect();
+      mcToast('✅ تم الحفظ — هيتزامن مع الكمبيوتر والمناديب');
+    } catch (error) {
+      alert('❌ ' + String((error && error.message) || error));
+    }
+  }
+  function masterCollectDone(id) { masterCollectPatch(id, { status: 'done', done_at: new Date().toISOString() }); }
+  function masterCollectPostpone(id) {
+    const row = masterCollects.find((r) => r.id === id);
+    if (!row) return;
+    const d = new Date(row.date || Date.now());
+    d.setDate(d.getDate() + 1);
+    masterCollectPatch(id, { date: masterDateInput(d), status: 'pend' });
+  }
+  function masterCollectNote(id) {
+    const row = masterCollects.find((r) => r.id === id);
+    if (!row) return;
+    const v = prompt('📝 ملاحظة الموعد:', row.note || '');
+    if (v === null) return;
+    masterCollectPatch(id, { note: v.trim() });
+  }
+  function masterCollectDelete(id) {
+    if (!confirm('🗑️ حذف الموعد؟ هيتلغي من الكمبيوتر كمان')) return;
+    masterCollects = masterCollects.filter((r) => r.id !== id);
+    renderMasterCollect();
+    masterCollectPatch(id, { status: 'cancelled' });
+  }
+  async function masterCollectAdd() {
+    const name = (($('mc-name') && $('mc-name').value) || '').trim();
+    if (!name) { mcToast('⚠️ اكتب اسم العميل'); return; }
+    const row = {
+      id: 'M' + Date.now(),
+      code: '',
+      name: name,
+      phone: (($('mc-phone') && $('mc-phone').value) || '').trim(),
+      emirate: (($('mc-emi') && $('mc-emi').value) || ''),
+      date: (($('mc-date') && $('mc-date').value) || masterDateInput(new Date())),
+      amt: Number(($('mc-amt') && $('mc-amt').value)) || 0,
+      method: (($('mc-method') && $('mc-method').value) || '💵 كاش'),
+      note: (($('mc-note') && $('mc-note').value) || '').trim(),
+      status: 'pend',
+      done_at: '',
+      src_inv: '',
+      created_at: new Date().toISOString()
+    };
+    try {
+      await masterFetch('/api/master/collect-update', { method: 'POST', body: JSON.stringify({ id: row.id, patch: row }) });
+      masterCollects.push(row);
+      ['mc-name', 'mc-phone', 'mc-amt', 'mc-note'].forEach((i) => { const el = $(i); if (el) el.value = ''; });
+      renderMasterCollect();
+      mcToast('✅ اتضاف الموعد');
+    } catch (error) {
+      alert('❌ ' + String((error && error.message) || error));
+    }
+  }
+  function masterCollectCopy() {
+    const list = masterCollectFiltered().filter((r) => r.status === 'pend');
+    if (!list.length) { mcToast('مفيش مواعيد متبقية'); return; }
+    const lines = ['📅 مواعيد التحصيل — ' + masterDateInput(new Date()), ''];
+    list.forEach((r) => lines.push('• ' + String(r.date || '').slice(0, 10) + ' | ' + r.name + ' | ' + (Number(r.amt) || 0) + ' د' + (r.note ? ' | ' + r.note : '')));
+    try { navigator.clipboard.writeText(lines.join('\n')); } catch (e) {}
+    mcToast('📋 اتنسخ — الصقه في الواتساب');
+  }
 
   boot();
 })();
