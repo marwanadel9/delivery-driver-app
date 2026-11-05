@@ -968,8 +968,7 @@
       .order-card .invoice-expand-toggle { display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;margin:8px 0;padding:8px 10px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer; }
       .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
       html.driver-invoice-open, body.driver-invoice-open { overflow:hidden!important; overscroll-behavior:none!important; }
-      .driver-invoice-open #faPttBtn,.driver-invoice-open #faTargets,.driver-invoice-open #faPttSts,.driver-invoice-open #faPttSpk { display:none!important; }
-      .order-card.is-fullscreen-invoice { position:fixed!important; top:0!important; bottom:0!important; left:6px!important; right:6px!important; z-index:2147483000!important; width:calc(100vw - 12px)!important; max-width:none!important; height:100dvh!important; min-height:0!important; max-height:100dvh!important; margin:0 auto!important; padding:7px 8px 8px!important; box-sizing:border-box!important; overflow:hidden!important; overflow-y:hidden!important; overflow-x:hidden!important; overscroll-behavior:none!important; border:1px solid #dcfce7!important; border-radius:12px!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
+      .order-card.is-fullscreen-invoice { position:fixed!important; top:env(safe-area-inset-top, 0px)!important; bottom:env(safe-area-inset-bottom, 0px)!important; left:6px!important; right:6px!important; z-index:2147483000!important; width:calc(100vw - 12px)!important; max-width:none!important; height:auto!important; min-height:0!important; max-height:none!important; margin:0 auto!important; padding:7px 8px 8px!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:1px solid #dcfce7!important; border-radius:12px!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
       .order-card.is-fullscreen-invoice .order-card-head { margin:0!important; gap:5px!important; }
       .order-card.is-fullscreen-invoice .customer-row { margin:0!important; padding:4px 0!important; gap:7px!important; }
       .order-card.is-fullscreen-invoice .customer-main h2 { font-size:15px!important; margin:0!important; line-height:1.25!important; }
@@ -997,7 +996,7 @@
       .invoice-fullscreen-head { position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;box-sizing:border-box;padding:8px 0 10px;background:#fff;border-bottom:1px solid #dcfce7; }
       .invoice-fullscreen-title { color:#166534;font-size:15px;font-weight:900; }
       .invoice-fullscreen-close { border:0;border-radius:10px;background:#dcfce7;color:#166534;min-width:42px;min-height:40px;padding:8px 12px;font:inherit;font-size:14px;font-weight:900;cursor:pointer; }
-      .order-card.is-fullscreen-invoice .btn-deliver { position:relative!important;bottom:auto!important;z-index:15!important;min-height:42px!important;flex:0 0 auto!important;margin-top:auto!important;box-shadow:none!important; }
+      .order-card.is-fullscreen-invoice .btn-deliver { position:sticky!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;z-index:15!important;min-height:52px!important;box-shadow:0 -5px 18px rgba(255,255,255,.95)!important; }
       .order-card.is-fullscreen-invoice .invoice-expand-toggle { display:none!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; direction:rtl!important; gap:8px!important; width:100%!important; min-width:0!important; align-items:start!important; }
       .order-card.is-fullscreen-invoice .driver-products-tables.single-table { grid-template-columns:minmax(0,1fr)!important; }
@@ -1150,27 +1149,7 @@
       let previousBodyOverflow = '';
       let previousHtmlOverflow = '';
       let fullscreenHead = null;
-      let invoiceFitFrame = 0;
-      const fitInvoiceToScreen = () => {
-        if (!node.classList.contains('is-fullscreen-invoice')) return;
-        node.style.zoom = '1';
-        node.style.setProperty('width', 'calc(100vw - 12px)', 'important');
-        const availableHeight = Math.max(240, window.innerHeight || document.documentElement.clientHeight || 0);
-        const contentHeight = Math.max(node.scrollHeight, node.getBoundingClientRect().height);
-        const scale = Math.min(1, availableHeight / Math.max(1, contentHeight));
-        node.style.zoom = String(scale);
-        node.style.setProperty('width', `calc((100vw - 12px) / ${scale})`, 'important');
-      };
-      const scheduleInvoiceFit = () => {
-        if (invoiceFitFrame) cancelAnimationFrame(invoiceFitFrame);
-        invoiceFitFrame = requestAnimationFrame(() => { invoiceFitFrame = 0; fitInvoiceToScreen(); });
-      };
       const closeInvoiceFullscreen = () => {
-        window.removeEventListener('resize', scheduleInvoiceFit);
-        if (invoiceFitFrame) cancelAnimationFrame(invoiceFitFrame);
-        invoiceFitFrame = 0;
-        node.style.removeProperty('zoom');
-        node.style.removeProperty('width');
         node.classList.remove('is-fullscreen-invoice');
         node.classList.add('is-compact');
         sortInput.disabled = false;
@@ -1214,8 +1193,6 @@
         });
         fullscreenHead.append(heading, closeButton);
         node.insertBefore(fullscreenHead, node.firstChild);
-        window.addEventListener('resize', scheduleInvoiceFit);
-        scheduleInvoiceFit();
         expandButton.textContent = 'الفاتورة مفتوحة';
         expandButton.setAttribute('aria-expanded', 'true');
       };
