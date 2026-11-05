@@ -968,7 +968,7 @@
       .order-card .invoice-expand-toggle { display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;margin:8px 0;padding:8px 10px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer; }
       .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
       html.driver-invoice-open, body.driver-invoice-open { overflow:hidden!important; overscroll-behavior:none!important; }
-      .order-card.is-fullscreen-invoice { position:fixed!important; top:0!important; bottom:0!important; left:0!important; right:0!important; z-index:2147483000!important; width:100vw!important; max-width:100vw!important; height:100vh!important; height:100dvh!important; min-height:100vh!important; min-height:100dvh!important; max-height:100vh!important; max-height:100dvh!important; margin:0!important; padding:calc(8px + env(safe-area-inset-top, 0px)) 8px calc(8px + env(safe-area-inset-bottom, 0px))!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:none!important; border-radius:0!important; background:#fff!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
+      .order-card.is-fullscreen-invoice { position:fixed!important; top:env(safe-area-inset-top, 0px)!important; bottom:env(safe-area-inset-bottom, 0px)!important; left:6px!important; right:6px!important; z-index:2147483000!important; width:calc(100vw - 12px)!important; max-width:none!important; height:auto!important; min-height:0!important; max-height:none!important; margin:0 auto!important; padding:7px 8px 8px!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:1px solid #dcfce7!important; border-radius:12px!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
       .order-card.is-fullscreen-invoice .order-card-head { margin:0!important; gap:5px!important; }
       .order-card.is-fullscreen-invoice .customer-row { margin:0!important; padding:4px 0!important; gap:7px!important; }
       .order-card.is-fullscreen-invoice .customer-main h2 { font-size:15px!important; margin:0!important; line-height:1.25!important; }
@@ -1161,12 +1161,7 @@
         fullscreenHead = null;
         expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
         expandButton.setAttribute('aria-expanded', 'false');
-        /* ⭐ رجوع مضمون لنفس النقطة حتى لو حصل رندر أثناء فتح الفاتورة */
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            window.scrollTo({ top: savedScrollY, behavior: 'instant' });
-          });
-        });
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' });
       };
       const toggleInvoiceDetails = () => {
         if (node.classList.contains('is-fullscreen-invoice')) {
@@ -1183,17 +1178,6 @@
         node.classList.remove('is-compact');
         node.classList.add('is-fullscreen-invoice');
         sortInput.disabled = true;
-        /* ⭐ زرار رجوع الهاتف: ندفع حالة في التاريخ — الرجوع يقفل الفاتورة
-           ويرجع المندوب لنفس النقطة اللي كان واقف عليها في القايمة */
-        try { history.pushState({ faInv: 1 }, '', location.href); } catch (e) {}
-        if (!window.__faBackBound) {
-          window.__faBackBound = true;
-          window.addEventListener('popstate', function () {
-            if (!document.body.classList.contains('driver-invoice-open')) return;
-            const closeBtn = document.querySelector('.invoice-fullscreen-close');
-            if (closeBtn) { try { closeBtn.click(); } catch (e) {} }
-          });
-        }
         fullscreenHead = document.createElement('div');
         fullscreenHead.className = 'invoice-fullscreen-head';
         const heading = document.createElement('strong');
