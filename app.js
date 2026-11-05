@@ -952,7 +952,6 @@
       .order-card.is-compact [role="button"],
       .order-card.is-compact [onclick] { display:none!important; pointer-events:none!important; }
       .order-card.is-compact { position:relative!important; padding:9px!important; gap:5px!important; cursor:pointer!important; }
-      .order-card.is-compact .fa-coordinator-badge{display:none!important}
       .driver-order-wrap { display:flex!important;flex-direction:column!important;width:100%!important;box-sizing:border-box!important;gap:0!important; }
       .driver-sort-row { display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:8px!important;width:100%!important;box-sizing:border-box!important;margin:0 0 6px!important;padding:0 4px!important;direction:rtl!important; }
       .driver-sort-label { color:#9a3412!important;font-size:13px!important;font-weight:900!important;white-space:nowrap!important; }
@@ -968,7 +967,7 @@
       .order-card .invoice-expand-toggle { display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;margin:8px 0;padding:8px 10px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer; }
       .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
       html.driver-invoice-open, body.driver-invoice-open { overflow:hidden!important; overscroll-behavior:none!important; }
-      .order-card.is-fullscreen-invoice { position:fixed!important; top:0!important; bottom:0!important; left:0!important; right:0!important; z-index:2147483000!important; width:100vw!important; max-width:100vw!important; height:100vh!important; height:100dvh!important; min-height:100vh!important; min-height:100dvh!important; max-height:100vh!important; max-height:100dvh!important; margin:0!important; padding:calc(8px + env(safe-area-inset-top, 0px)) 8px calc(8px + env(safe-area-inset-bottom, 0px))!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:none!important; border-radius:0!important; background:#fff!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
+      .order-card.is-fullscreen-invoice { position:fixed!important; top:env(safe-area-inset-top, 0px)!important; bottom:env(safe-area-inset-bottom, 0px)!important; left:6px!important; right:6px!important; z-index:2147483000!important; width:calc(100vw - 12px)!important; max-width:none!important; height:auto!important; min-height:0!important; max-height:none!important; margin:0 auto!important; padding:7px 8px 8px!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:1px solid #dcfce7!important; border-radius:12px!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
       .order-card.is-fullscreen-invoice .order-card-head { margin:0!important; gap:5px!important; }
       .order-card.is-fullscreen-invoice .customer-row { margin:0!important; padding:4px 0!important; gap:7px!important; }
       .order-card.is-fullscreen-invoice .customer-main h2 { font-size:15px!important; margin:0!important; line-height:1.25!important; }
@@ -1161,12 +1160,7 @@
         fullscreenHead = null;
         expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
         expandButton.setAttribute('aria-expanded', 'false');
-        /* ⭐ رجوع مضمون لنفس النقطة حتى لو حصل رندر أثناء فتح الفاتورة */
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            window.scrollTo({ top: savedScrollY, behavior: 'instant' });
-          });
-        });
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' });
       };
       const toggleInvoiceDetails = () => {
         if (node.classList.contains('is-fullscreen-invoice')) {
@@ -1183,17 +1177,6 @@
         node.classList.remove('is-compact');
         node.classList.add('is-fullscreen-invoice');
         sortInput.disabled = true;
-        /* ⭐ زرار رجوع الهاتف: ندفع حالة في التاريخ — الرجوع يقفل الفاتورة
-           ويرجع المندوب لنفس النقطة اللي كان واقف عليها في القايمة */
-        try { history.pushState({ faInv: 1 }, '', location.href); } catch (e) {}
-        if (!window.__faBackBound) {
-          window.__faBackBound = true;
-          window.addEventListener('popstate', function () {
-            if (!document.body.classList.contains('driver-invoice-open')) return;
-            const closeBtn = document.querySelector('.invoice-fullscreen-close');
-            if (closeBtn) { try { closeBtn.click(); } catch (e) {} }
-          });
-        }
         fullscreenHead = document.createElement('div');
         fullscreenHead.className = 'invoice-fullscreen-head';
         const heading = document.createElement('strong');
@@ -1546,34 +1529,11 @@
         cleanOrderNote(legacyDetails)
       );
 
-      /* ⭐ منسق الموعد يظهر للمندوب جوه الفاتورة — شارة كبيرة واضحة فوق الكارت + يتخبى بس لو فاضي */
-      const coordinatorValue = firstValue(order, ['appointment_coordinator', 'coordinator', 'coordinator_name']);
-      setText(node, 'appointment_coordinator', coordinatorValue);
       const coordinatorField = node.querySelector('[data-f="appointment_coordinator"]');
-      if (coordinatorField && !String(coordinatorValue || '').trim()) {
+      if (coordinatorField) {
         const coordinatorRow = coordinatorField.closest('.info-item, .order-section, .detail-row, .field-row, .master-detail');
         if (coordinatorRow) coordinatorRow.style.display = 'none';
         else coordinatorField.style.display = 'none';
-      }
-      {
-        const coordinatorBadge = node.querySelector('.fa-coordinator-badge');
-        if (coordinatorBadge) coordinatorBadge.remove();
-        if (String(coordinatorValue || '').trim()) {
-          const badge = document.createElement('div');
-          badge.className = 'fa-coordinator-badge';
-          badge.style.cssText = 'display:flex!important;align-items:center;justify-content:center;gap:8px;width:100%;box-sizing:border-box;margin:2px 0 4px;padding:10px 12px;border-radius:12px;background:linear-gradient(135deg,#fef3c7,#fde68a);border:2.5px solid #d4a72c;color:#7c2d12;font-size:19px;font-weight:1000;line-height:1.4;text-align:center;box-shadow:0 3px 10px rgba(212,167,44,.35);';
-          badge.textContent = '📋 منسق الموعد: ' + String(coordinatorValue).trim();
-          /* ⭐ الشيرة الكبيرة مكانها في سطر التفاصيل (مكان السهم) — مش فوق الكارت */
-          const coordRow = coordinatorField ? coordinatorField.closest('.info-item, .order-section, .detail-row, .field-row, .master-detail') : null;
-          if (coordRow && coordRow.parentNode) {
-            coordRow.style.display = 'none';
-            coordRow.parentNode.insertBefore(badge, coordRow.nextSibling);
-          } else {
-            const cardHead = node.querySelector('.order-card-head');
-            if (cardHead && cardHead.parentNode === node) node.insertBefore(badge, cardHead.nextSibling);
-            else node.insertBefore(badge, node.firstChild);
-          }
-        }
       }
 
       setText(
@@ -2591,29 +2551,6 @@
       .master-page[data-view="balances"] #master-customer-balances{display:block}
       .master-page[data-view="departures"] .master-home-intro,.master-page[data-view="departures"] .master-stats,.master-page[data-view="departures"] .master-filters,.master-page[data-view="departures"] .master-orders-layout,.master-page[data-view="departures"] #master-customer-balances{display:none}
       .master-page[data-view="departures"] #master-driver-departures{display:block}
-#master-collect{display:none}
-.master-page[data-view="collect"] #master-collect{display:block}
-.master-page[data-view="collect"] .master-home-intro,.master-page[data-view="collect"] .master-stats,.master-page[data-view="collect"] .master-filters,.master-page[data-view="collect"] .master-orders-layout{display:none}
-.master-collect-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:0 0 14px}
-.master-collect-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px}
-.master-collect-kpi .n{font-size:22px;font-weight:900;color:#0f172a}
-.master-collect-kpi .l{font-size:12px;font-weight:800;color:#64748b;margin-top:3px}
-.master-collect-kpi.warn .n{color:#b91c1c}
-.master-collect-box{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:14px}
-.master-collect-box h3{margin:0 0 12px;font-size:16px;color:#0f172a}
-.master-collect-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
-.master-collect-filters .fg{flex:1;min-width:150px}
-.master-collect-filters label{display:block;font-size:12px;font-weight:800;color:#475569;margin-bottom:5px}
-.master-collect-table{width:100%;border-collapse:collapse;font-size:13px}
-.master-collect-table th{background:#f1f5f9;color:#475569;padding:10px;border-bottom:2px solid #e2e8f0;text-align:right;white-space:nowrap;font-size:12px}
-.master-collect-table td{padding:9px 10px;border-bottom:1px solid #eef2f7;vertical-align:middle}
-.master-collect-table tr.overdue td{background:#fef2f2}
-.master-collect-pill{display:inline-block;padding:3px 11px;border-radius:20px;font-size:11px;font-weight:800;white-space:nowrap}
-.master-collect-pill.g{background:#dcfce7;color:#166534}
-.master-collect-pill.a{background:#fef3c7;color:#92400e}
-.master-collect-pill.r{background:#fee2e2;color:#991b1b}
-.master-collect-actions{display:flex;gap:6px;flex-wrap:wrap}
-.master-collect-actions .master-btn{padding:6px 11px;font-size:12px}
       .master-monthly-transfers{display:none;background:#fff;border:1px solid #e2eaf2;border-radius:18px;padding:16px;box-shadow:0 8px 26px rgba(30,49,67,.05)}
       .master-page[data-view="monthly-transfers"] .master-home-intro,.master-page[data-view="monthly-transfers"] .master-stats,.master-page[data-view="monthly-transfers"] .master-filters,.master-page[data-view="monthly-transfers"] .master-orders-layout,.master-page[data-view="monthly-transfers"] #master-customer-balances,.master-page[data-view="monthly-transfers"] #master-driver-departures{display:none!important}
       .master-page[data-view="monthly-transfers"] #master-monthly-transfers{display:block!important}
@@ -2702,7 +2639,6 @@
           <button class="master-nav-btn" type="button" data-master-view-tab="monthly-transfers">📅 التحويلات الشهرية</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="balances">💰 أرصدة العملاء</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="departures">🚗 تحرك المندوبين</button>
-          <button class="master-nav-btn" type="button" data-master-view-tab="collect">📅 تحصيل مجدول</button>
           <button class="master-nav-btn" type="button" data-master-view-tab="reports">📊 التقارير والإحصائيات</button>
         </nav>
 
@@ -2908,45 +2844,6 @@
             </table>
             </section>
           </div>
-        <section id="master-collect" aria-label="التحصيل المجدول">
-          <div class="master-collect-kpis" id="master-collect-kpis"></div>
-          <div class="master-collect-box">
-            <h3>➕ إضافة موعد تحصيل — بيظهر فورًا في برنامج الكمبيوتر</h3>
-            <div class="master-collect-filters">
-              <div class="fg" style="flex:2"><label>العميل</label><input id="mc-name" placeholder="اسم العميل" /></div>
-              <div class="fg"><label>الهاتف</label><input id="mc-phone" style="direction:ltr;text-align:left" /></div>
-              <div class="fg"><label>الإمارة</label><select id="mc-emi"><option>دبي</option><option>ابوظبي</option><option>الشارقه</option><option>عجمان</option><option>راس الخيمه</option><option>ام القيوين</option><option>الفجيره</option></select></div>
-              <div class="fg"><label>📅 يوم التحصيل</label><input id="mc-date" type="date" /></div>
-              <div class="fg" style="max-width:110px"><label>المبلغ (د)</label><input id="mc-amt" type="number" min="0" /></div>
-              <div class="fg" style="max-width:120px"><label>الطريقة</label><select id="mc-method"><option>💵 كاش</option><option>🏦 تحويل</option></select></div>
-              <div class="fg"><label>ملاحظة</label><input id="mc-note" placeholder="اختياري" /></div>
-              <button class="master-btn primary" type="button" onclick="masterCollectAdd()">➕ إضافة</button>
-            </div>
-          </div>
-          <div class="master-collect-box">
-            <div id="master-collect-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-              <button type="button" class="master-btn secondary" data-cm="today" onclick="masterCollectChip(this)">📅 اليوم</button>
-              <button type="button" class="master-btn secondary" data-cm="week" onclick="masterCollectChip(this)">📆 الأسبوع</button>
-              <button type="button" class="master-btn secondary" data-cm="pend" onclick="masterCollectChip(this)">⏳ المتبقي</button>
-              <button type="button" class="master-btn secondary" data-cm="all" onclick="masterCollectChip(this)">🗂️ الكل</button>
-            </div>
-            <div class="master-collect-filters">
-              <div class="fg" style="max-width:170px"><label>الفلتر</label><select id="master-collect-mode" onchange="renderMasterCollect()">
-                <option value="today">📅 اليوم فقط</option>
-                <option value="week" selected>📆 هذا الأسبوع</option>
-                <option value="pend">⏳ المتبقي فقط</option>
-                <option value="all">🗂️ كل المواعيد</option></select></div>
-              <div class="fg" style="flex:2"><label>🔍 بحث</label><input id="master-collect-q" placeholder="اسم / هاتف / ملاحظة" oninput="renderMasterCollect()" /></div>
-              <div style="flex:1"></div>
-              <button class="master-btn secondary" type="button" onclick="loadMasterCollects(true)">🔄 تحديث</button>
-              <button class="master-btn secondary" type="button" onclick="masterCollectCopy()">📋 نسخ واتساب</button>
-            </div>
-            <div style="overflow-x:auto"><table class="master-collect-table">
-              <thead><tr><th>يوم التحصيل</th><th>العميل</th><th>الهاتف</th><th>الإمارة</th><th>المبلغ</th><th>الطريقة</th><th>ملاحظة</th><th>الحالة</th><th></th></tr></thead>
-              <tbody id="master-collect-list"><tr><td colspan="9" style="text-align:center;color:#64748b;padding:24px">اضغط على القسم للتحميل…</td></tr></tbody>
-            </table></div>
-          </div>
-        </section>
         </main>
 
         <div class="master-modal" id="master-modal">
@@ -3021,7 +2918,7 @@
   }
 
   function setMasterView(view) {
-    const allowed = new Set(['home', 'orders', 'transfers', 'monthly-transfers', 'reports', 'balances', 'departures', 'collect']);
+    const allowed = new Set(['home', 'orders', 'transfers', 'monthly-transfers', 'reports', 'balances', 'departures']);
     const nextView = allowed.has(view) ? view : 'home';
     const page = $('master-page');
     if (!page) return;
@@ -3040,7 +2937,6 @@
     if (nextView === 'home') renderMasterHomeDashboard();
     if (nextView === 'balances') loadMasterCustomerBalances();
     if (nextView === 'departures') loadMasterDepartures();
-    if (nextView === 'collect') loadMasterCollects();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -4638,23 +4534,6 @@
         delivery_status: $('master-edit-status')?.value ?? order.delivery_status ?? 'pending'
       };
 
-      /* ⭐ تثبيت الأرقام الحية قبل الحفظ: لو النسخ اتحذفت واتعملت من جديد (بعد مزامنة
-         أو حذف SQL)، المودال لسه ماسك IDs قديمة والتحديث بيفشل على «0 من 1» —
-         نسحب الأرشيف حي من السيرفر ونرجع نطابق الفاتورة بأحدث نسخة بالرقم والشيت */
-      try {
-        const freshResp = await masterFetch('/api/master/orders');
-        if (freshResp && Array.isArray(freshResp.orders)) state.masterOrders = freshResp.orders;
-        const freshList = Array.isArray(state.masterOrders) ? state.masterOrders : [];
-        const freshById = freshList.find((item) => String(item?.id ?? '') === String(order?.id ?? ''));
-        if (!freshById) {
-          const ordNo = String(order?.order_number ?? '').trim();
-          const sheet = String(order?.sheet_name ?? '').trim();
-          const freshAnchor = freshList.find((item) => String(item?.order_number ?? '').trim() === ordNo && String(item?.sheet_name ?? '').trim() === sheet)
-            || freshList.find((item) => String(item?.order_number ?? '').trim() === ordNo);
-          if (freshAnchor) order = Object.assign({}, order, freshAnchor);
-        }
-      } catch (refreshErr) { /* نكمل بالنسخة الحالية لو التحديث تعذر */ }
-
       // Match the complete duplicate group before changing editable identity fields.
       // Every target keeps its own database ID and sheet_name; this is update-only, never insert.
       const originalFingerprint = masterInvoiceFingerprint(order);
@@ -5261,240 +5140,6 @@
   }, true);
 
 
-
-
-  /* ⭐ قسم التحصيل المجدول داخل الماستر — متزامن مع برنامج الكمبيوتر والمناديب */
-  let masterCollects = [];
-
-  function mcToast(message) {
-    try {
-      const t = $('toast');
-      if (!t) return;
-      t.textContent = message;
-      t.hidden = false;
-      clearTimeout(t._mc);
-      t._mc = setTimeout(() => { t.hidden = true; }, 3000);
-    } catch (e) {}
-  }
-
-  async function loadMasterCollects(manual) {
-    try {
-      const data = await masterFetch('/api/master/collect');
-      masterCollects = Array.isArray(data && data.collects) ? data.collects : [];
-      const dEl = $('mc-date');
-      if (dEl && !dEl.value) dEl.value = masterDateInput(new Date());
-      renderMasterCollect();
-      if (manual) mcToast('✅ اتحدّث — ' + masterCollects.length + ' موعد');
-    } catch (error) {
-      const box = $('master-collect-list');
-      if (box) box.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#b91c1c;padding:24px">تعذر تحميل المواعيد: ' + String((error && error.message) || error) + '</td></tr>';
-    }
-  }
-
-  function masterCollectFiltered() {
-    const mode = ($('master-collect-mode') && $('master-collect-mode').value) || 'week';
-    const q = (($('master-collect-q') && $('master-collect-q').value) || '').trim();
-    const today = masterDateInput(new Date());
-    const week = masterDateInput(new Date(Date.now() + 7 * 86400000));
-    return masterCollects
-      .filter((r) => r && r.status !== 'cancelled')
-      .filter((r) => {
-        const d = String(r.date || '').slice(0, 10);
-        if (mode === 'today' && d !== today) return false;
-        if (mode === 'week' && (d < today || d > week)) return false;
-        if (mode === 'pend' && r.status !== 'pend') return false;
-        if (q && !(String(r.name || '').includes(q) || String(r.phone || '').includes(q) || String(r.note || '').includes(q))) return false;
-        return true;
-      })
-      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-  }
-
-  function masterCollectChip(btn) {
-    const chips = document.querySelectorAll('#master-collect-chips [data-cm]');
-    chips.forEach(function (c) {
-      const on = c === btn;
-      c.style.background = on ? 'linear-gradient(145deg,#2e8b62,#1f5c40)' : '';
-      c.style.color = on ? '#fff' : '';
-      c.style.borderColor = on ? 'transparent' : '';
-    });
-    const mode = btn.getAttribute('data-cm');
-    const sel = $('master-collect-mode');
-    if (sel) sel.value = mode;
-    renderMasterCollect();
-  }
-
-  function mcBeep() {
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new Ctx();
-      [[880, 0, 0.16], [1174.66, 0.15, 0.26]].forEach(function (t) {
-        const o = ctx.createOscillator(), g = ctx.createGain();
-        o.type = 'sine'; o.frequency.value = t[0];
-        g.gain.setValueAtTime(0.0001, ctx.currentTime + t[1]);
-        g.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + t[1] + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t[1] + t[2]);
-        o.connect(g); g.connect(ctx.destination);
-        o.start(ctx.currentTime + t[1]); o.stop(ctx.currentTime + t[1] + t[2] + 0.05);
-      });
-    } catch (e) {}
-  }
-
-  /* ⭐ تحديث تلقائي كل 45 ثانية طوال ما التبويب مفتوح */
-  setInterval(function () {
-    const page = document.querySelector('.master-page');
-    if (page && page.getAttribute('data-view') === 'collect') loadMasterCollects(false);
-  }, 45000);
-
-  function renderMasterCollect() {
-    const list = masterCollectFiltered();
-    const today = masterDateInput(new Date());
-    const sum = (a) => a.reduce((s, r) => s + (Number(r.amt) || 0), 0);
-    const todayPend = list.filter((r) => r.status === 'pend' && String(r.date).slice(0, 10) === today);
-    const pend = list.filter((r) => r.status === 'pend');
-    const done = list.filter((r) => r.status === 'done');
-    const kpi = $('master-collect-kpis');
-    if (kpi) {
-      const K = (n, l, warn) => '<div class="master-collect-kpi' + (warn ? ' warn' : '') + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>';
-      kpi.innerHTML = K(todayPend.length + ' موعد', 'مستحق اليوم — ' + sum(todayPend).toLocaleString('ar-EG-u-nu-latn') + ' درهم', todayPend.length > 0)
-        + K(pend.length + ' موعد', 'متبقي — ' + sum(pend).toLocaleString('ar-EG-u-nu-latn') + ' درهم')
-        + K(done.length + ' موعد', 'تم تحصيلها — ' + sum(done).toLocaleString('ar-EG-u-nu-latn') + ' درهم')
-        + K(masterCollects.length.toLocaleString('ar-EG-u-nu-latn'), 'إجمالي المواعيد المسجلة');
-    }
-    /* ⭐ شارة ذهبية على التبويب بعدد مواعيد اليوم المتبقية */
-    try {
-      const navBtn = document.querySelector('[data-master-view-tab="collect"]');
-      if (navBtn) {
-        let bdg = navBtn.querySelector('.fa-collect-bdg');
-        if (todayPend.length > 0) {
-          if (!bdg) {
-            bdg = document.createElement('span');
-            bdg.className = 'fa-collect-bdg';
-            bdg.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;margin-inline-start:6px;border-radius:11px;background:#d4a72c;color:#2b2105;font-size:11px;font-weight:900;';
-            navBtn.appendChild(bdg);
-          }
-          bdg.textContent = todayPend.length;
-        } else if (bdg) bdg.remove();
-      }
-    } catch (e) {}
-    const box = $('master-collect-list');
-    if (!box) return;
-    box.innerHTML = list.map((r) => {
-      const overdue = r.status === 'pend' && String(r.date).slice(0, 10) < today;
-      const st = r.status === 'done' ? '<span class="master-collect-pill g">✅ تم التحصيل' + (r.done_at ? ' · ' + String(r.done_at).slice(11, 16) : '') + '</span>'
-        : overdue ? '<span class="master-collect-pill r">🔴 فات موعده</span>'
-        : '<span class="master-collect-pill a">⏳ قادم</span>';
-      const waPhone = String(r.phone || '').replace(/\D/g, '').replace(/^0/, '').replace(/^971/, '');
-      const wa = waPhone.length >= 7 ? '<a class="master-btn secondary" target="_blank" rel="noopener" href="https://wa.me/971' + waPhone + '">💬</a>' : '';
-      const call = waPhone.length >= 7 ? '<a class="master-btn secondary" href="tel:0' + waPhone + '">📞</a>' : '';
-      const acts = r.status !== 'done'
-        ? '<button class="master-btn primary" type="button" onclick="masterCollectDone(\'' + r.id + '\')">✅ تم التحصيل</button>'
-          + '<button class="master-btn secondary" type="button" onclick="masterCollectPostpone(\'' + r.id + '\')">➕ تأجيل لبكرة</button>'
-        : '';
-      const isToday = String(r.date || '').slice(0, 10) === today;
-      return '<tr class="' + (overdue ? 'overdue' : '') + '">'
-        + '<td><b' + (isToday && r.status === 'pend' ? ' style="color:#b45309;font-size:14px"' : '') + '>' + String(r.date || '').slice(0, 10) + (isToday && r.status === 'pend' ? ' 📌' : '') + '</b></td>'
-        + '<td><b>' + String(r.name || '') + '</b></td>'
-        + '<td style="direction:ltr;text-align:right">' + String(r.phone || '—') + '</td>'
-        + '<td>' + String(r.emirate || '—') + '</td>'
-        + '<td><b>' + (Number(r.amt) || 0).toLocaleString('ar-EG-u-nu-latn') + ' د</b></td>'
-        + '<td>' + String(r.method || '—') + '</td>'
-        + '<td>' + String(r.note || '') + '</td>'
-        + '<td>' + st + '</td>'
-        + '<td><div class="master-collect-actions">' + acts + wa + call
-        + '<button class="master-btn secondary" type="button" onclick="masterCollectNote(\'' + r.id + '\')">📝</button>'
-        + '<button class="master-btn danger" type="button" onclick="masterCollectDelete(\'' + r.id + '\')">🗑️</button>'
-        + '</div></td></tr>';
-    }).join('') || '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:28px;font-size:14px;line-height:2">📅 لا توجد مواعيد هنا<br><span style="font-size:12px">أضف أول موعد من الأعلى — أو أضفه من برنامج الكمبيوتر (قسم «تحصيل مجدول») وهيظهر هنا تلقائيًا</span></td></tr>';
-  }
-
-  async function masterCollectPatch(id, patch) {
-    try {
-      await masterFetch('/api/master/collect-update', { method: 'POST', body: JSON.stringify({ id, patch }) });
-      const row = masterCollects.find((r) => r.id === id);
-      if (row) Object.assign(row, patch, { updated_at: new Date().toISOString() });
-      renderMasterCollect();
-      mcToast('✅ تم الحفظ — هيتزامن مع الكمبيوتر والمناديب');
-    } catch (error) {
-      alert('❌ ' + String((error && error.message) || error));
-    }
-  }
-  function masterCollectDone(id) { mcBeep(); masterCollectPatch(id, { status: 'done', done_at: new Date().toISOString() }); }
-  function masterCollectPostpone(id) {
-    const row = masterCollects.find((r) => r.id === id);
-    if (!row) return;
-    const d = new Date(row.date || Date.now());
-    d.setDate(d.getDate() + 1);
-    masterCollectPatch(id, { date: masterDateInput(d), status: 'pend' });
-  }
-  function masterCollectNote(id) {
-    const row = masterCollects.find((r) => r.id === id);
-    if (!row) return;
-    const v = prompt('📝 ملاحظة الموعد:', row.note || '');
-    if (v === null) return;
-    masterCollectPatch(id, { note: v.trim() });
-  }
-  function masterCollectDelete(id) {
-    if (!confirm('🗑️ حذف الموعد؟ هيتلغي من الكمبيوتر كمان')) return;
-    masterCollects = masterCollects.filter((r) => r.id !== id);
-    renderMasterCollect();
-    masterCollectPatch(id, { status: 'cancelled' });
-  }
-  async function masterCollectAdd() {
-    const name = (($('mc-name') && $('mc-name').value) || '').trim();
-    if (!name) { mcToast('⚠️ اكتب اسم العميل'); return; }
-    const row = {
-      id: 'M' + Date.now(),
-      code: '',
-      name: name,
-      phone: (($('mc-phone') && $('mc-phone').value) || '').trim(),
-      emirate: (($('mc-emi') && $('mc-emi').value) || ''),
-      date: (($('mc-date') && $('mc-date').value) || masterDateInput(new Date())),
-      amt: Number(($('mc-amt') && $('mc-amt').value)) || 0,
-      method: (($('mc-method') && $('mc-method').value) || '💵 كاش'),
-      note: (($('mc-note') && $('mc-note').value) || '').trim(),
-      status: 'pend',
-      done_at: '',
-      src_inv: '',
-      created_at: new Date().toISOString()
-    };
-    try {
-      await masterFetch('/api/master/collect-update', { method: 'POST', body: JSON.stringify({ id: row.id, patch: row }) });
-      masterCollects.push(row);
-      ['mc-name', 'mc-phone', 'mc-amt', 'mc-note'].forEach((i) => { const el = $(i); if (el) el.value = ''; });
-      renderMasterCollect();
-      mcToast('✅ اتضاف الموعد');
-    } catch (error) {
-      alert('❌ ' + String((error && error.message) || error));
-    }
-  }
-  function masterCollectCopy() {
-    const list = masterCollectFiltered().filter((r) => r.status === 'pend');
-    if (!list.length) { mcToast('مفيش مواعيد متبقية'); return; }
-    const lines = ['📅 مواعيد التحصيل — ' + masterDateInput(new Date()), ''];
-    list.forEach((r) => lines.push('• ' + String(r.date || '').slice(0, 10) + ' | ' + r.name + ' | ' + (Number(r.amt) || 0) + ' د' + (r.note ? ' | ' + r.note : '')));
-    try { navigator.clipboard.writeText(lines.join('\n')); } catch (e) {}
-    mcToast('📋 اتنسخ — الصقه في الواتساب');
-  }
-
-
-  /* ⭐ حارس زرار رجوع الهاتف: جوه التطبيق الرجوع يقفل الفاتورة أو يفضل مكانه —
-     ميخرجش من التطبيق غير من شاشة الدخول */
-  if (!window.__faBackGuard) {
-    window.__faBackGuard = true;
-    try { history.pushState({ faApp: 1 }, '', location.href); } catch (e) {}
-    window.addEventListener('popstate', function () {
-      if (document.body.classList.contains('driver-invoice-open')) {
-        const closeBtn = document.querySelector('.invoice-fullscreen-close');
-        if (closeBtn) { try { closeBtn.click(); } catch (e) {} }
-        try { history.pushState({ faApp: 1 }, '', location.href); } catch (e) {}
-        return;
-      }
-      const ordersView = document.getElementById('orders-view');
-      if (ordersView && !ordersView.hidden) {
-        try { history.pushState({ faApp: 1 }, '', location.href); } catch (e) {}
-      }
-    });
-  }
 
   boot();
 })();
