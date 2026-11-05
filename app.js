@@ -1161,12 +1161,7 @@
         fullscreenHead = null;
         expandButton.textContent = 'عرض تفاصيل الفاتورة ▼';
         expandButton.setAttribute('aria-expanded', 'false');
-        /* ⭐ رجوع مضمون لنفس النقطة حتى لو حصل رندر أثناء فتح الفاتورة */
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            window.scrollTo({ top: savedScrollY, behavior: 'instant' });
-          });
-        });
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' });
       };
       const toggleInvoiceDetails = () => {
         if (node.classList.contains('is-fullscreen-invoice')) {
@@ -1183,17 +1178,6 @@
         node.classList.remove('is-compact');
         node.classList.add('is-fullscreen-invoice');
         sortInput.disabled = true;
-        /* ⭐ زرار رجوع الهاتف: ندفع حالة في التاريخ — الرجوع يقفل الفاتورة
-           ويرجع المندوب لنفس النقطة اللي كان واقف عليها في القايمة */
-        try { history.pushState({ faInv: 1 }, '', location.href); } catch (e) {}
-        if (!window.__faBackBound) {
-          window.__faBackBound = true;
-          window.addEventListener('popstate', function () {
-            if (!document.body.classList.contains('driver-invoice-open')) return;
-            const closeBtn = document.querySelector('.invoice-fullscreen-close');
-            if (closeBtn) { try { closeBtn.click(); } catch (e) {} }
-          });
-        }
         fullscreenHead = document.createElement('div');
         fullscreenHead.className = 'invoice-fullscreen-head';
         const heading = document.createElement('strong');
@@ -1932,52 +1916,7 @@
         }
       }
 
-      // البطاقة الخارجية كلها تفتح الفاتورة فقط؛ لا تعمل أي عناصر بداخلها قبل الفتح.
-      // عند فتح الفاتورة بالكامل، تبقى كل الأزرار الداخلية بوظائفها الأصلية.
-      const faOpenInvoice = (event) => {
-        if (node.classList.contains('is-fullscreen-invoice')) return;
-        // لا تفتح الفاتورة عند الضغط على خانة الترتيب.
-        if (event.target && event.target.closest && event.target.closest('.driver-sort-row')) return;
-        if (event.target && event.target.closest && (event.target.closest('input,select,textarea,a,button'))) return;
-        event.preventDefault();
-        event.stopPropagation();
-        toggleInvoiceDetails();
-      };
-      node.addEventListener('click', faOpenInvoice, true);
-      /* ⭐ فتح بضغطة ثابتة فقط: السكرول/السحب بيخلصوا بـ touchend على الكارت —
-         منقيس مكان وبداية اللمس، وأي حركة أكتر من 12px أو ضغطة أطول من نص ثانية
-         متفتحش الفاتورة */
-      let __faTapStart = null;
-      let __faLastOpenTap = 0;
-      node.addEventListener('touchstart', (e) => {
-        const t = e.changedTouches[0];
-        if (t) __faTapStart = { x: t.clientX, y: t.clientY, t: Date.now() };
-      }, { capture: true, passive: true });
-      const faTapShouldOpen = (ev) => {
-        const now = Date.now();
-        if (now - __faLastOpenTap < 400) return false;
-        if (__faTapStart) {
-          const dx = Math.abs(ev.clientX - __faTapStart.x);
-          const dy = Math.abs(ev.clientY - __faTapStart.y);
-          const dt = now - __faTapStart.t;
-          __faTapStart = null;
-          if (dx > 12 || dy > 12 || dt > 600) return false;
-        }
-        __faLastOpenTap = now;
-        return true;
-      };
-      node.addEventListener('pointerup', (event) => {
-        if (event.pointerType === 'mouse') return;
-        if (!faTapShouldOpen(event)) return;
-        faOpenInvoice(event);
-      }, true);
-      node.addEventListener('touchend', (e) => {
-        if (!__faTapStart) return;
-        const t = e.changedTouches[0];
-        if (!t) return;
-        if (!faTapShouldOpen(t)) return;
-        faOpenInvoice(e);
-      }, true);
+      // فتح الفاتورة يتم من زر «عرض تفاصيل الفاتورة» فقط، كما في الكود المرجعي.
 
       const orderWrap = document.createElement('div');
       orderWrap.className = 'driver-order-wrap';
