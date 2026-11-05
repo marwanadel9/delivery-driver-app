@@ -823,10 +823,12 @@ export default {
         const sheet =
           auth.driver.sheet_name;
 
-        /* ⭐ المندوب يشوف فواتير اليوم فقط: الأرشيف اليومي يمنع تراكم
-           الفواتير المسلّمة القديمة في تبويب «تم التسليم» بعد كل مزامنة */
-        const todayStart =
-          new Date().toISOString().slice(0, 10) + "T00:00:00";
+        /* ⭐ المندوب يشوف فواتير «اليوم» فقط — واليوم بيتحسب بتوقيت دبي (UTC+4)
+           مش UTC: الشغل المرفوع بعد منتصف الليل بتوقيتك (مثلًا 1:30 ص) بيتسجل
+           على السيرفر بليلة الأمس بالتوقيت العالمي، وفلتر UTC كان بيخفيه */
+        const dubaiNowMs = Date.now() + (4 * 3600 * 1000);
+        const dubaiDay = new Date(dubaiNowMs).toISOString().slice(0, 10);
+        const todayStart = dubaiDay + "T00:00:00+04:00";
         const ordersPath =
           "/rest/v1/orders?sheet_name=eq." +
           encodeURIComponent(sheet) +
