@@ -954,7 +954,7 @@
       .order-card.is-compact { position:relative!important; padding:9px!important; gap:5px!important; cursor:pointer!important; }
       .order-card.is-compact .fa-coordinator-badge{display:none!important}
       .driver-order-wrap { display:flex!important;flex-direction:column!important;width:100%!important;box-sizing:border-box!important;gap:0!important; }
-      .driver-sort-row { display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:8px!important;width:100%!important;box-sizing:border-box!important;margin:0 0 6px!important;padding:0 4px!important;direction:rtl!important; }
+      .driver-sort-row { display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:6px!important;width:100%!important;box-sizing:border-box!important;margin:0 0 4px!important;padding:0 2px!important;direction:rtl!important;pointer-events:none!important; } .driver-sort-row .driver-sort-input{pointer-events:auto!important;}
       .driver-sort-label { color:#9a3412!important;font-size:13px!important;font-weight:900!important;white-space:nowrap!important; }
       .driver-sort-input { width:76px!important;height:42px!important;box-sizing:border-box!important;border:2px solid #f97316!important;border-radius:10px!important;background:#fff7ed!important;color:#ea580c!important;text-align:center!important;direction:ltr!important;unicode-bidi:isolate!important;font-family:Arial,sans-serif!important;font-size:22px!important;font-weight:1000!important;outline:none!important; }
       .driver-sort-input:focus { border-color:#c2410c!important;box-shadow:0 0 0 3px rgba(249,115,22,.18)!important; }
@@ -1934,13 +1934,20 @@
 
       // البطاقة الخارجية كلها تفتح الفاتورة فقط؛ لا تعمل أي عناصر بداخلها قبل الفتح.
       // عند فتح الفاتورة بالكامل، تبقى كل الأزرار الداخلية بوظائفها الأصلية.
-      node.addEventListener('click', (event) => {
+      const faOpenInvoice = (event) => {
         if (node.classList.contains('is-fullscreen-invoice')) return;
-        // لا تفتح الفاتورة عند الضغط على أسهم الترتيب.
+        // لا تفتح الفاتورة عند الضغط على خانة الترتيب.
         if (event.target && event.target.closest && event.target.closest('.driver-sort-row')) return;
+        if (event.target && event.target.closest && (event.target.closest('input,select,textarea,a,button'))) return;
         event.preventDefault();
         event.stopPropagation();
         toggleInvoiceDetails();
+      };
+      node.addEventListener('click', faOpenInvoice, true);
+      /* ⭐ fallback للـ WebView بتاع APK: لو حدث الضغطة العادية متأخر/متجاهل، pointerup يفتح فورًا */
+      node.addEventListener('pointerup', (event) => {
+        if (event.pointerType === 'mouse') return;
+        faOpenInvoice(event);
       }, true);
 
       const orderWrap = document.createElement('div');
