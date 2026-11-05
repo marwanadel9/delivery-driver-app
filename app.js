@@ -956,7 +956,7 @@
       .driver-order-wrap { display:flex!important;flex-direction:column!important;width:100%!important;box-sizing:border-box!important;gap:0!important; }
       .driver-sort-row { display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:6px!important;width:100%!important;box-sizing:border-box!important;margin:0 0 4px!important;padding:0 2px!important;direction:rtl!important;pointer-events:none!important; } .driver-sort-row .driver-sort-input{pointer-events:auto!important;}
       .driver-sort-label { color:#9a3412!important;font-size:13px!important;font-weight:900!important;white-space:nowrap!important; }
-      .driver-sort-input { width:76px!important;height:42px!important;box-sizing:border-box!important;border:2px solid #f97316!important;border-radius:10px!important;background:#fff7ed!important;color:#ea580c!important;text-align:center!important;direction:ltr!important;unicode-bidi:isolate!important;font-family:Arial,sans-serif!important;font-size:22px!important;font-weight:1000!important;outline:none!important; }
+      .driver-sort-input { width:76px!important;height:42px!important;box-sizing:border-box!important;border:2px solid #f97316!important;border-radius:10px!important;background:#fff7ed!important;color:#ea580c!important;text-align:center!important;direction:ltr!important;unicode-bidi:isolate!important;font-family:Arial,sans-serif!important;font-size:22px!important;font-weight:1000!important;outline:none!important;touch-action:pan-y!important;-webkit-user-select:text!important;user-select:text!important; }
       .driver-sort-input:focus { border-color:#c2410c!important;box-shadow:0 0 0 3px rgba(249,115,22,.18)!important; }
       .driver-sort-input:disabled,.driver-sort-input[readonly] { opacity:.75!important;background:#ffedd5!important; }
       .order-card.is-compact .order-card-head { margin:0!important; gap:4px!important; }
@@ -1113,11 +1113,13 @@
       sortLabel.textContent = 'ترتيب الفاتورة';
       const sortInput = document.createElement('input');
       sortInput.className = 'driver-sort-input';
-      sortInput.type = 'number';
-      sortInput.min = '1';
-      sortInput.max = String(state.orders.length || 1);
-      sortInput.step = '1';
+      // استخدم text بدل number حتى لا يغيّر Android WebView الرقم عند سحب الصفحة فوق الحقل.
+      // تظل لوحة الأرقام ظاهرة عند الضغط، ويُحفظ الترتيب بعد إدخال رقم صحيح فقط.
+      sortInput.type = 'text';
       sortInput.inputMode = 'numeric';
+      sortInput.setAttribute('pattern', '[0-9]*');
+      sortInput.setAttribute('autocomplete', 'off');
+      sortInput.setAttribute('spellcheck', 'false');
       sortInput.lang = 'en';
       sortInput.dir = 'ltr';
       sortInput.value = String(Math.max(1, Number(order._driver_sort_position) || state.orders.findIndex((item) => String(item.id) === String(order.id)) + 1));
@@ -1130,8 +1132,9 @@
         event.stopPropagation();
       });
       sortInput.addEventListener('change', () => {
-        const nextPosition = Number(sortInput.value);
-        if (!Number.isInteger(nextPosition) || nextPosition < 1) {
+        const enteredPosition = String(sortInput.value || '').trim();
+        const nextPosition = Number(enteredPosition);
+        if (!/^[0-9]+$/.test(enteredPosition) || !Number.isInteger(nextPosition) || nextPosition < 1) {
           sortInput.value = String(state.orders.findIndex((item) => String(item.id) === String(order.id)) + 1);
           return;
         }
