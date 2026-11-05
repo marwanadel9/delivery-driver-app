@@ -956,7 +956,7 @@
       .driver-order-wrap { display:flex!important;flex-direction:column!important;width:100%!important;box-sizing:border-box!important;gap:0!important; }
       .driver-sort-row { display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:6px!important;width:100%!important;box-sizing:border-box!important;margin:0 0 4px!important;padding:0 2px!important;direction:rtl!important;pointer-events:none!important; } .driver-sort-row .driver-sort-input{pointer-events:auto!important;}
       .driver-sort-label { color:#9a3412!important;font-size:13px!important;font-weight:900!important;white-space:nowrap!important; }
-      .driver-sort-input { width:76px!important;height:42px!important;box-sizing:border-box!important;border:2px solid #f97316!important;border-radius:10px!important;background:#fff7ed!important;color:#ea580c!important;text-align:center!important;direction:ltr!important;unicode-bidi:isolate!important;font-family:Arial,sans-serif!important;font-size:22px!important;font-weight:1000!important;outline:none!important;touch-action:pan-y!important;-webkit-user-select:text!important;user-select:text!important; }
+      .driver-sort-input { width:76px!important;height:42px!important;box-sizing:border-box!important;border:2px solid #f97316!important;border-radius:10px!important;background:#fff7ed!important;color:#ea580c!important;text-align:center!important;direction:ltr!important;unicode-bidi:isolate!important;font-family:Arial,sans-serif!important;font-size:22px!important;font-weight:1000!important;outline:none!important; }
       .driver-sort-input:focus { border-color:#c2410c!important;box-shadow:0 0 0 3px rgba(249,115,22,.18)!important; }
       .driver-sort-input:disabled,.driver-sort-input[readonly] { opacity:.75!important;background:#ffedd5!important; }
       .order-card.is-compact .order-card-head { margin:0!important; gap:4px!important; }
@@ -1113,13 +1113,11 @@
       sortLabel.textContent = 'ترتيب الفاتورة';
       const sortInput = document.createElement('input');
       sortInput.className = 'driver-sort-input';
-      // استخدم text بدل number حتى لا يغيّر Android WebView الرقم عند سحب الصفحة فوق الحقل.
-      // تظل لوحة الأرقام ظاهرة عند الضغط، ويُحفظ الترتيب بعد إدخال رقم صحيح فقط.
-      sortInput.type = 'text';
+      sortInput.type = 'number';
+      sortInput.min = '1';
+      sortInput.max = String(state.orders.length || 1);
+      sortInput.step = '1';
       sortInput.inputMode = 'numeric';
-      sortInput.setAttribute('pattern', '[0-9]*');
-      sortInput.setAttribute('autocomplete', 'off');
-      sortInput.setAttribute('spellcheck', 'false');
       sortInput.lang = 'en';
       sortInput.dir = 'ltr';
       sortInput.value = String(Math.max(1, Number(order._driver_sort_position) || state.orders.findIndex((item) => String(item.id) === String(order.id)) + 1));
@@ -1132,9 +1130,8 @@
         event.stopPropagation();
       });
       sortInput.addEventListener('change', () => {
-        const enteredPosition = String(sortInput.value || '').trim();
-        const nextPosition = Number(enteredPosition);
-        if (!/^[0-9]+$/.test(enteredPosition) || !Number.isInteger(nextPosition) || nextPosition < 1) {
+        const nextPosition = Number(sortInput.value);
+        if (!Number.isInteger(nextPosition) || nextPosition < 1) {
           sortInput.value = String(state.orders.findIndex((item) => String(item.id) === String(order.id)) + 1);
           return;
         }
@@ -1947,19 +1944,40 @@
         toggleInvoiceDetails();
       };
       node.addEventListener('click', faOpenInvoice, true);
-      /* ⭐ fallbacks للـ WebView بتاع APK: pointerup و touchend يفتحوا فورًا لو click متجاهل */
+      /* ⭐ فتح بضغطة ثابتة فقط: السكرول/السحب بيخلصوا بـ touchend على الكارت —
+         منقيس مكان وبداية اللمس، وأي حركة أكتر من 12px أو ضغطة أطول من نص ثانية
+         متفتحش الفاتورة */
+      let __faTapStart = null;
       let __faLastOpenTap = 0;
-      const faOpenTap = (event) => {
+      node.addEventListener('touchstart', (e) => {
+        const t = e.changedTouches[0];
+        if (t) __faTapStart = { x: t.clientX, y: t.clientY, t: Date.now() };
+      }, { capture: true, passive: true });
+      const faTapShouldOpen = (ev) => {
         const now = Date.now();
-        if (now - __faLastOpenTap < 500) return; /* منع الفتح المزدوج */
+        if (now - __faLastOpenTap < 400) return false;
+        if (__faTapStart) {
+          const dx = Math.abs(ev.clientX - __faTapStart.x);
+          const dy = Math.abs(ev.clientY - __faTapStart.y);
+          const dt = now - __faTapStart.t;
+          __faTapStart = null;
+          if (dx > 12 || dy > 12 || dt > 600) return false;
+        }
         __faLastOpenTap = now;
-        faOpenInvoice(event);
+        return true;
       };
       node.addEventListener('pointerup', (event) => {
         if (event.pointerType === 'mouse') return;
-        faOpenTap(event);
+        if (!faTapShouldOpen(event)) return;
+        faOpenInvoice(event);
       }, true);
-      node.addEventListener('touchend', faOpenTap, true);
+      node.addEventListener('touchend', (e) => {
+        if (!__faTapStart) return;
+        const t = e.changedTouches[0];
+        if (!t) return;
+        if (!faTapShouldOpen(t)) return;
+        faOpenInvoice(e);
+      }, true);
 
       const orderWrap = document.createElement('div');
       orderWrap.className = 'driver-order-wrap';
