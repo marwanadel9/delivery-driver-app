@@ -1344,12 +1344,58 @@ export default {
             }
           );
 
-        const rpcData =
+        let rpcData =
           await rpcResponse.json().catch(function () {
             return null;
           });
 
         if (!rpcResponse.ok) {
+          /* ⭐ بديل: لو نسخة المناديب محذوفة (مثلًا بحذف يدوي SQL) أو RPC رفض الصف،
+             حدّث أرشيف الماستر مباشرة بمفتاح الخدمة — تعديل الماستر ميستحالش أبدًا
+             بسبب نسخة ناقصة عند مندوب */
+          const svcKeyFb =
+            String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+          let fallbackRow = null;
+          if (svcKeyFb) {
+            const directPatch =
+              Object.assign({}, order);
+            delete directPatch.id;
+            directPatch.updated_at =
+              new Date().toISOString();
+            const archResp =
+              await supabaseRequest(
+                "/rest/v1/master_orders_archive?id=eq." +
+                  encodeURIComponent(orderId),
+                {
+                  method: "PATCH",
+                  headers: {
+                    apikey: svcKeyFb,
+                    Authorization:
+                      "Bearer " + svcKeyFb,
+                    "Content-Type":
+                      "application/json",
+                    Prefer:
+                      "return=representation"
+                  },
+                  body:
+                    JSON.stringify(directPatch)
+                }
+              );
+            const archRows =
+              await archResp.json().catch(function () {
+                return null;
+              });
+            if (
+              archResp.ok &&
+              Array.isArray(archRows) &&
+              archRows.length
+            ) {
+              fallbackRow = archRows[0];
+            }
+          }
+          if (fallbackRow) {
+            rpcData = fallbackRow;
+          } else {
           return json(
             {
               error:
@@ -1363,8 +1409,8 @@ export default {
             },
             400
           );
+          }
         }
-
         // مزامنة صريحة لطريقة الدفع على كل نسخ هذه الفاتورة المحددة بالمعرّفات.
         // لا نعتمد هنا على تطابق رقم الفاتورة وحده، حتى لا نمس فاتورة أخرى قد تحمل رقمًا مشابهًا.
         if (Object.prototype.hasOwnProperty.call(order, "payment_method")) {
