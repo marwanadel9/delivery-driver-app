@@ -1392,6 +1392,48 @@ export default {
             ) {
               fallbackRow = archRows[0];
             }
+            /* ⭐ المحاولة التانية: الـ ID قديم واتبنى صف جديد برقم جديد بعد
+               إعادة الرفع — نطابق بالرقم والشيت ونحدّث مهما كان الـ ID */
+            if (!fallbackRow) {
+              const fbOrdNo =
+                String(order.order_number || "").trim();
+              const fbSheet =
+                String(order.sheet_name || "").trim();
+              if (fbOrdNo && fbSheet) {
+                const archResp2 =
+                  await supabaseRequest(
+                    "/rest/v1/master_orders_archive?order_number=eq." +
+                      encodeURIComponent(fbOrdNo) +
+                      "&sheet_name=eq." +
+                      encodeURIComponent(fbSheet),
+                    {
+                      method: "PATCH",
+                      headers: {
+                        apikey: svcKeyFb,
+                        Authorization:
+                          "Bearer " + svcKeyFb,
+                        "Content-Type":
+                          "application/json",
+                        Prefer:
+                          "return=representation"
+                      },
+                      body:
+                        JSON.stringify(directPatch)
+                    }
+                  );
+                const archRows2 =
+                  await archResp2.json().catch(function () {
+                    return null;
+                  });
+                if (
+                  archResp2.ok &&
+                  Array.isArray(archRows2) &&
+                  archRows2.length
+                ) {
+                  fallbackRow = archRows2[0];
+                }
+              }
+            }
           }
           if (fallbackRow) {
             rpcData = fallbackRow;
