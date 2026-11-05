@@ -4638,6 +4638,23 @@
         delivery_status: $('master-edit-status')?.value ?? order.delivery_status ?? 'pending'
       };
 
+      /* ⭐ تثبيت الأرقام الحية قبل الحفظ: لو النسخ اتحذفت واتعملت من جديد (بعد مزامنة
+         أو حذف SQL)، المودال لسه ماسك IDs قديمة والتحديث بيفشل على «0 من 1» —
+         نسحب الأرشيف حي من السيرفر ونرجع نطابق الفاتورة بأحدث نسخة بالرقم والشيت */
+      try {
+        const freshResp = await masterFetch('/api/master/orders');
+        if (freshResp && Array.isArray(freshResp.orders)) state.masterOrders = freshResp.orders;
+        const freshList = Array.isArray(state.masterOrders) ? state.masterOrders : [];
+        const freshById = freshList.find((item) => String(item?.id ?? '') === String(order?.id ?? ''));
+        if (!freshById) {
+          const ordNo = String(order?.order_number ?? '').trim();
+          const sheet = String(order?.sheet_name ?? '').trim();
+          const freshAnchor = freshList.find((item) => String(item?.order_number ?? '').trim() === ordNo && String(item?.sheet_name ?? '').trim() === sheet)
+            || freshList.find((item) => String(item?.order_number ?? '').trim() === ordNo);
+          if (freshAnchor) order = Object.assign({}, order, freshAnchor);
+        }
+      } catch (refreshErr) { /* نكمل بالنسخة الحالية لو التحديث تعذر */ }
+
       // Match the complete duplicate group before changing editable identity fields.
       // Every target keeps its own database ID and sheet_name; this is update-only, never insert.
       const originalFingerprint = masterInvoiceFingerprint(order);
