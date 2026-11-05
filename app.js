@@ -1944,11 +1944,19 @@
         toggleInvoiceDetails();
       };
       node.addEventListener('click', faOpenInvoice, true);
-      /* ⭐ fallback للـ WebView بتاع APK: لو حدث الضغطة العادية متأخر/متجاهل، pointerup يفتح فورًا */
+      /* ⭐ fallbacks للـ WebView بتاع APK: pointerup و touchend يفتحوا فورًا لو click متجاهل */
+      let __faLastOpenTap = 0;
+      const faOpenTap = (event) => {
+        const now = Date.now();
+        if (now - __faLastOpenTap < 500) return; /* منع الفتح المزدوج */
+        __faLastOpenTap = now;
+        faOpenInvoice(event);
+      };
       node.addEventListener('pointerup', (event) => {
         if (event.pointerType === 'mouse') return;
-        faOpenInvoice(event);
+        faOpenTap(event);
       }, true);
+      node.addEventListener('touchend', faOpenTap, true);
 
       const orderWrap = document.createElement('div');
       orderWrap.className = 'driver-order-wrap';
