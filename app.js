@@ -967,7 +967,7 @@
       .order-card .invoice-expand-toggle { display:flex;align-items:center;justify-content:center;gap:6px;width:100%;box-sizing:border-box;margin:8px 0;padding:8px 10px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer; }
       .order-card:not(.is-compact) .invoice-expand-toggle { background:#ecfdf5; }
       html.driver-invoice-open, body.driver-invoice-open { overflow:hidden!important; overscroll-behavior:none!important; }
-      .order-card.is-fullscreen-invoice { position:fixed!important; top:env(safe-area-inset-top, 0px)!important; bottom:env(safe-area-inset-bottom, 0px)!important; left:6px!important; right:6px!important; z-index:2147483000!important; width:calc(100vw - 12px)!important; max-width:none!important; height:auto!important; min-height:0!important; max-height:none!important; margin:0 auto!important; padding:7px 8px 8px!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:1px solid #dcfce7!important; border-radius:12px!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }
+      .order-card.is-fullscreen-invoice { position:fixed!important; top:0!important; left:0!important; right:0!important; z-index:2147483000!important; width:100vw!important; max-width:none!important; height:100vh!important; height:100dvh!important; min-height:0!important; max-height:none!important; margin:0!important; padding:calc(7px + env(safe-area-inset-top,0px)) calc(8px + env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) calc(8px + env(safe-area-inset-left,0px))!important; box-sizing:border-box!important; overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior:contain!important; border:none!important; border-radius:0!important; background:#fff!important; box-shadow:0 0 0 100vmax rgba(15,23,42,.55)!important; display:flex!important; flex-direction:column!important; gap:5px!important; cursor:default!important; }.order-card .coordinator-gold-badge { display:none!important; }.order-card.is-fullscreen-invoice .coordinator-gold-badge { display:flex!important; }
       .order-card.is-fullscreen-invoice .order-card-head { margin:0!important; gap:5px!important; }
       .order-card.is-fullscreen-invoice .customer-row { margin:0!important; padding:4px 0!important; gap:7px!important; }
       .order-card.is-fullscreen-invoice .customer-main h2 { font-size:15px!important; margin:0!important; line-height:1.25!important; }
@@ -1015,7 +1015,7 @@
         .order-card.is-fullscreen-invoice .driver-product-table img { width:28px!important;height:28px!important;max-width:28px!important;flex-basis:28px!important; }
         .order-card.is-fullscreen-invoice .driver-products-tables > .products-section > div:first-child { font-size:13px!important; }
       }
-      @media(min-width:700px){.order-card.is-fullscreen-invoice{left:50%!important;right:auto!important;top:0!important;bottom:0!important;height:auto!important;transform:translateX(-50%);width:min(760px,calc(100vw - 24px))!important;padding:14px!important;box-shadow:0 0 0 100vmax rgba(15,23,42,.62)!important;border-radius:14px!important;}}
+      @media(min-width:700px){.order-card.is-fullscreen-invoice{width:100vw!important;height:100vh!important;height:100dvh!important;padding:calc(14px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) calc(16px + env(safe-area-inset-left,0px))!important;box-shadow:0 0 0 100vmax rgba(15,23,42,.62)!important;}}
     `;
     document.head.appendChild(style);
   }
@@ -1176,6 +1176,8 @@
         document.documentElement.style.overflow = 'hidden';
         node.classList.remove('is-compact');
         node.classList.add('is-fullscreen-invoice');
+        /* ⭐ زرار رجوع الهاتف: دفع حالة للتاريخ عشان الرجوع يقفل الفاتورة ويرجع لنفس نقطة السكرول */
+        try { history.pushState({ faInv: 1 }, ''); } catch (ePush) {}
         sortInput.disabled = true;
         fullscreenHead = document.createElement('div');
         fullscreenHead.className = 'invoice-fullscreen-head';
@@ -1529,11 +1531,31 @@
         cleanOrderNote(legacyDetails)
       );
 
+      /* ⭐ شارة منسّق الموعد الذهبية: جوه الفاتورة المفتوحة بس — خط 19px عريض، تختفي لو فاضية */
       const coordinatorField = node.querySelector('[data-f="appointment_coordinator"]');
       if (coordinatorField) {
         const coordinatorRow = coordinatorField.closest('.info-item, .order-section, .detail-row, .field-row, .master-detail');
         if (coordinatorRow) coordinatorRow.style.display = 'none';
         else coordinatorField.style.display = 'none';
+      }
+      {
+        const oldBadge = node.querySelector('.coordinator-gold-badge');
+        if (oldBadge) oldBadge.remove();
+        const coordinatorValue = String(firstValue(order, ['appointment_coordinator', 'appointmentCoordinator', 'coordinator', 'coord']) || '').trim();
+        if (coordinatorValue) {
+          const badge = document.createElement('div');
+          badge.className = 'coordinator-gold-badge';
+          badge.style.cssText = 'display:none;align-items:center;justify-content:center;gap:8px;width:100%;box-sizing:border-box;margin:2px 0;padding:10px 12px;border-radius:12px;background:linear-gradient(135deg,#e8c766,#c9930a);color:#2b2105;font-size:19px;font-weight:900;line-height:1.4;border:2px solid #d4a72c;box-shadow:0 4px 14px rgba(184,134,11,.35);direction:rtl;text-align:center;';
+          const badgeStar = document.createElement('span');
+          badgeStar.textContent = '⭐';
+          badgeStar.setAttribute('aria-hidden', 'true');
+          const badgeLabel = document.createElement('span');
+          badgeLabel.textContent = 'منسّق الموعد: ' + toEnglishDigits(coordinatorValue);
+          badge.append(badgeStar, badgeLabel);
+          const detailsBox = node.querySelector('.order-details');
+          if (detailsBox && detailsBox.parentNode === node) node.insertBefore(badge, detailsBox);
+          else node.appendChild(badge);
+        }
       }
 
       setText(
@@ -5139,7 +5161,19 @@
     ov.addEventListener('click', function () { ov.remove(); });
   }, true);
 
-
+  /* ⭐ حارس الرجوع العام: زرار رجوع الهاتف/المتصفح يقفل الفاتورة أو صورة البوابة المفتوحة
+     ويرجع لنفس نقطة السكرول — وأي رجوع جوه التطبيق ميسمحش بخروجه نهائيًا */
+  window.addEventListener('popstate', function () {
+    try {
+      if (window.__faBack && window.__faBack()) {
+        /* اتقفلت فاتورة/صورة — نرجع نحط حارس مكانه */
+        try { history.pushState({ faGuard: 1 }, ''); } catch (eG1) {}
+        return;
+      }
+      /* حارس عام: الرجوع جوه التطبيق ميخرجش منه */
+      try { history.pushState({ faGuard: 1 }, ''); } catch (eG2) {}
+    } catch (ePop) {}
+  });
 
   boot();
 })();
