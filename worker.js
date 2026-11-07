@@ -828,13 +828,12 @@ export default {
            على السيرفر بليلة الأمس بالتوقيت العالمي، وفلتر UTC كان بيخفيه */
         const dubaiNowMs = Date.now() + (4 * 3600 * 1000);
         const dubaiDay = new Date(dubaiNowMs).toISOString().slice(0, 10);
-        const todayStart = dubaiDay + "T00:00:00+04:00";
         const ordersPath =
           "/rest/v1/orders?sheet_name=eq." +
           encodeURIComponent(sheet) +
           "&select=*" +
-          "&created_at=gte." +
-          encodeURIComponent(todayStart);
+          "&delivery_date=eq." +
+          encodeURIComponent(dubaiDay);
 
         const ordersResponse =
           await supabaseRequest(
@@ -1547,7 +1546,8 @@ export default {
             "delivery_fee",
             "paid_in_advance",
             "bank_transfer_received",
-            "created_at"
+            "created_at",
+            "delivery_date"
           ];
 
           for (const field of archiveFields) {
@@ -1561,6 +1561,14 @@ export default {
           // أي تاريخ قديم يعيده RPC، ويجب أن يظل متطابقًا في أرشيف MASTER.
           if (typeof order.created_at === "string" && !Number.isNaN(new Date(order.created_at).getTime())) {
             archivePatchBody.created_at = new Date(order.created_at).toISOString();
+          }
+          // تاريخ التوصيل الذي اختاره الكمبيوتر له الأولوية، ولا نخلطه بتاريخ الرفع.
+          if (Object.prototype.hasOwnProperty.call(order, "delivery_date")) {
+            const deliveryDate = order.delivery_date == null ? null : String(order.delivery_date).trim();
+            if (deliveryDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) {
+              return json({ error: "تاريخ التوصيل غير صحيح" }, 400);
+            }
+            archivePatchBody.delivery_date = deliveryDate;
           }
 
           // قيمة الدفع التي اختارها المستخدم في لوحة MASTER لها الأولوية على
@@ -2467,6 +2475,9 @@ export default {
         const patch = body.order && typeof body.order === "object" ? body.order : null;
         if (!orderNumber || !patch) return json({ error: "بيانات غير مكتملة" }, 400);
         delete patch.id;
+        if (Object.prototype.hasOwnProperty.call(patch, "delivery_date") && patch.delivery_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(patch.delivery_date))) {
+          return json({ error: "تاريخ التوصيل غير صحيح" }, 400);
+        }
         const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
         if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
         const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
@@ -2532,20 +2543,11 @@ export default {
       if (path === "/api/master/delete-by-date" && request.method === "POST") {
         const auth = await requireMaster(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
-        const body = await request.json().catch(function () { return {}; });
-        const d = String(body.date || "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: "تاريخ غير صحيح" }, 400);
-        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
-        const H = { apikey: svc, Authorization: "Bearer " + svc, Prefer: "return=representation" };
-        const from = d + "T00:00:00";
-        const toD = new Date(new Date(d + "T00:00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
-        const to = toD + "T00:00:00";
-        const filt = "created_at=gte." + encodeURIComponent(from) + "&created_at=lt." + encodeURIComponent(to);
-        const r1 = await supabaseRequest("/rest/v1/orders?" + filt, { method: "DELETE", headers: H });
-        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?" + filt, { method: "DELETE", headers: H });
-        const c1 = Array.isArray(await r1.clone().json().catch(() => [])) ? 1 : 0;
-        return json({ success: true, orders_cleared: r1.ok, archive_cleared: r2.ok, date: d });
+        return json({
+          success: false,
+          deleted: false,
+          error: "تم إيقاف الحذف حسب التاريخ حفاظًا على الفواتير والأرشيف. غيّر delivery_date بدل الحذف."
+        }, 410);
       }
 
       if (path === "/api/master/dedupe" && request.method === "POST") {
