@@ -2603,12 +2603,32 @@ export default {
         if (!findResp.ok || !Array.isArray(found)) {
           return json({ error: "تعذر البحث عن الفاتورة في جدول orders", status: findResp.status, details: found }, 502);
         }
-        if (!found.length) {
-          const diagResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=order_number,sheet_name,delivery_date&limit=10", { headers: H });
+        let resolvedRows = found;
+        if (!resolvedRows.length) {
+          /* توافق آمن: لو الاسم المحلي للمندوب مختلف عن sheet_name المخزن،
+             نبحث برقم الفاتورة ثم نقبل فقط تطابقًا واحدًا بنفس تاريخ التوصيل المستقبلي. */
+          const diagResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id,order_number,sheet_name,delivery_date,created_at&limit=20", { headers: H });
           const diag = await diagResp.json().catch(function () { return []; });
-          return json({ error: "لم أجد الفاتورة بهذا الرقم واسم ورقة المندوب. راجع sheet_name في السجل.", requested: { order_number: orderNumber, sheet_name: sheetName, delivery_date: requestedDate }, matches_by_invoice: Array.isArray(diag) ? diag : [] }, 404);
+          if (!diagResp.ok || !Array.isArray(diag)) {
+            return json({ error: "تعذر البحث التشخيصي عن الفاتورة", status: diagResp.status, details: diag }, 502);
+          }
+          const exactDate = diag.filter(function (row) {
+            const dbDate = String(row.delivery_date || "").slice(0, 10);
+            return dbDate === requestedDate && dbDate > dubaiToday;
+          });
+          if (exactDate.length === 1) {
+            resolvedRows = exactDate;
+          } else {
+            return json({
+              error: exactDate.length > 1
+                ? "رقم الفاتورة موجود بأكثر من مندوب بنفس تاريخ التوصيل؛ لم يتم السحب لتجنب سحب فاتورة خاطئة."
+                : "لم أجد فاتورة مستقبلية بهذا الرقم وتاريخ التوصيل في جدول orders.",
+              requested: { order_number: orderNumber, sheet_name: sheetName, delivery_date: requestedDate },
+              matches_by_invoice: diag.map(function (row) { return { order_number: row.order_number, sheet_name: row.sheet_name, delivery_date: row.delivery_date, created_at: row.created_at }; })
+            }, 404);
+          }
         }
-        const futureRows = found.filter(function (row) {
+        const futureRows = resolvedRows.filter(function (row) {
           const dbDate = String(row.delivery_date || "").slice(0, 10);
           return dbDate === requestedDate && dbDate > dubaiToday;
         });
@@ -2629,8 +2649,11 @@ export default {
           }
         }
         const idFilter = ids.length ? "&id=in.(" + ids.join(",") + ")" : "";
+        const actualSheets = Array.from(new Set(futureRows.map(function (x) { return String(x.sheet_name || ""); }).filter(Boolean)));
+        if (actualSheets.length !== 1) return json({ error: "تعذر تحديد ورقة المندوب بشكل فريد؛ لم يتم سحب أي فاتورة.", actual_sheets: actualSheets }, 409);
+        const actualSheetName = actualSheets[0];
         const delResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&sheet_name=eq." + encodeURIComponent(sheetName) +
+          "&sheet_name=eq." + encodeURIComponent(actualSheetName) +
           "&delivery_date=eq." + encodeURIComponent(requestedDate) + idFilter, {
             method: "DELETE",
             headers: Object.assign({}, H, { Prefer: "return=representation" })
@@ -2643,7 +2666,7 @@ export default {
         if (!Array.isArray(removedRows) || !removedRows.length) {
           return json({ error: "السيرفر لم يُرجع تأكيد حذف الفاتورة من قائمة المندوب؛ لم يتم اعتبار السحب ناجحًا." }, 409);
         }
-        return json({ success: true, removed: removedRows.length, archive_preserved: true, order_number: orderNumber, sheet_name: sheetName, delivery_date: requestedDate });
+        return json({ success: true, removed: removedRows.length, archive_preserved: true, order_number: orderNumber, sheet_name: actualSheetName, delivery_date: requestedDate });
       }
 
       if (
