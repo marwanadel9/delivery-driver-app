@@ -2578,96 +2578,108 @@ export default {
         return json({ success: true, orders: o, archive: a });
       }
 
-      /* سحب فاتورة مستقبلية من قائمة المندوب فقط — لا نحذف أرشيف الماستر */
+      /* سحب فاتورة مستقبلية من جميع قوائم المناديب ومن الماستر عند وجودها */
       if (path === "/api/master/order/recall-future" && request.method === "POST") {
         const auth = await requireMaster(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
+
         const body = await request.json().catch(function () { return {}; });
         const orderNumber = String(body.order_number || "").trim();
-        const sheetName = String(body.sheet_name || "").trim();
         const requestedDate = String(body.delivery_date || "").slice(0, 10);
-        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !sheetName || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
-          return json({ error: "بيانات الفاتورة أو تاريخ التوصيل غير صحيحة", received: { order_number: orderNumber, sheet_name: sheetName, delivery_date: requestedDate } }, 400);
+
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+          return json({ error: "رقم الفاتورة أو تاريخ التوصيل غير صحيح", received: { order_number: orderNumber, delivery_date: requestedDate } }, 400);
         }
+
         const dubaiToday = new Date(Date.now() + 4 * 3600 * 1000).toISOString().slice(0, 10);
-        if (requestedDate <= dubaiToday) return json({ error: "السحب مسموح للفواتير المستقبلية فقط", requested_date: requestedDate, dubai_today: dubaiToday }, 409);
+        if (requestedDate <= dubaiToday) {
+          return json({ error: "السحب مسموح للفواتير المستقبلية فقط", requested_date: requestedDate, dubai_today: dubaiToday }, 409);
+        }
+
         const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
         if (!svc) return json({ error: "مفتاح SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار Worker" }, 500);
-        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=representation" };
 
-        const sheetFilter = "in.(" + sheetNames.map(function (x) { return encodeURIComponent(x); }).join(",") + ")";
-        const query = "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&sheet_name=" + sheetFilter +
-          "&select=id,order_number,sheet_name,delivery_date,created_at";
-        const findResp = await supabaseRequest(query, { headers: H });
+        const H = {
+          apikey: svc,
+          Authorization: "Bearer " + svc,
+          "Content-Type": "application/json",
+          Prefer: "return=representation"
+        };
+
+        /* رقم الفاتورة + تاريخ التوصيل: يجلب كل النسخ الموزعة على كل المناديب */
+        const where = "?order_number=eq." + encodeURIComponent(orderNumber) +
+          "&delivery_date=eq." + encodeURIComponent(requestedDate);
+        const findResp = await supabaseRequest("/rest/v1/orders" + where +
+          "&select=id,order_number,sheet_name,delivery_date,delivery_status", { headers: H });
         const found = await findResp.json().catch(function () { return []; });
+
         if (!findResp.ok || !Array.isArray(found)) {
-          return json({ error: "تعذر البحث عن الفاتورة في جدول orders", status: findResp.status, details: found }, 502);
+          return json({ error: "تعذر قراءة نسخ الفاتورة من قوائم المناديب", status: findResp.status, details: found }, 502);
         }
-        let resolvedRows = found;
-        if (!resolvedRows.length) {
-          /* توافق آمن: لو الاسم المحلي للمندوب مختلف عن sheet_name المخزن،
-             نبحث برقم الفاتورة ثم نقبل فقط تطابقًا واحدًا بنفس تاريخ التوصيل المستقبلي. */
-          const diagResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id,order_number,sheet_name,delivery_date,created_at&limit=20", { headers: H });
+        if (!found.length) {
+          const diagResp = await supabaseRequest("/rest/v1/orders?order_number=eq." +
+            encodeURIComponent(orderNumber) + "&select=order_number,sheet_name,delivery_date&limit=30", { headers: H });
           const diag = await diagResp.json().catch(function () { return []; });
-          if (!diagResp.ok || !Array.isArray(diag)) {
-            return json({ error: "تعذر البحث التشخيصي عن الفاتورة", status: diagResp.status, details: diag }, 502);
-          }
-          const exactDate = diag.filter(function (row) {
-            const dbDate = String(row.delivery_date || "").slice(0, 10);
-            return sheetNames.includes(String(row.sheet_name || "")) && dbDate === requestedDate && dbDate > dubaiToday;
-          });
-          if (exactDate.length === 1) {
-            resolvedRows = exactDate;
-          } else {
-            return json({
-              error: exactDate.length > 1
-                ? "رقم الفاتورة موجود بأكثر من مندوب بنفس تاريخ التوصيل؛ لم يتم السحب لتجنب سحب فاتورة خاطئة."
-                : "لم أجد فاتورة مستقبلية بهذا الرقم وتاريخ التوصيل في جدول orders.",
-              requested: { order_number: orderNumber, sheet_name: sheetName, delivery_date: requestedDate },
-              matches_by_invoice: diag.map(function (row) { return { order_number: row.order_number, sheet_name: row.sheet_name, delivery_date: row.delivery_date, created_at: row.created_at }; })
-            }, 404);
-          }
-        }
-        const futureRows = resolvedRows.filter(function (row) {
-          const dbDate = String(row.delivery_date || "").slice(0, 10);
-          return dbDate === requestedDate && dbDate > dubaiToday;
-        });
-        if (!futureRows.length) {
           return json({
-            error: "الفاتورة موجودة، لكن تاريخ التوصيل المحفوظ في قاعدة البيانات لا يطابق التاريخ المستقبلي المطلوب؛ لم يتم حذف أي شيء.",
+            error: "لم توجد نسخة مستقبلية بهذه الفاتورة وتاريخ التوصيل في قوائم المناديب. لم يتم حذف أي سجل.",
             requested_date: requestedDate,
             dubai_today: dubaiToday,
-            database_rows: found.map(function (row) { return { order_number: row.order_number, sheet_name: row.sheet_name, delivery_date: row.delivery_date, created_at: row.created_at }; })
-          }, 409);
+            found_for_invoice: Array.isArray(diag) ? diag : []
+          }, 404);
         }
-        const ids = futureRows.map(function (x) { return x.id; }).filter(function (x) { return Number.isInteger(x) && x > 0; });
-        if (ids.length) {
-          const depResp = await supabaseRequest("/rest/v1/driver_departures?order_id=in.(" + ids.join(",") + ")", { method: "DELETE", headers: H });
-          if (!depResp.ok) {
-            const err = await depResp.json().catch(function () { return {}; });
-            return json({ error: "تعذر إزالة سجل مغادرة المندوب: " + ((err && (err.message || err.hint || err.error)) || depResp.status) }, 502);
-          }
+
+        const ids = found.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
+        if (!ids.length) return json({ error: "سجلات الفاتورة لا تحتوي على معرّفات صالحة؛ لم يتم حذف أي شيء." }, 409);
+
+        const depResp = await supabaseRequest("/rest/v1/driver_departures?order_id=in.(" + ids.join(",") + ")", {
+          method: "DELETE",
+          headers: H
+        });
+        if (!depResp.ok) {
+          const depErr = await depResp.json().catch(function () { return {}; });
+          return json({ error: "تعذر إزالة سجلات مغادرة المناديب: " + ((depErr && (depErr.message || depErr.hint || depErr.error)) || depResp.status) }, 502);
         }
-        const idFilter = ids.length ? "&id=in.(" + ids.join(",") + ")" : "";
-        const actualSheets = Array.from(new Set(futureRows.map(function (x) { return String(x.sheet_name || ""); }).filter(Boolean)));
-        if (actualSheets.some(function (x) { return !sheetNames.includes(x); })) return json({ error: "تم العثور على ورقة مندوب غير مطلوبة؛ لم يتم سحب أي فاتورة.", actual_sheets: actualSheets }, 409);
-        const actualSheetFilter = "in.(" + actualSheets.map(function (x) { return encodeURIComponent(x); }).join(",") + ")";
-        const delResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&sheet_name=" + actualSheetFilter +
-          "&delivery_date=eq." + encodeURIComponent(requestedDate) + idFilter, {
+
+        const ordersResp = await supabaseRequest("/rest/v1/orders" + where +
+          "&id=in.(" + ids.join(",") + ")", {
             method: "DELETE",
             headers: Object.assign({}, H, { Prefer: "return=representation" })
           });
-        if (!delResp.ok) {
-          const err = await delResp.json().catch(function () { return {}; });
-          return json({ error: "تعذر سحب الفاتورة من قائمة المندوب: " + ((err && (err.message || err.hint || err.error)) || delResp.status), details: err }, 502);
+        if (!ordersResp.ok) {
+          const delErr = await ordersResp.json().catch(function () { return {}; });
+          return json({ error: "تعذر سحب الفاتورة من قوائم المناديب: " + ((delErr && (delErr.message || delErr.hint || delErr.error)) || ordersResp.status), details: delErr }, 502);
         }
-        const removedRows = await delResp.json().catch(function () { return []; });
+
+        const removedRows = await ordersResp.json().catch(function () { return []; });
         if (!Array.isArray(removedRows) || !removedRows.length) {
-          return json({ error: "السيرفر لم يُرجع تأكيد حذف الفاتورة من قائمة المندوب؛ لم يتم اعتبار السحب ناجحًا." }, 409);
+          return json({ error: "لم يؤكد السيرفر إزالة الفاتورة من قوائم المناديب؛ لم يتم اعتبار السحب ناجحًا." }, 409);
         }
-        return json({ success: true, removed: removedRows.length, archive_preserved: true, order_number: orderNumber, sheet_names: actualSheets, delivery_date: requestedDate });
+
+        /* إزالة نسخة الماستر لنفس الفاتورة وتاريخ التوصيل فقط */
+        const archiveResp = await supabaseRequest("/rest/v1/master_orders_archive" + where, {
+          method: "DELETE",
+          headers: Object.assign({}, H, { Prefer: "return=representation" })
+        });
+        if (!archiveResp.ok) {
+          const archiveErr = await archiveResp.json().catch(function () { return {}; });
+          return json({
+            success: false,
+            removed: removedRows.length,
+            error: "تم سحب الفاتورة من قوائم المناديب، لكن تعذر حذف نسختها من الماستر: " + ((archiveErr && (archiveErr.message || archiveErr.hint || archiveErr.error)) || archiveResp.status),
+            details: archiveErr
+          }, 502);
+        }
+        const archiveRows = await archiveResp.json().catch(function () { return []; });
+
+        return json({
+          success: true,
+          removed: removedRows.length,
+          drivers_removed: removedRows.length,
+          archive_removed: Array.isArray(archiveRows) ? archiveRows.length : 0,
+          order_number: orderNumber,
+          sheet_names: Array.from(new Set(removedRows.map(function (r) { return String(r.sheet_name || ""); }).filter(Boolean))),
+          delivery_date: requestedDate
+        });
       }
 
       if (
