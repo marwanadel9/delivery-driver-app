@@ -2595,8 +2595,9 @@ export default {
         if (!svc) return json({ error: "مفتاح SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار Worker" }, 500);
         const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=representation" };
 
+        const sheetFilter = "in.(" + sheetNames.map(function (x) { return encodeURIComponent(x); }).join(",") + ")";
         const query = "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&sheet_name=eq." + encodeURIComponent(sheetName) +
+          "&sheet_name=" + sheetFilter +
           "&select=id,order_number,sheet_name,delivery_date,created_at";
         const findResp = await supabaseRequest(query, { headers: H });
         const found = await findResp.json().catch(function () { return []; });
@@ -2614,7 +2615,7 @@ export default {
           }
           const exactDate = diag.filter(function (row) {
             const dbDate = String(row.delivery_date || "").slice(0, 10);
-            return dbDate === requestedDate && dbDate > dubaiToday;
+            return sheetNames.includes(String(row.sheet_name || "")) && dbDate === requestedDate && dbDate > dubaiToday;
           });
           if (exactDate.length === 1) {
             resolvedRows = exactDate;
@@ -2650,10 +2651,10 @@ export default {
         }
         const idFilter = ids.length ? "&id=in.(" + ids.join(",") + ")" : "";
         const actualSheets = Array.from(new Set(futureRows.map(function (x) { return String(x.sheet_name || ""); }).filter(Boolean)));
-        if (actualSheets.length !== 1) return json({ error: "تعذر تحديد ورقة المندوب بشكل فريد؛ لم يتم سحب أي فاتورة.", actual_sheets: actualSheets }, 409);
-        const actualSheetName = actualSheets[0];
+        if (actualSheets.some(function (x) { return !sheetNames.includes(x); })) return json({ error: "تم العثور على ورقة مندوب غير مطلوبة؛ لم يتم سحب أي فاتورة.", actual_sheets: actualSheets }, 409);
+        const actualSheetFilter = "in.(" + actualSheets.map(function (x) { return encodeURIComponent(x); }).join(",") + ")";
         const delResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&sheet_name=eq." + encodeURIComponent(actualSheetName) +
+          "&sheet_name=" + actualSheetFilter +
           "&delivery_date=eq." + encodeURIComponent(requestedDate) + idFilter, {
             method: "DELETE",
             headers: Object.assign({}, H, { Prefer: "return=representation" })
@@ -2666,7 +2667,7 @@ export default {
         if (!Array.isArray(removedRows) || !removedRows.length) {
           return json({ error: "السيرفر لم يُرجع تأكيد حذف الفاتورة من قائمة المندوب؛ لم يتم اعتبار السحب ناجحًا." }, 409);
         }
-        return json({ success: true, removed: removedRows.length, archive_preserved: true, order_number: orderNumber, sheet_name: actualSheetName, delivery_date: requestedDate });
+        return json({ success: true, removed: removedRows.length, archive_preserved: true, order_number: orderNumber, sheet_names: actualSheets, delivery_date: requestedDate });
       }
 
       if (
