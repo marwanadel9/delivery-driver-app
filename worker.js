@@ -65,6 +65,34 @@ async function supabaseRequest(path, options) {
   });
 }
 
+// مرجع اليوم دائمًا هو تاريخ الإمارات، وليس توقيت جهاز المندوب.
+function dubaiDateKey(date) {
+  const value = date instanceof Date ? date : new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Dubai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(value);
+  const fields = {};
+  for (const part of parts) fields[part.type] = part.value;
+  return fields.year + "-" + fields.month + "-" + fields.day;
+}
+
+function isFutureDeliveryDate(value, todayDubai) {
+  const deliveryDate = String(value == null ? "" : value).slice(0, 10);
+  const today = todayDubai || dubaiDateKey(new Date());
+  return /^\d{4}-\d{2}-\d{2}$/.test(deliveryDate) && deliveryDate > today;
+}
+
+function futureDeliveryLockedResponse(deliveryDate) {
+  return json({
+    error: "هذه الفاتورة مجدولة ليوم " + String(deliveryDate || "") + "، وسيتم فتحها تلقائيًا مع بداية هذا اليوم بتوقيت دبي.",
+    code: "FUTURE_DELIVERY_LOCKED",
+    delivery_date: String(deliveryDate || "")
+  }, 423);
+}
+
 async function getUser(token, anonKey) {
   if (!token || !anonKey) {
     return null;
@@ -936,17 +964,19 @@ export default {
         const sheet =
           auth.driver.sheet_name;
 
-        /* ⭐ المندوب يشوف فواتير «اليوم» فقط — واليوم بيتحسب بتوقيت دبي (UTC+4)
-           مش UTC: الشغل المرفوع بعد منتصف الليل بتوقيتك (مثلًا 1:30 ص) بيتسجل
-           على السيرفر بليلة الأمس بالتوقيت العالمي، وفلتر UTC كان بيخفيه */
-        const dubaiNowMs = Date.now() + (4 * 3600 * 1000);
-        const dubaiDay = new Date(dubaiNowMs).toISOString().slice(0, 10);
+        /*
+         * المندوب يرى فواتير اليوم والفواتير المستقبلية من الآن.
+         * الفاتورة المستقبلية تظهر مقفولة، وتفتح عند 00:00 في يوم delivery_date
+         * حسب Asia/Dubai. لا نستخدم created_at لتحديد يوم التوصيل.
+         */
+        const dubaiDay = dubaiDateKey(new Date());
         const ordersPath =
           "/rest/v1/orders?sheet_name=eq." +
           encodeURIComponent(sheet) +
           "&select=*" +
-          "&delivery_date=eq." +
-          encodeURIComponent(dubaiDay);
+          "&delivery_date=gte." +
+          encodeURIComponent(dubaiDay) +
+          "&order=delivery_date.asc,created_at.asc";
 
         const ordersResponse =
           await supabaseRequest(
@@ -985,7 +1015,9 @@ export default {
             plate_qtys: stripEmojiText(row.plate_qtys),
             chicken_weights: stripEmojiText(row.chicken_weights),
             chicken_qtys: stripEmojiText(row.chicken_qtys),
-            customer_name: stripEmojiText(row.customer_name)
+            customer_name: stripEmojiText(row.customer_name),
+            _delivery_locked: isFutureDeliveryDate(row.delivery_date, dubaiDay),
+            _dubai_today: dubaiDay
           });
           if (canCall) return cleaned;
           return Object.assign({}, cleaned, { phone: "" });
@@ -1056,7 +1088,9 @@ export default {
           mandoub_name:
             auth.driver.mandoub_name,
           can_call:
-            canCall
+            canCall,
+          dubai_today:
+            dubaiDay
         });
       }
 
@@ -1188,13 +1222,16 @@ export default {
         if (!Number.isInteger(orderId) || orderId <= 0) return json({ error: "رقم الطلب غير صحيح" }, 400);
 
         const orderResponse = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) + "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) + "&select=id,order_number,customer_name,phone,emirate,area,total,sheet_name&limit=1",
+          "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) + "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) + "&select=id,order_number,customer_name,phone,emirate,area,total,sheet_name,delivery_date&limit=1",
           { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
         );
         const orderRows = await orderResponse.json().catch(function () { return null; });
         if (!orderResponse.ok) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة" }, 502);
         if (!Array.isArray(orderRows) || !orderRows.length) return json({ error: "الفاتورة غير موجودة ضمن طلبات حسابك" }, 404);
         const order = orderRows[0];
+        if (isFutureDeliveryDate(order.delivery_date)) {
+          return futureDeliveryLockedResponse(order.delivery_date);
+        }
 
         const existingResponse = await supabaseRequest(
           "/rest/v1/driver_departures?order_id=eq." + encodeURIComponent(orderId) + "&select=order_id,departed_at&limit=1",
@@ -1270,7 +1307,7 @@ export default {
         const sourceResponse = await supabaseRequest(
           "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) +
           "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) +
-          "&select=id,order_number,customer_name,sheet_name,paid_in_advance,delivery_status&limit=1",
+          "&select=id,order_number,customer_name,sheet_name,paid_in_advance,delivery_status,delivery_date&limit=1",
           { headers: paymentHeaders }
         );
         const sourceRows = await sourceResponse.json().catch(function () { return null; });
@@ -1282,6 +1319,9 @@ export default {
         }
 
         const sourceOrder = sourceRows[0];
+        if (isFutureDeliveryDate(sourceOrder.delivery_date)) {
+          return futureDeliveryLockedResponse(sourceOrder.delivery_date);
+        }
         if (sourceOrder.paid_in_advance === true) {
           return json({ error: "هذه الفاتورة مدفوعة مقدمًا، وتعديل الدفع من الكمبيوتر فقط" }, 403);
         }
@@ -1367,13 +1407,16 @@ export default {
         const orderResponse = await supabaseRequest(
           "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) +
           "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) +
-          "&select=id,order_number,customer_name,sheet_name,delivery_status,paid_in_advance&limit=1",
+          "&select=id,order_number,customer_name,sheet_name,delivery_status,paid_in_advance,delivery_date&limit=1",
           { headers: serviceHeaders }
         );
         const orderRows = await orderResponse.json().catch(function () { return null; });
         if (!orderResponse.ok) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة" }, 502);
         if (!Array.isArray(orderRows) || !orderRows.length) return json({ error: "الفاتورة غير موجودة ضمن طلبات حسابك" }, 404);
         const order = orderRows[0];
+        if (isFutureDeliveryDate(order.delivery_date)) {
+          return futureDeliveryLockedResponse(order.delivery_date);
+        }
         // الدفع مقدمًا لا يمنع التسليم؛ الكمبيوتر يحدد حالة الدفع فقط.
         if (String(order.delivery_status || "").toLowerCase() === "delivered" || String(order.delivery_status || "").includes("تم التسليم")) {
           return json({ success: true, already_delivered: true, delivery_status: order.delivery_status });
