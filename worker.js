@@ -2691,9 +2691,12 @@ export default {
             .filter(Boolean)
         ));
         const requestedSheet = String(order.sheet_name || '').trim();
-        if (currentSheets.length > 1 && requestedSheet && currentSheets.indexOf(requestedSheet) === -1) {
-          return json({ error: "الفاتورة موجودة عند أكثر من مندوب. تم رفض تغيير المندوب حتى لا تنتقل كل النسخ إلى مندوب واحد؛ تم الحفاظ على نسخ جميع المناديب دون تعديل.", driver_sheets: currentSheets }, 409);
-        }
+        const requestedAllDrivers = !requestedSheet || requestedSheet.toUpperCase() === 'ALL';
+        const hasMultipleDriverCopies = currentSheets.length > 1;
+        // التعديل من الكمبيوتر يحدّث بيانات الفاتورة في كل النسخ المطابقة.
+        // عند وجودها لدى أكثر من مندوب، لا نرفض الحفظ ولا ننقل النسخ إلى مندوب واحد؛
+        // نُبقي sheet_name لكل نسخة كما هو ونحدّث باقي الحقول في جميع النسخ.
+        // إذا كانت نسخة واحدة فقط، يُسمح بتغيير المندوب عند اختيار مندوب محدد.
 
         const allowed = [
           "customer_name", "phone", "emirate", "area", "order_details",
@@ -2711,9 +2714,9 @@ export default {
         const ordersPatch = Object.assign({}, archivePatch);
         delete ordersPatch.updated_at;
 
-        // تغيير المندوب مسموح فقط إذا كانت الفاتورة لها مندوب واحد معروف.
-        // أما الفاتورة المكررة عند عدة مناديب فتبقى كل نسخة باسم مندوبها.
-        if (currentSheets.length === 1 && requestedSheet && requestedSheet !== currentSheets[0]) {
+        // لا ننقل الفاتورة عند اختيار ALL أو عند وجود نسخ لدى أكثر من مندوب.
+        // تغيير المندوب يظل متاحًا فقط عندما توجد نسخة واحدة ويُختار مندوب محدد.
+        if (currentSheets.length === 1 && !requestedAllDrivers && requestedSheet !== currentSheets[0]) {
           if (foundOrders.rows.length) ordersPatch.sheet_name = requestedSheet;
           if (foundArchive.rows.length) archivePatch.sheet_name = requestedSheet;
         }
@@ -2776,6 +2779,7 @@ export default {
           updated_archive: updatedArchive.length,
           archive_managed_by_orders_trigger: archiveManagedByOrderTrigger,
           updated_sheets: updatedSheets,
+          driver_assignment_preserved: hasMultipleDriverCopies || requestedAllDrivers,
           delivery_date: deliveryDate,
           created_at_unchanged: true
         });
