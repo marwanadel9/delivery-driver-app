@@ -1020,9 +1020,7 @@
       .order-card.is-future-delivery-locked .payment-btn:disabled,
       .order-card.is-future-delivery-locked .btn-deliver:disabled { cursor:not-allowed!important; }
       .order-card.is-compact .fa-coordinator-badge{display:none!important}
-      .driver-order-wrap { display:flex!important;flex-direction:column!important;width:100%!important;box-sizing:border-box!important;gap:0!important;position:relative!important;isolation:isolate!important; }
-      /* القفل يغطي صف الترتيب والبطاقة بكاملها؛ لا يسمح بفتح التفاصيل أو الضغط على أي رابط/زر. */
-      .driver-order-wrap.is-future-delivery-locked-wrap > .future-delivery-lock-shield { position:absolute!important;inset:0!important;z-index:2147483647!important;display:block!important;background:rgba(255,247,223,.035)!important;border:1px solid rgba(217,119,6,.28)!important;border-radius:14px!important;cursor:not-allowed!important;pointer-events:auto!important;touch-action:pan-y!important;user-select:none!important;-webkit-user-select:none!important;-webkit-tap-highlight-color:transparent!important; }
+      .driver-order-wrap { display:flex!important;flex-direction:column!important;width:100%!important;box-sizing:border-box!important;gap:0!important; }
       .driver-sort-row { display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:8px!important;width:100%!important;box-sizing:border-box!important;margin:0 0 6px!important;padding:0 4px!important;direction:rtl!important; }
       .driver-sort-label { color:#9a3412!important;font-size:13px!important;font-weight:900!important;white-space:nowrap!important; }
       .driver-sort-input { width:76px!important;height:42px!important;box-sizing:border-box!important;border:2px solid #f97316!important;border-radius:10px!important;background:#fff7ed!important;color:#ea580c!important;text-align:center!important;direction:ltr!important;unicode-bidi:isolate!important;font-family:Arial,sans-serif!important;font-size:22px!important;font-weight:1000!important;outline:none!important; }
@@ -1120,8 +1118,9 @@
       toast(error.message || 'تعذر حفظ ترتيب الفواتير', true);
     } finally {
       document.querySelectorAll('.driver-sort-input').forEach((el) => {
-        const row = state.orders.find((item) => String(item.id ?? '') === String(el.dataset.orderId ?? ''));
-        el.disabled = Boolean(row && isFutureDeliveryLocked(row));
+        // ترتيب الفاتورة مسموح حتى لو كانت الفاتورة المستقبلية مقفولة؛
+        // القفل يظل مطبقًا على الدفع والتسليم وفتح التفاصيل وباقي الأزرار.
+        el.disabled = false;
       });
     }
   }
@@ -1211,8 +1210,10 @@
       sortInput.dir = 'ltr';
       sortInput.value = String(Math.max(1, Number(order._driver_sort_position) || state.orders.findIndex((item) => String(item.id) === String(order.id)) + 1));
       sortInput.dataset.orderId = String(order.id ?? '');
-      sortInput.disabled = futureLocked;
-      if (futureLocked) sortInput.title = 'الفاتورة مقفولة حتى بداية يوم التوصيل بتوقيت دبي';
+      // الاستثناء الوحيد من قفل الفاتورة المستقبلية هو إعادة ترتيبها.
+      // لا يفتح هذا الاستثناء تفاصيل الفاتورة ولا أي إجراء تشغيلي آخر.
+      sortInput.disabled = false;
+      if (futureLocked) sortInput.title = 'مسموح تغيير ترتيب الفاتورة فقط؛ باقي الفاتورة مقفول حتى بداية يوم التوصيل بتوقيت دبي';
       sortInput.setAttribute('aria-label', 'رقم ترتيب الفاتورة بالأرقام الإنجليزية');
       sortLabel.htmlFor = `driver-sort-${String(order.id).replace(/[^A-Za-z0-9_-]/g, '')}`;
       sortInput.id = sortLabel.htmlFor;
@@ -1244,7 +1245,7 @@
       const closeInvoiceFullscreen = () => {
         node.classList.remove('is-fullscreen-invoice');
         node.classList.add('is-compact');
-        sortInput.disabled = futureLocked;
+        sortInput.disabled = false;
         document.body.classList.remove('driver-invoice-open');
         document.documentElement.classList.remove('driver-invoice-open');
         document.body.style.overflow = previousBodyOverflow;
@@ -2039,24 +2040,6 @@
       const orderWrap = document.createElement('div');
       orderWrap.className = 'driver-order-wrap';
       orderWrap.append(sortRow, node);
-      if (futureLocked) {
-        orderWrap.classList.add('is-future-delivery-locked-wrap');
-        orderWrap.setAttribute('aria-disabled', 'true');
-        orderWrap.setAttribute('data-lock-date', orderDeliveryDate);
-        /* inert يمنع التركيز ولوحة المفاتيح، والطبقة الشفافة تعترض كل لمسات الشاشة. */
-        sortRow.inert = true;
-        node.inert = true;
-        sortRow.setAttribute('inert', '');
-        node.setAttribute('inert', '');
-        node.querySelectorAll('button,input,select,textarea').forEach((control) => { control.disabled = true; });
-        node.querySelectorAll('a,[role="button"],[tabindex]').forEach((control) => { control.setAttribute('tabindex', '-1'); control.setAttribute('aria-disabled', 'true'); });
-        const shield = document.createElement('div');
-        shield.className = 'future-delivery-lock-shield';
-        shield.setAttribute('role', 'note');
-        shield.setAttribute('aria-label', `الفاتورة مقفولة بالكامل حتى بداية يوم ${formatDeliveryDateLabel(orderDeliveryDate)} بتوقيت دبي`);
-        shield.title = `مقفولة حتى بداية يوم ${formatDeliveryDateLabel(orderDeliveryDate)} بتوقيت دبي`;
-        orderWrap.appendChild(shield);
-      }
       list.appendChild(orderWrap);
     }
 
@@ -2176,7 +2159,9 @@
             ? 'اختيار الدفع كاش'
             : 'اختيار التحويل البنكي'
         );
-        button.disabled = isFutureDeliveryLocked(order) || isDelivered(order.delivery_status) || isPaidInAdvance(order);
+        if (!isDelivered(order.delivery_status) && !isPaidInAdvance(order)) {
+          button.disabled = false;
+        }
       });
     }
   }
