@@ -2277,17 +2277,22 @@
   }
 
   function masterDriver(order) {
-    const sheet = String(order.sheet_name || '').trim();
-
-    if (sheet === 'Mandoub2') {
-      return 'مندوب 2';
-    }
-
-    if (sheet === 'Mandoub') {
-      return 'مندوب 1';
-    }
-
-    return sheet || 'غير محدد';
+    // يعرض أسماء كل المناديب الذين لديهم نسخة من نفس الفاتورة،
+    // مع بقاء الفاتورة نفسها في صف واحد فقط داخل الماستر.
+    const copies = typeof masterGetInvoiceCopies === 'function'
+      ? masterGetInvoiceCopies(order)
+      : [order];
+    const sheets = Array.from(new Set(
+      (copies.length ? copies : [order])
+        .map((item) => String(item?.sheet_name || '').trim())
+        .filter(Boolean)
+    ));
+    const labels = sheets.map((sheet) => {
+      if (sheet === 'Mandoub2') return 'مندوب 2';
+      if (sheet === 'Mandoub') return 'مندوب 1';
+      return sheet;
+    });
+    return labels.length ? labels.join(' + ') : 'غير محدد';
   }
 
   function masterDate(value) {
@@ -3217,28 +3222,22 @@
       .replace(/[^a-z0-9\u0600-\u06FF]/g, '');
   }
 
-  // Identity matcher for duplicate copies of one invoice across driver sheets.
-  // The sheet name and creation timestamp are intentionally ignored: the same
-  // invoice may be copied to several drivers, and each copy can have a different timestamp.
+  // Same logical invoice across driver sheets: invoice number + compatible
+  // customer identity + compatible delivery date. A known date mismatch MUST
+  // remain two separate invoices, even when the customer phone is identical.
   function masterSameInvoiceCopy(left, right) {
     const leftNumber = masterOrderInvoiceNumber(left);
     const rightNumber = masterOrderInvoiceNumber(right);
     if (!leftNumber || leftNumber !== rightNumber) return false;
 
-    const leftPhone = masterOrderPhoneDigits(left);
-    const rightPhone = masterOrderPhoneDigits(right);
-    if (leftPhone.length >= 5 && rightPhone.length >= 5 && leftPhone === rightPhone) {
-      return true;
-    }
+    const leftDate = masterOrderDateAreaKey(left?.delivery_date);
+    const rightDate = masterOrderDateAreaKey(right?.delivery_date);
+    if (leftDate && rightDate && leftDate !== rightDate) return false;
 
     const leftName = masterOrderCustomerName(left);
     const rightName = masterOrderCustomerName(right);
-    if (leftName.length < 3 || rightName.length < 3 || leftName !== rightName) {
-      return false;
-    }
+    if (leftName && rightName && leftName !== rightName) return false;
 
-    // Use address fields as a safety check when both copies contain them.
-    // If one copy has a blank field, don't let that missing value block matching.
     const leftEmirate = masterOrderAreaKey(left, 'emirate');
     const rightEmirate = masterOrderAreaKey(right, 'emirate');
     if (leftEmirate && rightEmirate && leftEmirate !== rightEmirate) return false;
@@ -3247,9 +3246,23 @@
     const rightArea = masterOrderAreaKey(right, 'area');
     if (leftArea && rightArea && leftArea !== rightArea) return false;
 
-    // If phone numbers differ, matching name + compatible location is still accepted
-    // because one copy may have an old/blank phone; the invoice number must match above.
-    return true;
+    const leftPhone = masterOrderPhoneDigits(left);
+    const rightPhone = masterOrderPhoneDigits(right);
+    if (leftPhone.length >= 5 && rightPhone.length >= 5) {
+      // Equal phones are strong evidence; different phones may still be old
+      // copies of the same invoice when the customer and area match exactly.
+      if (leftPhone === rightPhone) return true;
+      return leftName.length >= 3 && leftName === rightName &&
+        (!leftEmirate || !rightEmirate || leftEmirate === rightEmirate) &&
+        (!leftArea || !rightArea || leftArea === rightArea);
+    }
+
+    return leftName.length >= 3 && leftName === rightName;
+  }
+
+  function masterOrderDateAreaKey(value) {
+    const raw = String(value || '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '';
   }
 
   function masterInvoiceFingerprint(order) {
@@ -3274,18 +3287,25 @@
     return `invoice|${invoiceNumber}|${identity}`;
   }
 
+  function masterCopyStorageKey(item) {
+    const source = String(item?._master_source || 'unknown');
+    const sheet = masterNormalizeDuplicateValue(item?.sheet_name || '');
+    const id = item?.id === null || item?.id === undefined ? '' : String(item.id).trim();
+    return id ? `${source}|${sheet}|${id}` : `${source}|${sheet}|${masterInvoiceFingerprint(item)}`;
+  }
+
   function masterGetInvoiceCopies(order) {
     const sourceOrders = Array.isArray(state.masterOrders) ? state.masterOrders : [];
     const copies = [];
-    const seenIds = new Set();
-    const initial = sourceOrders.find((item) => String(item?.id ?? '') === String(order?.id ?? '')) || order;
+    const seenKeys = new Set();
+    const requestedKey = masterCopyStorageKey(order);
+    const initial = sourceOrders.find((item) => masterCopyStorageKey(item) === requestedKey) || order;
 
     const addCopy = (item) => {
       if (!item) return false;
-      const id = item.id === null || item.id === undefined ? '' : String(item.id).trim();
-      const key = id ? `id:${id}` : item;
-      if (seenIds.has(key)) return false;
-      seenIds.add(key);
+      const key = masterCopyStorageKey(item);
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
       copies.push(item);
       return true;
     };
@@ -3295,7 +3315,8 @@
     while (changed) {
       changed = false;
       for (const candidate of sourceOrders) {
-        if (copies.some((existing) => String(existing?.id ?? '') === String(candidate?.id ?? ''))) continue;
+        const candidateKey = masterCopyStorageKey(candidate);
+        if (seenKeys.has(candidateKey)) continue;
         if (copies.some((existing) => masterSameInvoiceCopy(existing, candidate))) {
           if (addCopy(candidate)) changed = true;
         }
@@ -3306,18 +3327,24 @@
   }
 
   function masterOrderRecency(order) {
+    let timestampOrId = 0;
     const updateFields = ['updated_at', 'updatedAt', 'modified_at', 'last_updated_at'];
     for (const field of updateFields) {
       const value = order?.[field];
       if (!value) continue;
       const timestamp = new Date(value).getTime();
-      if (Number.isFinite(timestamp)) return timestamp;
+      if (Number.isFinite(timestamp)) { timestampOrId = timestamp; break; }
+    }
+    if (!timestampOrId) {
+      const id = Number(order?.id);
+      timestampOrId = Number.isFinite(id) ? id : 0;
     }
 
-    // بعض الجداول لا تحتوي updated_at؛ عند وجود نسخ مكررة نفضّل السجل ذي المعرّف الأعلى،
-    // بدل دمج حالة تسليم قديمة فوق الحالة التي اختارها المستخدم للتو.
-    const id = Number(order?.id);
-    return Number.isFinite(id) ? id : 0;
+    // النسخة النشطة في orders هي أحدث مصدر تشغيلي لحالة الطلب؛ لا نسمح
+    // لنسخة أرشيف قديمة بأن تطغى على حالة مندوب ما زال يعمل على الفاتورة.
+    const sourcePriority = order?._master_source === 'orders' ? 2
+      : order?._master_source === 'master_orders_archive' ? 1 : 0;
+    return sourcePriority * 1e15 + timestampOrId;
   }
 
   function getMasterUniqueOrders() {
@@ -4667,18 +4694,23 @@
       const matchingCopies = masterGetInvoiceCopies(order);
       const targets = matchingCopies.length ? matchingCopies : [order];
       const uniqueTargets = [];
-      const seenTargetIds = new Set();
+      const seenTargetSheets = new Set();
       for (const target of targets) {
         const targetId = String(target?.id ?? '').trim();
-        if (!targetId || seenTargetIds.has(targetId)) continue;
-        seenTargetIds.add(targetId);
+        const sheetKey = masterNormalizeDuplicateValue(target?.sheet_name || '');
+        if (!targetId || !sheetKey) {
+          throw new Error('إحدى نسخ الفاتورة لا تحتوي على اسم المندوب في قاعدة البيانات. أوقفت التعديل لحماية بقية النسخ.');
+        }
+        const targetKey = sheetKey;
+        if (seenTargetSheets.has(targetKey)) continue;
+        seenTargetSheets.add(targetKey);
         uniqueTargets.push(target);
       }
       if (!uniqueTargets.length) {
         throw new Error('لم يتم العثور على معرّف قاعدة بيانات صالح لهذه الفاتورة. لم يتم إرسال أي تعديل.');
       }
 
-      const successfulIds = new Set();
+      const successfulSheets = new Set();
       const failedTargets = [];
       for (const target of uniqueTargets) {
         const targetId = String(target.id);
@@ -4707,7 +4739,7 @@
             body: JSON.stringify({
               identity: {
                 order_number: target.order_number || target.invoice_number || order.order_number,
-                sheet_name: target.sheet_name || 'ALL',
+                sheet_name: target.sheet_name,
                 delivery_date: target.delivery_date || '',
                 phone: target.phone || '',
                 customer_name: target.customer_name || ''
@@ -4715,16 +4747,7 @@
               order: payloadForTarget
             })
           });
-          const saved = response?.order || response?.data || response;
-          const index = state.masterOrders.findIndex((item) => String(item.id) === targetId);
-          if (index !== -1) {
-            state.masterOrders[index] = {
-              ...state.masterOrders[index],
-              ...payloadForTarget,
-              ...(saved && typeof saved === 'object' ? saved : {})
-            };
-          }
-          successfulIds.add(targetId);
+          successfulSheets.add(String(target.sheet_name || 'غير محدد'));
         } catch (copyError) {
           failedTargets.push({ sheet: target.sheet_name || 'غير محدد', id: targetId, error: copyError.message || 'تعذر الحفظ' });
         }
@@ -4733,16 +4756,19 @@
       if (failedTargets.length) {
         await loadMasterOrders();
         const failedLabels = failedTargets.map((item) => `${item.sheet} (#${item.id})`).join('، ');
-        throw new Error(`تم تحديث ${successfulIds.size} من ${uniqueTargets.length} نسخة. تعذر تحديث: ${failedLabels}. راجع اتصال قاعدة البيانات قبل إعادة المحاولة.`);
+        throw new Error(`تم تحديث ${successfulSheets.size} من ${uniqueTargets.length} مندوب/نسخة. تعذر تحديث: ${failedLabels}. راجع اتصال قاعدة البيانات قبل إعادة المحاولة.`);
       }
 
       // Refresh from the source of truth after all updates so the master shows the newest state.
       await loadMasterOrders();
-      const current = state.masterOrders.find((item) => String(item.id) === String(order.id)) ||
-        state.masterOrders.find((item) => masterInvoiceFingerprint(item) === originalFingerprint) ||
+      const current = getMasterUniqueOrders().find((item) =>
+        masterOrderInvoiceNumber(item) === masterOrderInvoiceNumber(updatedOrder) &&
+        masterOrderDateAreaKey(item.delivery_date) === selectedOrderDate &&
+        masterNormalizeDuplicateValue(item.sheet_name || '') === masterNormalizeDuplicateValue(order.sheet_name || '')
+      ) || getMasterUniqueOrders().find((item) => masterInvoiceFingerprint(item) === originalFingerprint) ||
         { ...order, ...updatedOrder };
       toast(uniqueTargets.length > 1
-        ? `تم تعديل الفاتورة وتحديث ${uniqueTargets.length} نسخ مرتبطة بها ✅`
+        ? `تم تعديل الفاتورة وتحديثها عند ${uniqueTargets.length} مناديب ✅`
         : 'تم تعديل الفاتورة بنجاح ✅');
       openMasterOrder(current);
       renderMasterOrders();
@@ -4759,73 +4785,58 @@
   }
 
   async function deleteMasterOrder(order) {
-    const number =
-      order.order_number ??
-      order.id ??
-      '';
+    const number = order.order_number ?? order.id ?? '';
+    const customer = order.customer_name || '';
+    const copies = masterGetInvoiceCopies(order);
+    const deliveryDate = masterDeliveryDateValue(order);
+    const phone = masterOrderPhoneDigits(order) || masterOrderPhoneDigits(copies[0] || {});
+    const customerName = masterOrderCustomerName(order) || masterOrderCustomerName(copies[0] || {});
 
-    const customer =
-      order.customer_name ||
-      '';
-
-    const confirmed =
-      window.confirm(
-        `هل أنت متأكد من حذف الفاتورة #${number}${
-          customer
-            ? ` الخاصة بالعميل ${customer}`
-            : ''
-        }؟\n\nلا يمكن التراجع عن الحذف.`
-      );
-
-    if (!confirmed) {
-      return;
-    }
+    const confirmed = window.confirm(
+      `هل أنت متأكد من حذف الفاتورة #${number}${customer ? ` الخاصة بالعميل ${customer}` : ''}؟\n\nسيتم حذف كل نسخها من جميع المناديب ومن الماستر وقاعدة البيانات.`
+    );
+    if (!confirmed) return;
 
     try {
-      const button =
-        $('master-delete-order-btn');
-
+      const button = $('master-delete-order-btn');
       if (button) {
         button.disabled = true;
-        button.textContent =
-          'جارٍ الحذف…';
+        button.textContent = 'جارٍ حذف كل النسخ…';
       }
 
-      await masterFetch(
-        '/api/master/order/delete',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            orderId: order.id
-          })
-        }
-      );
+      if (!deliveryDate || (!phone && customerName.length < 3)) {
+        throw new Error('لا يمكن تحديد كل نسخ الفاتورة بأمان: تاريخ التوصيل ورقم الهاتف أو اسم العميل مطلوبان. لم يتم حذف أي نسخة.');
+      }
 
-      state.masterOrders =
-        state.masterOrders.filter(
-          (item) =>
-            String(item.id) !==
-            String(order.id)
-        );
+      const result = await masterFetch('/api/master/order/delete-by-identity', {
+        method: 'POST',
+        body: JSON.stringify({
+          identity: {
+            order_number: String(order.order_number || order.invoice_number || '').trim(),
+            sheet_name: 'ALL',
+            delivery_date: deliveryDate,
+            phone: phone,
+            customer_name: customerName
+          }
+        })
+      });
 
+      await loadMasterOrders();
       closeMasterModal();
       renderMasterOrders();
-
-      toast(
-        'تم حذف الفاتورة بنجاح ✅'
-      );
+      const removedDrivers = Number(result?.deleted_orders || 0);
+      const removedArchive = Number(result?.deleted_archive || 0);
+      toast(`تم حذف الفاتورة من جميع النسخ بنجاح ✅ (المناديب: ${removedDrivers}، الأرشيف: ${removedArchive})`);
 
     } catch (error) {
-      if (
-        error.message === 'expired'
-      ) {
-        return;
+      if (error.message === 'expired') return;
+      toast(error.message || 'تعذر حذف كل نسخ الفاتورة', true);
+      const button = $('master-delete-order-btn');
+      if (button) {
+        button.disabled = false;
+        button.textContent = '🗑️ حذف الفاتورة';
       }
-
-      toast(
-        error.message,
-        true
-      );
+      await loadMasterOrders();
     }
   }
 
