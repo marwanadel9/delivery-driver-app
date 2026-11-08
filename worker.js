@@ -2580,7 +2580,7 @@ export default {
           "total", "payment_method", "delivery_status", "delivery_fee",
           "delivery_date", "sheet_name", "location_url", "note",
           "appointment_coordinator", "gate_photo_url", "gate_photo_urls",
-          "paid_in_advance"
+          "paid_in_advance", "bank_transfer_received"
         ];
         const archivePatch = {};
         allowed.forEach(function (key) {
