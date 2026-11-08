@@ -330,7 +330,7 @@
       gap: 9px !important;
       width: 100% !important;
       min-width: 0 !important;
-      min-height: 68px !important;
+      min-height: 62px !important;
       box-sizing: border-box !important;
       padding: 10px 12px !important;
       border: 2px solid transparent !important;
@@ -405,7 +405,7 @@
     }
 
     .order-card .payment-btn:active:not(:disabled) {
-      transform: scale(.975) !important;
+      transform: scale(.985) !important;
       box-shadow: 0 2px 5px rgba(15, 23, 42, .13) !important;
     }
 
@@ -413,25 +413,6 @@
       outline: 3px solid #f59e0b !important;
       outline-offset: 3px !important;
     }
-
-    .order-card .payment-btn.is-saving {
-      opacity: .96 !important;
-      filter: saturate(1.05) !important;
-      cursor: progress !important;
-    }
-
-    .order-card .payment-btn.is-saving::after {
-      content: '';
-      width: 17px !important;
-      height: 17px !important;
-      flex: 0 0 17px !important;
-      border: 2px solid currentColor !important;
-      border-left-color: transparent !important;
-      border-radius: 50% !important;
-      animation: payment-spin .65s linear infinite !important;
-    }
-
-    @keyframes payment-spin { to { transform: rotate(360deg); } }
 
     .order-card .payment-btn:disabled {
       opacity: .72 !important;
@@ -442,7 +423,7 @@
     @media (max-width: 380px) {
       .order-card .payment-section { padding: 9px !important; gap: 8px !important; }
       .order-card .payment-buttons { gap: 7px !important; }
-      .order-card .payment-btn { min-height: 62px !important; padding: 8px 6px !important; gap: 6px !important; }
+      .order-card .payment-btn { min-height: 58px !important; padding: 8px 6px !important; gap: 6px !important; }
       .order-card .payment-btn > span:first-child { width: 29px !important; height: 29px !important; font-size: 18px !important; }
       .order-card .payment-btn strong { font-size: 12px !important; }
       .order-card .payment-btn small { font-size: 9px !important; }
@@ -927,7 +908,7 @@
             طريقة الدفع
           </span>
 
-          <small class="payment-current" aria-live="polite" role="status">
+          <small class="payment-current">
             لم يتم تحديد طريقة الدفع — اختر طريقة التحصيل
           </small>
 
@@ -1032,7 +1013,7 @@
       }
     }, true);
   </script>
-  <script src="/app.js?v=20261108-payment-v2"></script>
+  <script src="/app.js?v=20261109-future-lock-v1"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
