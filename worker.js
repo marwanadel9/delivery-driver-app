@@ -226,10 +226,20 @@ async function requireMaster(request, env) {
 // مطابقة هوية الفاتورة بين الكمبيوتر ونسخ المندوبين والماستر.
 // رقم الفاتورة وحده لا يكفي دائمًا؛ نستخدم تاريخ التوصيل والهاتف والعميل.
 function invoiceDigits(value) {
-  return String(value == null ? "" : value).replace(/[^0-9]/g, "");
+  return String(value == null ? "" : value)
+    .replace(/[٠-٩]/g, function (digit) { return String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)); })
+    .replace(/[۰-۹]/g, function (digit) { return String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)); })
+    .replace(/[^0-9]/g, "");
 }
 function invoiceNorm(value) {
-  return String(value == null ? "" : value).normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  return String(value == null ? "" : value)
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/\s+/g, " ");
 }
 function matchInvoiceRows(rows, identity) {
   const orderNumber = String(identity.order_number || "").trim();
@@ -270,32 +280,45 @@ function matchInvoiceRows(rows, identity) {
     }
   }
 
-  // نستخدم اسم العميل كحاجز حماية عند إعادة استخدام أرقام الفواتير اليومية.
-  let nameMatched = candidates;
-  if (customer) {
-    nameMatched = candidates.filter(function (row) {
-      const saved = invoiceNorm(row.customer_name);
-      return !saved || saved === customer;
+  // عند ALL نريد كل النسخ الحقيقية للفواتير المكررة عبر المناديب.
+  // بعض النسخ القديمة قد تحمل هاتفًا مختلفًا بعد تحديث العميل؛ لذلك نطابق
+  // على رقم الفاتورة + تاريخ التوصيل + (الهاتف أو اسم العميل) دون إسقاط نسخة
+  // مندوب آخر لمجرد اختلاف هاتفها. التاريخ المختلف يظل مستبعدًا دائمًا.
+  if (allSheets && date) {
+    candidates = candidates.filter(function (row) {
+      const savedPhone = invoiceDigits(row.phone);
+      const savedCustomer = invoiceNorm(row.customer_name);
+      const phoneMatch = Boolean(phone && savedPhone && savedPhone === phone);
+      const customerMatch = Boolean(customer && savedCustomer && savedCustomer === customer);
+      return phoneMatch || customerMatch;
     });
-    if (!nameMatched.length) return { rows: [], ambiguous: false };
-  }
-
-  if (phone) {
-    const phoneMatched = nameMatched.filter(function (row) {
-      const saved = invoiceDigits(row.phone);
-      return !saved || saved === phone;
-    });
-    if (phoneMatched.length) {
-      candidates = phoneMatched;
-    } else if (customer && date) {
-      // إذا كان هاتف نسخة قديمة مختلفًا، نقبل مطابقة الاسم فقط بعد تضييق
-      // النطاق بالتاريخ وبالمندوب المحدد أو ALL؛ ولا نتجاوز اختلاف تاريخ معروف.
-      candidates = nameMatched;
-    } else {
-      return { rows: [], ambiguous: false };
-    }
+    if (!candidates.length) return { rows: [], ambiguous: false };
   } else {
-    candidates = nameMatched;
+    // في التعديل الموجه لمندوب واحد نلتزم بالمطابقة الصارمة لحماية الفاتورة.
+    let nameMatched = candidates;
+    if (customer) {
+      nameMatched = candidates.filter(function (row) {
+        const saved = invoiceNorm(row.customer_name);
+        return !saved || saved === customer;
+      });
+      if (!nameMatched.length) return { rows: [], ambiguous: false };
+    }
+
+    if (phone) {
+      const phoneMatched = nameMatched.filter(function (row) {
+        const saved = invoiceDigits(row.phone);
+        return !saved || saved === phone;
+      });
+      if (phoneMatched.length) {
+        candidates = phoneMatched;
+      } else if (customer && date) {
+        candidates = nameMatched;
+      } else {
+        return { rows: [], ambiguous: false };
+      }
+    } else {
+      candidates = nameMatched;
+    }
   }
 
   if (!allSheets && candidates.length > 1) return { rows: [], ambiguous: true };
@@ -2596,8 +2619,12 @@ export default {
         const order = body.order && typeof body.order === "object" ? body.order : null;
         const orderNumber = String(identity.order_number || "").trim();
         const deliveryDate = String(order && order.delivery_date || "").slice(0, 10);
-        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !order || !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) {
-          return json({ error: "بيانات الفاتورة أو تاريخ التوصيل غير صحيحة" }, 400);
+        const identityPhone = invoiceDigits(identity.phone);
+        const identityCustomer = invoiceNorm(identity.customer_name);
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !order ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate) ||
+            (!identityPhone && identityCustomer.length < 3)) {
+          return json({ error: "بيانات الفاتورة أو تاريخ التوصيل أو هوية العميل غير صحيحة" }, 400);
         }
         const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
         if (!serviceKey) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
@@ -2619,8 +2646,34 @@ export default {
 
         const foundOrders = matchInvoiceRows(ordersRows, identity);
         const foundArchive = matchInvoiceRows(archiveRows, identity);
-        if (foundOrders.ambiguous || foundArchive.ambiguous) {
-          return json({ error: "رقم الفاتورة له أكثر من نسخة ولا يمكن تحديدها بأمان. لم يتم تعديل أي شيء.", ambiguous_orders: foundOrders.ambiguous, ambiguous_archive: foundArchive.ambiguous }, 409);
+        if (foundOrders.ambiguous) {
+          return json({ error: "نسخ الطلبات النشطة غير محددة بأمان. لم يتم تعديل أي شيء.", ambiguous_orders: true }, 409);
+        }
+
+        // ضم نسخة الأرشيف المرتبطة مباشرةً بنفس id + رقم الفاتورة + المندوب،
+        // حتى لو كان delivery_date في الأرشيف فارغًا بينما orders يحمل التاريخ الصحيح.
+        const exactArchiveCounterparts = archiveRows.filter(function (archived) {
+          return foundOrders.rows.some(function (active) {
+            return String(active.id) === String(archived.id) &&
+              String(active.order_number || '').trim() === String(archived.order_number || '').trim() &&
+              String(active.sheet_name || '').trim() === String(archived.sheet_name || '').trim();
+          });
+        });
+        const archiveMap = new Map();
+        foundArchive.rows.concat(exactArchiveCounterparts).forEach(function (row) {
+          archiveMap.set(String(row.id), row);
+        });
+        foundArchive.rows = Array.from(archiveMap.values());
+        if (foundArchive.ambiguous) {
+          const allArchiveForIdentity = archiveRows.filter(function (row) {
+            if (String(row.order_number || '').trim() !== orderNumber) return false;
+            const savedDate = String(row.delivery_date || '').slice(0, 10);
+            return !savedDate || savedDate === String(identity.delivery_date || '').slice(0, 10);
+          });
+          if (!exactArchiveCounterparts.length || exactArchiveCounterparts.length < allArchiveForIdentity.length) {
+            return json({ error: "نسخ الأرشيف لنفس الفاتورة غير محددة بأمان. لم يتم تعديل أي شيء.", ambiguous_archive: true }, 409);
+          }
+          foundArchive.ambiguous = false;
         }
         if (!foundOrders.rows.length && !foundArchive.rows.length) {
           return json({ error: "not_found — لم يتم العثور على الفاتورة بنفس بيانات العميل" }, 404);
@@ -2680,36 +2733,52 @@ export default {
         }
 
         const ordersFilter = invoiceIdFilter(foundOrders.rows);
-        const archiveFilter = invoiceIdFilter(foundArchive.rows);
+        const activeIds = new Set(foundOrders.rows.map(function (row) { return String(row.id); }));
+        const archiveOnlyRows = foundArchive.rows.filter(function (row) { return !activeIds.has(String(row.id)); });
+        const archiveOnlyFilter = invoiceIdFilter(archiveOnlyRows);
+        const targetIsDelivered = delivered;
+
+        // السجل الموجود في الأرشيف فقط لا يمكن تحويله إلى out من دون إعادة
+        // إنشاء نسخة نشطة؛ نرفض قبل أي كتابة حتى لا تحدث مزامنة جزئية.
+        if (archiveOnlyRows.length && !foundOrders.rows.length && !targetIsDelivered) {
+          return json({ error: "الفاتورة موجودة في الأرشيف فقط ولا توجد نسخة نشطة عند المناديب لإعادتها إلى قيد التوصيل. لم يتم اعتماد التعديل.", updated_orders: 0, updated_archive: 0 }, 409);
+        }
+        if (archiveOnlyRows.length && foundOrders.rows.length && !targetIsDelivered) {
+          return json({ error: "توجد نسخة تاريخية فقط لأحد المندوبين. لا يمكن إرجاعها إلى قيد التوصيل تلقائيًا؛ لم يتم اعتماد التعديل لتجنب اختلاف النسخ.", updated_orders: 0, updated_archive: 0 }, 409);
+        }
+
         let updatedOrders = [];
         let updatedArchive = [];
         if (ordersFilter) {
           const response = await supabaseRequest("/rest/v1/orders?" + ordersFilter, { method: "PATCH", headers: H, body: JSON.stringify(ordersPatch) });
           updatedOrders = await response.json().catch(function () { return null; });
           if (!response.ok || !Array.isArray(updatedOrders) || updatedOrders.length !== foundOrders.rows.length) {
-            return json({ error: "تعذر تحديث كل نسخ المناديب؛ راجع قاعدة البيانات قبل إعادة المحاولة.", updated_orders: Array.isArray(updatedOrders) ? updatedOrders.length : 0 }, 502);
+            return json({ error: "تعذر تحديث كل نسخ المناديب؛ راجع قاعدة البيانات قبل إعادة المحاولة.", updated_orders: Array.isArray(updatedOrders) ? updatedOrders.length : 0, expected_orders: foundOrders.rows.length }, 502);
           }
         }
 
-        // عند وجود نسخ نشطة في orders، يكون Trigger الأرشفة هو المسؤول عن
-        // إنشاء/تحديث نسخة الأرشيف عند التسليم أو إزالتها عند الرجوع إلى out.
-        // لذلك لا نرسل PATCH إلى نسخة أرشيف قد يكون Trigger حذفها للتو.
-        // نحدّث الأرشيف مباشرة فقط عندما لا توجد أي نسخة نشطة مطابقة.
-        const targetIsDelivered = statusRaw === "delivered" || statusRaw.includes("تم");
-        let archiveManagedByOrderTrigger = false;
-        if (archiveFilter && !foundOrders.rows.length) {
-          if (!targetIsDelivered) {
-            return json({ error: "الفاتورة موجودة في الأرشيف فقط ولا توجد نسخة نشطة عند المناديب لإعادتها إلى قيد التوصيل. لم يتم اعتماد التعديل.", updated_orders: 0, updated_archive: 0 }, 409);
-          }
-          const response = await supabaseRequest("/rest/v1/master_orders_archive?" + archiveFilter, { method: "PATCH", headers: H, body: JSON.stringify(archivePatch) });
+        // النسخ ذات المعرف نفسه في orders يتولى Trigger الأرشفة تحديثها.
+        // نحدّث فقط سجلات الأرشيف التاريخية التي لا يقابلها سجل نشط في orders.
+        let archiveManagedByOrderTrigger = foundOrders.rows.length > 0;
+        if (archiveOnlyFilter) {
+          const response = await supabaseRequest("/rest/v1/master_orders_archive?" + archiveOnlyFilter, { method: "PATCH", headers: H, body: JSON.stringify(archivePatch) });
           updatedArchive = await response.json().catch(function () { return null; });
-          if (!response.ok || !Array.isArray(updatedArchive) || updatedArchive.length !== foundArchive.rows.length) {
-            return json({ error: "تعذر تحديث نسخة الأرشيف؛ راجع قاعدة البيانات فورًا.", updated_orders: updatedOrders.length, updated_archive: Array.isArray(updatedArchive) ? updatedArchive.length : 0 }, 502);
+          if (!response.ok || !Array.isArray(updatedArchive) || updatedArchive.length !== archiveOnlyRows.length) {
+            return json({ error: "تم تحديث الطلبات النشطة لكن تعذر تحديث بعض النسخ التاريخية؛ راجع قاعدة البيانات فورًا.", updated_orders: updatedOrders.length, updated_archive: Array.isArray(updatedArchive) ? updatedArchive.length : 0, expected_archive: archiveOnlyRows.length }, 502);
           }
-        } else if (foundOrders.rows.length) {
-          archiveManagedByOrderTrigger = true;
         }
-        return json({ success: true, order_number: orderNumber, updated_orders: updatedOrders.length, updated_archive: updatedArchive.length, archive_managed_by_orders_trigger: archiveManagedByOrderTrigger, updated_sheets: currentSheets, delivery_date: deliveryDate, created_at_unchanged: true });
+        const updatedSheets = Array.from(new Set(foundOrders.rows.concat(foundArchive.rows)
+          .map(function (row) { return String(row.sheet_name || '').trim(); }).filter(Boolean)));
+        return json({
+          success: true,
+          order_number: orderNumber,
+          updated_orders: updatedOrders.length,
+          updated_archive: updatedArchive.length,
+          archive_managed_by_orders_trigger: archiveManagedByOrderTrigger,
+          updated_sheets: updatedSheets,
+          delivery_date: deliveryDate,
+          created_at_unchanged: true
+        });
       }
 
       if (path === "/api/master/order/update-by-number" && request.method === "POST") {
