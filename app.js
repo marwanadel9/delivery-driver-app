@@ -2295,6 +2295,12 @@
       return '—';
     }
 
+    const rawValue = String(value).trim();
+    const dateOnly = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnly) {
+      return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
+    }
+
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) {
@@ -2302,11 +2308,13 @@
     }
 
     return date.toLocaleString('ar-EG-u-nu-latn', {
+      timeZone: 'Asia/Dubai',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      hourCycle: 'h23'
     });
   }
 
@@ -2315,17 +2323,39 @@
       return '';
     }
 
+    const rawValue = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+      return rawValue;
+    }
+
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) {
       return String(value).slice(0, 10);
     }
 
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Dubai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  }
 
-    return `${year}-${month}-${day}`;
+  // تاريخ التوصيل فقط هو مرجع تصنيف الفاتورة؛ created_at يظل تاريخ إنشاء/رفع.
+  function masterDeliveryDateValue(order) {
+    return order && order.delivery_date ? String(order.delivery_date).trim() : '';
+  }
+
+  function masterDeliveryDateInput(order) {
+    return masterDateInput(masterDeliveryDateValue(order));
+  }
+
+  function masterDeliveryDateDisplay(order) {
+    const deliveryDate = masterDeliveryDateValue(order);
+    return deliveryDate ? masterDate(deliveryDate) : 'تاريخ التوصيل غير محدد';
   }
 
   function masterPaymentText(value) {
@@ -3328,7 +3358,7 @@
       const orderNumber = String(order.order_number ?? order.id ?? '').toLowerCase();
       const customerName = String(order.customer_name ?? '').toLowerCase();
       const customerPhone = String(order.phone ?? '').toLowerCase();
-      const orderDate = masterDateInput(order.delivery_date || order.created_at);
+      const orderDate = masterDeliveryDateInput(order);
 
       // الجدول الرئيسي يعرض فواتير اليوم فقط بشكل افتراضي، حتى مع البحث بالاسم أو الرقم أو المندوب.
       // لا يُسمح بعرض فواتير يوم آخر إلا عند اختيار تاريخ صريح من فلتر التاريخ.
@@ -3349,7 +3379,7 @@
         return false;
       }
 
-      if (date && masterDateInput(order.delivery_date || order.created_at) !== date) {
+      if (date && masterDeliveryDateInput(order) !== date) {
         return false;
       }
 
@@ -3455,12 +3485,12 @@
         !isPaidInAdvance(order) &&
         normalizePayment(order.payment_method) === 'bank_transfer' &&
         order.bank_transfer_received !== true &&
-        masterDateInput(order.delivery_date || order.created_at) !== '' &&
-        masterDateInput(order.delivery_date || order.created_at) < today
+        masterDeliveryDateInput(order) !== '' &&
+        masterDeliveryDateInput(order) < today
       )
       .sort((a, b) => {
-        const da = masterDateInput(a.delivery_date || a.created_at);
-        const db = masterDateInput(b.delivery_date || b.created_at);
+        const da = masterDeliveryDateInput(a);
+        const db = masterDeliveryDateInput(b);
         return da.localeCompare(db) || String(a.order_number || a.id || '').localeCompare(String(b.order_number || b.id || ''));
       });
   }
@@ -3475,8 +3505,8 @@
     const yesterdayDate = new Date(`${today}T12:00:00`);
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterday = masterDateInput(yesterdayDate);
-    const yesterdayOrders = orders.filter((order) => masterDateInput(order.delivery_date || order.created_at) === yesterday);
-    const olderOrders = orders.filter((order) => masterDateInput(order.delivery_date || order.created_at) < yesterday);
+    const yesterdayOrders = orders.filter((order) => masterDeliveryDateInput(order) === yesterday);
+    const olderOrders = orders.filter((order) => masterDeliveryDateInput(order) < yesterday);
     const totalPendingAmount = orders.reduce((sum, order) => sum + masterMoney(order.total), 0);
     const totalPendingCount = orders.length;
     const moneyText = (value) => `${value.toLocaleString('ar-EG-u-nu-latn', { maximumFractionDigits: 2 })} درهم`;
@@ -3495,7 +3525,7 @@
       orders.forEach((order) => {
       const card = document.createElement('article');
       card.className = 'master-old-transfer-card';
-      const ageDays = Math.max(1, Math.floor((new Date(`${masterDateInput(new Date())}T12:00:00`).getTime() - new Date(`${masterDateInput(order.delivery_date || order.created_at)}T12:00:00`).getTime()) / 86400000));
+      const ageDays = Math.max(1, Math.floor((new Date(`${masterDateInput(new Date())}T12:00:00`).getTime() - new Date(`${masterDeliveryDateInput(order)}T12:00:00`).getTime()) / 86400000));
       const ageLabel = ageDays === 1 ? 'أمس' : ageDays === 2 ? 'أول أمس' : `منذ ${ageDays} يوم`;
       card.innerHTML = `
         <div class="master-old-transfer-card-top">
@@ -3505,7 +3535,7 @@
         <div class="master-old-transfer-customer">${masterEscape(order.customer_name || '—')}</div>
         <div class="master-old-transfer-meta">${masterEscape(order.phone || '—')}</div>
         <div class="master-old-transfer-meta">${masterEscape([order.emirate, order.area].filter(Boolean).join(' / ') || '—')}</div>
-        <div class="master-old-transfer-meta">تاريخ الفاتورة: ${masterEscape(masterDate(order.delivery_date || order.created_at))}</div>
+        <div class="master-old-transfer-meta">تاريخ الفاتورة: ${masterEscape(masterDeliveryDateDisplay(order))}</div>
         <div class="master-old-transfer-amount">${masterEscape(formatTotal(order.total))}</div>
         <button class="master-transfer-btn pending" data-old-transfer="${masterEscape(order.id)}">تأكيد استلام التحويل</button>
       `;
@@ -3523,7 +3553,7 @@
     return getMasterUniqueOrders()
       .filter((order) => {
         if (isPaidInAdvance(order) || normalizePayment(order.payment_method) !== 'bank_transfer') return false;
-        const date = masterDateInput(order.delivery_date || order.created_at);
+        const date = masterDeliveryDateInput(order);
         return date && date.slice(0, 7) === month;
       })
       .sort((a, b) => {
@@ -3534,7 +3564,7 @@
         if (emirateOrder) return emirateOrder;
         const areaOrder = emirateCompare.compare(String(a.area || ''), String(b.area || ''));
         if (areaOrder) return areaOrder;
-        return masterDateInput(b.delivery_date || b.created_at).localeCompare(masterDateInput(a.delivery_date || a.created_at));
+        return masterDeliveryDateInput(b).localeCompare(masterDeliveryDateInput(a));
       });
   }
 
@@ -3570,7 +3600,7 @@
         <td>${masterEscape(order.customer_name || '—')}</td>
         <td dir="ltr">${masterEscape(order.phone || '—')}</td>
         <td>${masterEscape(order.area || '—')}</td>
-        <td>${masterEscape(masterDate(order.delivery_date || order.created_at))}</td>
+        <td>${masterEscape(masterDeliveryDateDisplay(order))}</td>
         <td><strong>${masterEscape(moneyText(masterMoney(order.total)))}</strong></td>
         <td>${status}</td>
         <td><button type="button" class="${buttonClass}" data-month-transfer-action="${masterEscape(order.id)}">${buttonLabel}</button></td>
@@ -3604,7 +3634,7 @@
 
   function renderMasterDaySummary() {
     const selectedDate = String($('master-search-date')?.value || '').trim() || masterDateInput(new Date());
-    const orders = getMasterUniqueOrders().filter((order) => masterDateInput(order.delivery_date || order.created_at) === selectedDate);
+    const orders = getMasterUniqueOrders().filter((order) => masterDeliveryDateInput(order) === selectedDate);
     const prepaid = orders.filter((order) => isPaidInAdvance(order));
     const balance = orders.filter((order) => !isPaidInAdvance(order) && isBalancePaymentOrder(order));
     const cash = orders.filter((order) => !isPaidInAdvance(order) && !isBalancePaymentOrder(order) && normalizePayment(order.payment_method) === 'cash');
@@ -3647,7 +3677,7 @@
     // can summarize a previous day without changing any invoice or driver behavior.
     const selectedDashboardDate = String($('master-search-date')?.value || '').trim();
     const today = selectedDashboardDate || masterDateInput(new Date());
-    const todayOrders = allOrders.filter((order) => masterDateInput(order.delivery_date || order.created_at) === today);
+    const todayOrders = allOrders.filter((order) => masterDeliveryDateInput(order) === today);
     const isBalanceOrder = (order) => {
       const method = String(order?.payment_method || '').trim().toLowerCase();
       const marked = [order?.paid_from_balance, order?.balance_used, order?.customer_balance_used, order?.paid_by_balance]
@@ -3710,7 +3740,7 @@
         const date = new Date(`${today}T12:00:00`);
         date.setDate(date.getDate() - offset);
         const key = masterDateInput(date);
-        const orders = allOrders.filter((order) => masterDateInput(order.delivery_date || order.created_at) === key);
+        const orders = allOrders.filter((order) => masterDeliveryDateInput(order) === key);
         days.push({ key, label: date.toLocaleDateString('ar-EG-u-nu-latn', { day: '2-digit', month: '2-digit' }), total: sum(orders), count: orders.length });
       }
       const max = Math.max(1, ...days.map((day) => day.total));
@@ -3848,7 +3878,7 @@
 
         <td>
           ${masterEscape(
-            masterDate(order.delivery_date || order.created_at)
+            masterDeliveryDateDisplay(order)
           )}
         </td>
 
@@ -4033,7 +4063,7 @@
           <small>التاريخ</small>
           <strong>
             ${masterEscape(
-              masterDate(order.delivery_date || order.created_at)
+              masterDeliveryDateDisplay(order)
             )}
           </strong>
         </div>
@@ -4481,8 +4511,8 @@
           <label>المنطقة
             <input id="master-edit-area" type="text" value="${masterEscape(order.area || '')}">
           </label>
-          <label>تاريخ الطلب
-            <input id="master-edit-order-date" type="date" value="${masterEscape(masterDateInput(order.delivery_date || order.created_at))}" required>
+          <label>تاريخ التوصيل
+            <input id="master-edit-order-date" type="date" value="${masterEscape(masterDeliveryDateInput(order))}" required>
           </label>
         </div>
 
@@ -4590,24 +4620,16 @@
       const nextPayment = normalizePayment($('master-edit-payment')?.value ?? order.payment_method ?? '');
       const selectedOrderDate = String($('master-edit-order-date')?.value || '').trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedOrderDate)) {
-        throw new Error('يرجى اختيار تاريخ صحيح للطلب.');
+        throw new Error('يرجى اختيار تاريخ توصيل صحيح.');
       }
-      // غيّر اليوم مع الحفاظ على ساعة ودقيقة تسجيل الفاتورة الأصلية.
-      const originalCreatedAt = new Date(order.created_at || Date.now());
-      const safeOriginalDate = Number.isNaN(originalCreatedAt.getTime()) ? new Date() : originalCreatedAt;
-      const dateParts = [safeOriginalDate.getHours(), safeOriginalDate.getMinutes(), safeOriginalDate.getSeconds()]
-        .map((part) => String(part).padStart(2, '0'));
-      const nextCreatedAtDate = new Date(`${selectedOrderDate}T${dateParts.join(':')}`);
-      if (Number.isNaN(nextCreatedAtDate.getTime())) throw new Error('تعذر قراءة تاريخ الطلب المحدد.');
-      const nextCreatedAt = nextCreatedAtDate.toISOString();
-
+      // التاريخ المختار هو تاريخ التوصيل فقط؛ created_at يظل محفوظًا كما هو.
       const updatedOrder = {
         ...order,
+        delivery_date: selectedOrderDate,
         customer_name: $('master-edit-customer')?.value ?? order.customer_name ?? '',
         phone: $('master-edit-phone')?.value ?? order.phone ?? '',
         emirate: $('master-edit-emirate')?.value ?? order.emirate ?? '',
         area: $('master-edit-area')?.value ?? order.area ?? '',
-        created_at: nextCreatedAt,
         chicken_weights: chicken.chicken_weights,
         chicken_qtys: chicken.chicken_qtys,
         plate_names: cuts.plate_names,
@@ -4668,18 +4690,28 @@
           order_number: target.order_number ?? updatedOrder.order_number,
           invoice_number: target.invoice_number ?? updatedOrder.invoice_number,
           sheet_name: target.sheet_name,
-          created_at: updatedOrder.created_at,
+          delivery_date: selectedOrderDate,
           // When payment method changes, an old transfer confirmation must not carry over.
           bank_transfer_received: paymentChanged ? false : target.bank_transfer_received,
           gate_photo_urls: gatePhotoUrls,
           gate_photo_url: gatePhotoUrls[0] || ''
         };
+        // لا نرسل created_at في تعديل الماستر؛ تاريخ الإنشاء لا يتغير نهائيًا.
+        delete payloadForTarget.created_at;
 
         try {
-          const response = await masterFetch('/api/master/order/update', {
+          // نستخدم مسار الهوية الآمن لتحديث نسخة المندوب ونسخة الأرشيف معًا.
+          // identity من بيانات النسخة القديمة قبل تعديل الاسم/الهاتف/التاريخ.
+          const response = await masterFetch('/api/master/order/update-by-identity', {
             method: 'POST',
             body: JSON.stringify({
-              orderId: target.id,
+              identity: {
+                order_number: target.order_number || target.invoice_number || order.order_number,
+                sheet_name: target.sheet_name || 'ALL',
+                delivery_date: target.delivery_date || '',
+                phone: target.phone || '',
+                customer_name: target.customer_name || ''
+              },
               order: payloadForTarget
             })
           });
