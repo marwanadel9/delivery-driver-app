@@ -2427,13 +2427,14 @@
       .master-filter label{font-size:11px;color:#7b878c;font-weight:800}
       .master-filter input,.master-filter select{width:100%;box-sizing:border-box;border:1px solid #dfe6e8;border-radius:10px;padding:9px;background:#fff}
 
-      .master-orders-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px;align-items:start;direction:rtl}
-      .master-orders-sidebar{display:flex;flex-direction:column;gap:12px;min-width:0}
+      .master-orders-layout{display:flex;flex-direction:column;gap:14px;align-items:stretch;direction:rtl;width:100%;min-width:0}
+      .master-orders-sidebar{display:block;width:100%;min-width:0}
       .master-day-summary-panel{display:block;background:#fff;border:1px solid #cfe0f4;border-radius:14px;padding:12px;box-shadow:0 5px 18px rgba(30,49,67,.06);direction:rtl}
       .master-day-summary-head{display:flex;flex-direction:column;gap:4px;padding:0 0 10px;margin-bottom:10px;border-bottom:1px solid #e5edf6}
       .master-day-summary-head strong{font-size:15px;font-weight:900;color:#102744}
       .master-day-summary-head span{font-size:11px;color:#64748b;font-weight:800}
-      .master-day-summary-grid{display:grid;grid-template-columns:1fr;gap:7px}
+      .master-day-summary-subtitle{display:block;font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px}
+      .master-day-summary-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
       .master-day-summary-card{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;min-width:0}
       .master-day-summary-card .label{font-size:11px;line-height:1.45;color:#475569;font-weight:800}
       .master-day-summary-card .numbers{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:left;min-width:0}
@@ -2444,7 +2445,8 @@
       .master-day-summary-card.prepaid{background:#fff1f2;border-color:#fecdd3}.master-day-summary-card.prepaid strong{color:#be123c}
       .master-day-summary-card.balance{background:#f5f3ff;border-color:#ddd6fe}.master-day-summary-card.balance strong{color:#6d28d9}
       .master-day-summary-card.pending{background:#fff7ed;border-color:#fed7aa}.master-day-summary-card.pending strong{color:#c2410c}
-      @media(max-width:900px){.master-orders-sidebar{order:0}.master-table-wrap{order:1}.master-day-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.master-day-summary-card{align-items:flex-start;flex-direction:column}.master-day-summary-card .numbers{align-items:flex-start;text-align:right}}
+      @media(max-width:1100px){.master-day-summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+      @media(max-width:900px){.master-day-summary-card{align-items:flex-start;flex-direction:column}.master-day-summary-card .numbers{align-items:flex-start;text-align:right}}
       @media(max-width:650px){.master-day-summary-panel{padding:10px}.master-day-summary-head strong{font-size:14px}.master-day-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-day-summary-card{padding:8px}.master-day-summary-card .label{font-size:10px}.master-day-summary-card strong{font-size:14px}.master-day-summary-card small{font-size:9px}}
       .master-old-transfer-panel{padding:11px;border-radius:14px}
       .master-old-transfer-head{margin-bottom:8px}
@@ -2484,11 +2486,25 @@
       .master-old-transfer-card .master-transfer-btn{width:100%;min-height:38px}
       .master-old-transfer-empty{text-align:center;color:#718087;font-size:12px;line-height:1.8;padding:20px 8px;background:#fafbfc;border-radius:12px}
 
-      .master-table-wrap{background:#fff;border:1px solid #e8edef;border-radius:16px;overflow:auto}
-      .master-table{width:100%;border-collapse:collapse;min-width:1050px}
-      .master-table th,.master-table td{padding:12px;border-bottom:1px solid #edf1f2;text-align:right;white-space:nowrap}
-      .master-table th{font-size:11px;color:#718087;background:#fafbfb}
-      .master-table td{font-size:12px}
+      .master-table-wrap{background:#fff;border:1px solid #e8edef;border-radius:16px;overflow-x:auto;width:100%;min-width:0;box-sizing:border-box}
+      .master-table{width:100%;min-width:0;table-layout:fixed;border-collapse:collapse}
+      .master-table th,.master-table td{padding:9px 6px;border-bottom:1px solid #edf1f2;text-align:right;white-space:normal;overflow-wrap:anywhere;word-break:normal;vertical-align:middle;box-sizing:border-box}
+      .master-table th{font-size:10px;line-height:1.4;color:#718087;background:#fafbfb}
+      .master-table td{font-size:10.5px;line-height:1.55}
+      .master-table th:nth-child(1),.master-table td:nth-child(1){width:7%;white-space:nowrap}
+      .master-table th:nth-child(2),.master-table td:nth-child(2){width:9%}
+      .master-table th:nth-child(3),.master-table td:nth-child(3){width:8%;direction:ltr;text-align:center}
+      .master-table th:nth-child(4),.master-table td:nth-child(4){width:15%}
+      .master-table th:nth-child(5),.master-table td:nth-child(5){width:8%}
+      .master-table th:nth-child(6),.master-table td:nth-child(6){width:8%;white-space:nowrap}
+      .master-table th:nth-child(7),.master-table td:nth-child(7){width:8%}
+      .master-table th:nth-child(8),.master-table td:nth-child(8){width:9%}
+      .master-table th:nth-child(9),.master-table td:nth-child(9){width:8%}
+      .master-table th:nth-child(10),.master-table td:nth-child(10){width:8%;white-space:nowrap}
+      .master-table th:nth-child(11),.master-table td:nth-child(11){width:12%}
+      .master-table td:nth-child(5){font-weight:800;color:#334155}
+      .master-edit-row{display:flex;gap:4px;align-items:center;justify-content:flex-start;flex-wrap:wrap}
+      .master-edit-row button{padding:6px 7px;font-size:10px;white-space:normal;line-height:1.3}
       .master-table tbody tr.master-transfer-pending td{background:#fff0f0!important;color:#8f1d1d;border-bottom-color:#ffd2d2}
       .master-table tbody tr.master-transfer-received td{background:#eaf8ef!important;color:#155b32;border-bottom-color:#c8ebd2}
       .master-table tbody tr.master-transfer-pending:hover td{background:#ffe3e3!important}
@@ -2598,10 +2614,11 @@
       .master-page[data-view="home"] .master-stats{grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
       .master-page[data-view="home"] .master-filters,.master-page[data-view="home"] .master-orders-layout{display:none}
       .master-page[data-view="orders"] .master-stats,.master-page[data-view="orders"] .master-home-intro,.master-page[data-view="orders"] #master-old-transfer-panel{display:none}
-      .master-page[data-view="orders"] .master-orders-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px;align-items:start;direction:rtl}
+      .master-page[data-view="orders"] .master-orders-layout{display:flex;flex-direction:column;gap:14px;align-items:stretch;width:100%;min-width:0;direction:rtl}
       .master-page[data-view="orders"] .master-filters{display:grid}
       .master-page[data-view="transfers"] .master-stats,.master-page[data-view="transfers"] .master-home-intro,.master-page[data-view="transfers"] .master-filters,.master-page[data-view="transfers"] .master-table-wrap{display:none}
       .master-page[data-view="transfers"] .master-orders-layout{display:block}
+      .master-page[data-view="transfers"] #master-day-summary-panel{display:none}
       .master-page[data-view="transfers"] #master-old-transfer-panel{display:block;width:100%;max-width:980px;margin:0 auto}
       .master-page[data-view="reports"] .master-home-intro,.master-page[data-view="reports"] .master-filters,.master-page[data-view="reports"] .master-orders-layout{display:none}
       .master-page[data-view="reports"] .master-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -2670,9 +2687,9 @@
       .master-edit-row{display:flex;gap:6px;align-items:center}
       .master-edit-btn{border:0;background:#e8f2ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:900;white-space:nowrap}
       .master-edit-btn:hover{background:#dbeafe}
-      @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:270px minmax(0,1fr)}}
-      @media(max-width:900px){.master-orders-layout{grid-template-columns:minmax(0,1fr);gap:10px}.master-old-transfer-panel{order:0;padding:10px}.master-table-wrap{order:1}}
-      @media(max-width:650px){.master-edit-chicken-row{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-chicken-row .master-edit-remove-row{grid-column:1/-1}.master-edit-cut-row{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-cut-row label:first-child{grid-column:1/-1}.master-edit-cut-row .master-edit-remove-row{grid-column:1/-1}.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:1000px}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
+      @media(max-width:1200px){.master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.master-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.master-orders-layout{grid-template-columns:minmax(0,1fr)}}
+      @media(max-width:900px){.master-orders-layout{display:flex;flex-direction:column;gap:10px}.master-day-summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.master-old-transfer-panel{padding:10px}}
+      @media(max-width:650px){.master-edit-chicken-row{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-chicken-row .master-edit-remove-row{grid-column:1/-1}.master-edit-cut-row{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-cut-row label:first-child{grid-column:1/-1}.master-edit-cut-row .master-edit-remove-row{grid-column:1/-1}.master-old-transfer-panel{padding:9px;border-radius:12px}.master-old-transfer-title{font-size:12px}.master-old-transfer-card{padding:8px}.master-old-transfer-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.master-old-transfer-stat{padding:7px}.master-old-transfer-stat-label{font-size:9px}.master-old-transfer-stat-value{font-size:14px}.master-old-transfer-note{font-size:10px;margin-bottom:7px}.master-old-transfer-list{gap:6px}.master-old-transfer-card .master-transfer-btn{min-height:34px;font-size:10px}.master-old-transfer-stat{padding:9px}.master-old-transfer-stat-value{font-size:15px}.master-old-transfer-stat-value.money{font-size:13px}.master-orders-layout{gap:12px}.master-top{align-items:flex-start;padding:12px;gap:10px;flex-wrap:wrap}.master-brand{gap:9px}.master-logo{width:42px;height:42px;border-radius:13px;font-size:23px}.master-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.master-wrap{padding:10px}.master-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.master-stat{padding:12px 10px;min-height:88px;border-radius:13px}.master-stat-label{font-size:11px;margin-bottom:8px}.master-stat-value{font-size:16px;overflow-wrap:anywhere}.master-stat-hint{font-size:10px;line-height:1.5}.master-filters{grid-template-columns:1fr 1fr;padding:10px;gap:8px}.master-filter input,.master-filter select{font-size:16px;min-height:42px}.master-table-wrap{border-radius:12px}.master-table{min-width:820px;table-layout:fixed}.master-detail-grid{grid-template-columns:1fr}.master-edit-grid{grid-template-columns:1fr}.master-title{font-size:16px;line-height:1.4}.master-sub{font-size:11px}.master-btn{padding:10px 9px;min-height:42px}.master-modal{padding:8px}.master-modal-card{max-height:94vh;border-radius:15px}.master-modal-body{padding:12px}}
       @media(max-width:900px){.master-nav{grid-template-columns:repeat(2,minmax(0,1fr));top:78px;padding:10px;gap:7px}.master-nav-btn{min-height:44px;font-size:12px}.master-page[data-view="home"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-page[data-view="reports"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media(max-width:650px){.master-nav{position:sticky;top:0;z-index:20;grid-template-columns:repeat(2,minmax(0,1fr));padding:8px}.master-nav-btn{font-size:11px;padding:9px 5px;min-height:42px}.master-home-intro{padding:14px}.master-page[data-view="home"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-page[data-view="home"] .master-stats .master-stat{display:block}.master-page[data-view="home"] .master-stats .master-stat:nth-child(1),.master-page[data-view="home"] .master-stats .master-stat:nth-child(3),.master-page[data-view="home"] .master-stats .master-stat:nth-child(5),.master-page[data-view="home"] .master-stats .master-stat:nth-child(6),.master-page[data-view="home"] .master-stats .master-stat:nth-child(9){display:none}.master-page[data-view="reports"] .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-edit-row{align-items:stretch;flex-direction:column}.master-edit-row button{width:100%}}
     `;
@@ -2871,11 +2888,12 @@
           </section>
 
           <div class="master-orders-layout">
-            <aside class="master-orders-sidebar" aria-label="ملخص اليوم والتحويلات السابقة">
-              <section class="master-day-summary-panel" id="master-day-summary-panel" aria-label="ملخص اليوم المحدد">
+            <section class="master-day-summary-panel" id="master-day-summary-panel" aria-label="ملخص اليوم المحدد">
+
                 <div class="master-day-summary-head">
                   <strong>📊 ملخص اليوم المحدد</strong>
                   <span id="master-day-summary-date">تاريخ اليوم</span>
+                  <small class="master-day-summary-subtitle">ملخص مستقل — الفواتير أدناه معروضة مرة واحدة لكل فاتورة</small>
                 </div>
                 <div class="master-day-summary-grid">
                   <div class="master-day-summary-card"><span class="label">إجمالي الفواتير</span><div class="numbers"><strong id="day-summary-count">٠</strong><small>فاتورة</small></div></div>
@@ -2888,24 +2906,7 @@
                   <div class="master-day-summary-card"><span class="label">الفواتير المسلّمة</span><div class="numbers"><strong id="day-summary-delivered">٠</strong><small>من فواتير التاريخ</small></div></div>
                   <div class="master-day-summary-card"><span class="label">إجمالي المبالغ المسجلة/المستلمة</span><div class="numbers"><strong id="day-summary-received-total">٠ درهم</strong><small>كاش + تحويل مستلم + مقدم + رصيد</small></div></div>
                 </div>
-              </section>
-              <section class="master-old-transfer-panel" id="master-old-transfer-panel" aria-label="التحويلات القديمة غير المستلمة">
-              <div class="master-old-transfer-head">
-                <div class="master-old-transfer-title">التحويلات السابقة غير المستلمة</div>
-                <span class="master-old-transfer-count" id="master-old-transfer-count">٠</span>
-              </div>
-              <div class="master-old-transfer-note">تظهر هنا التحويلات القديمة التي تحتاج مراجعة. فواتير اليوم موجودة في قسم الطلبات.</div>
-              <div class="master-old-transfer-stats" aria-label="إحصائيات التحويلات القديمة">
-                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">عدد التحويلات المعلقة</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-count">٠</strong></div>
-                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">إجمالي المبالغ غير المستلمة</span><strong class="master-old-transfer-stat-value money" id="master-old-transfer-stat-total">٠ درهم</strong></div>
-                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">فواتير أمس</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-yesterday">٠</strong></div>
-                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">فواتير أول أمس والأقدم</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-older">٠</strong></div>
-              </div>
-              <div class="master-old-transfer-list" id="master-old-transfer-list">
-                <div class="master-old-transfer-empty">جاري تحميل التحويلات…</div>
-              </div>
-              </section>
-            </aside>
+                          </section>
             <section class="master-table-wrap">
             <table class="master-table">
               <thead>
@@ -2926,6 +2927,24 @@
               <tbody id="master-orders-body"></tbody>
             </table>
             </section>
+            <aside class="master-orders-sidebar" aria-label="التحويلات السابقة">
+              <section class="master-old-transfer-panel" id="master-old-transfer-panel" aria-label="التحويلات القديمة غير المستلمة">
+              <div class="master-old-transfer-head">
+                <div class="master-old-transfer-title">التحويلات السابقة غير المستلمة</div>
+                <span class="master-old-transfer-count" id="master-old-transfer-count">٠</span>
+              </div>
+              <div class="master-old-transfer-note">تظهر هنا التحويلات القديمة التي تحتاج مراجعة. فواتير اليوم موجودة في قسم الطلبات.</div>
+              <div class="master-old-transfer-stats" aria-label="إحصائيات التحويلات القديمة">
+                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">عدد التحويلات المعلقة</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-count">٠</strong></div>
+                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">إجمالي المبالغ غير المستلمة</span><strong class="master-old-transfer-stat-value money" id="master-old-transfer-stat-total">٠ درهم</strong></div>
+                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">فواتير أمس</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-yesterday">٠</strong></div>
+                <div class="master-old-transfer-stat"><span class="master-old-transfer-stat-label">فواتير أول أمس والأقدم</span><strong class="master-old-transfer-stat-value" id="master-old-transfer-stat-older">٠</strong></div>
+              </div>
+              <div class="master-old-transfer-list" id="master-old-transfer-list">
+                <div class="master-old-transfer-empty">جاري تحميل التحويلات…</div>
+              </div>
+              </section>
+            </aside>
           </div>
         <section id="master-collect" aria-label="التحصيل المجدول">
           <div class="master-collect-kpis" id="master-collect-kpis"></div>
@@ -4688,87 +4707,80 @@
         }
       } catch (refreshErr) { /* نكمل بالنسخة الحالية لو التحديث تعذر */ }
 
-      // Match the complete duplicate group before changing editable identity fields.
-      // Every target keeps its own database ID and sheet_name; this is update-only, never insert.
+      // حدّث كل نسخ الفاتورة في عملية واحدة: الماستر يَعرض صفًا واحدًا،
+      // لكن Worker يطابق كل النسخ لدى جميع المناديب ويحافظ على sheet_name لكل نسخة.
       const originalFingerprint = masterInvoiceFingerprint(order);
       const matchingCopies = masterGetInvoiceCopies(order);
-      const targets = matchingCopies.length ? matchingCopies : [order];
-      const uniqueTargets = [];
-      const seenTargetSheets = new Set();
-      for (const target of targets) {
-        const targetId = String(target?.id ?? '').trim();
-        const sheetKey = masterNormalizeDuplicateValue(target?.sheet_name || '');
-        if (!targetId || !sheetKey) {
-          throw new Error('إحدى نسخ الفاتورة لا تحتوي على اسم المندوب في قاعدة البيانات. أوقفت التعديل لحماية بقية النسخ.');
-        }
-        const targetKey = sheetKey;
-        if (seenTargetSheets.has(targetKey)) continue;
-        seenTargetSheets.add(targetKey);
-        uniqueTargets.push(target);
+      if (!matchingCopies.length) {
+        throw new Error('لم يتم العثور على نسخ الفاتورة في قاعدة البيانات. لم يتم حفظ التعديل.');
       }
-      if (!uniqueTargets.length) {
-        throw new Error('لم يتم العثور على معرّف قاعدة بيانات صالح لهذه الفاتورة. لم يتم إرسال أي تعديل.');
+      const invalidCopy = matchingCopies.find((copy) =>
+        !String(copy?.id ?? '').trim() || !String(copy?.sheet_name || '').trim()
+      );
+      if (invalidCopy) {
+        throw new Error('إحدى نسخ الفاتورة لا تحتوي على معرّف أو اسم مندوب صالح. أوقفت التعديل لحماية بقية النسخ.');
       }
 
-      const successfulSheets = new Set();
-      const failedTargets = [];
-      for (const target of uniqueTargets) {
-        const targetId = String(target.id);
-        const paymentChanged = normalizePayment(target.payment_method) !== nextPayment;
-        const payloadForTarget = {
-          ...target,
-          ...updatedOrder,
-          id: target.id,
-          order_number: target.order_number ?? updatedOrder.order_number,
-          invoice_number: target.invoice_number ?? updatedOrder.invoice_number,
-          sheet_name: target.sheet_name,
-          delivery_date: selectedOrderDate,
-          // When payment method changes, an old transfer confirmation must not carry over.
-          bank_transfer_received: paymentChanged ? false : target.bank_transfer_received,
-          gate_photo_urls: gatePhotoUrls,
-          gate_photo_url: gatePhotoUrls[0] || ''
-        };
-        // لا نرسل created_at في تعديل الماستر؛ تاريخ الإنشاء لا يتغير نهائيًا.
-        delete payloadForTarget.created_at;
-
-        try {
-          // نستخدم مسار الهوية الآمن لتحديث نسخة المندوب ونسخة الأرشيف معًا.
-          // identity من بيانات النسخة القديمة قبل تعديل الاسم/الهاتف/التاريخ.
-          const response = await masterFetch('/api/master/order/update-by-identity', {
-            method: 'POST',
-            body: JSON.stringify({
-              identity: {
-                order_number: target.order_number || target.invoice_number || order.order_number,
-                sheet_name: target.sheet_name,
-                delivery_date: target.delivery_date || '',
-                phone: target.phone || '',
-                customer_name: target.customer_name || ''
-              },
-              order: payloadForTarget
-            })
-          });
-          successfulSheets.add(String(target.sheet_name || 'غير محدد'));
-        } catch (copyError) {
-          failedTargets.push({ sheet: target.sheet_name || 'غير محدد', id: targetId, error: copyError.message || 'تعذر الحفظ' });
-        }
+      const identityDate = matchingCopies
+        .map((copy) => masterDeliveryDateValue(copy))
+        .find((value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')))
+        || masterDeliveryDateValue(order);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(identityDate || ''))) {
+        throw new Error('لا يمكن تحديد تاريخ الفاتورة الأصلي بأمان؛ لم يتم إرسال التعديل.');
       }
 
-      if (failedTargets.length) {
-        await loadMasterOrders();
-        const failedLabels = failedTargets.map((item) => `${item.sheet} (#${item.id})`).join('، ');
-        throw new Error(`تم تحديث ${successfulSheets.size} من ${uniqueTargets.length} مندوب/نسخة. تعذر تحديث: ${failedLabels}. راجع اتصال قاعدة البيانات قبل إعادة المحاولة.`);
+      const paymentChanged = matchingCopies.some((copy) =>
+        normalizePayment(copy.payment_method) !== nextPayment
+      );
+      const payloadForAll = {
+        ...order,
+        ...updatedOrder,
+        id: order.id,
+        order_number: order.order_number ?? order.invoice_number ?? updatedOrder.order_number,
+        invoice_number: order.invoice_number ?? updatedOrder.invoice_number,
+        // هذا اسم النسخة المعروضة فقط؛ Worker يمنع تغيير أسماء الشيتات
+        // عندما تكون الفاتورة موجودة عند أكثر من مندوب.
+        sheet_name: order.sheet_name,
+        delivery_date: selectedOrderDate,
+        bank_transfer_received: paymentChanged ? false : order.bank_transfer_received,
+        gate_photo_urls: gatePhotoUrls,
+        gate_photo_url: gatePhotoUrls[0] || ''
+      };
+      // تاريخ الإنشاء ثابت ولا يرسل ضمن تعديل الفاتورة.
+      delete payloadForAll.created_at;
+
+      const result = await masterFetch('/api/master/order/update-by-identity', {
+        method: 'POST',
+        body: JSON.stringify({
+          identity: {
+            order_number: order.order_number || order.invoice_number || updatedOrder.order_number,
+            sheet_name: 'ALL',
+            delivery_date: identityDate,
+            phone: masterOrderPhoneDigits(order) || matchingCopies.map(masterOrderPhoneDigits).find(Boolean) || '',
+            customer_name: order.customer_name || matchingCopies.map(masterOrderCustomerName).find(Boolean) || ''
+          },
+          order: payloadForAll
+        })
+      });
+      if (!result || result.success !== true ||
+          (Number(result.updated_orders || 0) + Number(result.updated_archive || 0) === 0)) {
+        throw new Error('لم يؤكد السيرفر تحديث أي نسخة من الفاتورة؛ لم يتم اعتبار العملية ناجحة.');
       }
 
-      // Refresh from the source of truth after all updates so the master shows the newest state.
+      // إعادة تحميل جميع نسخ المناديب بعد نجاح العملية؛ يظهر الصف مرة واحدة
+      // وتظل أسماء كل المناديب المرتبطة به ظاهرة في عمود المندوب.
       await loadMasterOrders();
       const current = getMasterUniqueOrders().find((item) =>
         masterOrderInvoiceNumber(item) === masterOrderInvoiceNumber(updatedOrder) &&
         masterOrderDateAreaKey(item.delivery_date) === selectedOrderDate &&
-        masterNormalizeDuplicateValue(item.sheet_name || '') === masterNormalizeDuplicateValue(order.sheet_name || '')
+        (masterOrderCustomerName(item) === masterOrderCustomerName(updatedOrder) ||
+          masterOrderPhoneDigits(item) === masterOrderPhoneDigits(updatedOrder))
       ) || getMasterUniqueOrders().find((item) => masterInvoiceFingerprint(item) === originalFingerprint) ||
         { ...order, ...updatedOrder };
-      toast(uniqueTargets.length > 1
-        ? `تم تعديل الفاتورة وتحديثها عند ${uniqueTargets.length} مناديب ✅`
+      const updatedSheets = Array.isArray(result.updated_sheets) ? result.updated_sheets :
+        Array.from(new Set(matchingCopies.map((copy) => copy.sheet_name).filter(Boolean)));
+      toast(updatedSheets.length > 1
+        ? `تم تعديل الفاتورة وتحديث جميع نسخها عند ${updatedSheets.length} مناديب ✅`
         : 'تم تعديل الفاتورة بنجاح ✅');
       openMasterOrder(current);
       renderMasterOrders();
