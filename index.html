@@ -7,7 +7,7 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <title>فروج الزين</title>
-  <link rel="stylesheet" href="/styles.css?v=20261105a">
+  <link rel="stylesheet" href="/styles.css?v=20261108-payment-v2">
 
   <style>
     /* تكبير ووضوح بيانات الطلب فقط بدون تغيير باقي التصميم */
@@ -263,6 +263,190 @@
       .main-content {
         padding-bottom: max(16px, env(safe-area-inset-bottom));
       }
+    }
+
+    /* تحسين قسم طريقة الدفع: توضيح الاختيار وتكبير مساحة اللمس */
+    .order-card .payment-section {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+      margin: 10px 0 !important;
+      padding: 12px !important;
+      border: 1px solid #cbdcf0 !important;
+      border-radius: 15px !important;
+      background: linear-gradient(180deg, #f8fbff 0%, #f1f6fd 100%) !important;
+      box-shadow: 0 3px 10px rgba(31, 67, 112, .07) !important;
+    }
+
+    .order-card .payment-title {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      gap: 7px 10px !important;
+      margin: 0 !important;
+      color: #183657 !important;
+      font-size: 14px !important;
+      font-weight: 900 !important;
+      line-height: 1.5 !important;
+    }
+
+    .order-card .payment-current {
+      display: inline-flex !important;
+      align-items: center !important;
+      min-height: 27px !important;
+      box-sizing: border-box !important;
+      padding: 4px 10px !important;
+      border: 1px solid #cbdcf0 !important;
+      border-radius: 999px !important;
+      background: #fff !important;
+      color: #334e68 !important;
+      font-size: 11px !important;
+      font-weight: 800 !important;
+      line-height: 1.45 !important;
+    }
+
+    .order-card .payment-hint {
+      display: block !important;
+      margin: -3px 0 0 !important;
+      color: #64748b !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      line-height: 1.6 !important;
+    }
+
+    .order-card .payment-buttons {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 10px !important;
+      width: 100% !important;
+      direction: rtl !important;
+    }
+
+    .order-card .payment-btn {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 9px !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      min-height: 68px !important;
+      box-sizing: border-box !important;
+      padding: 10px 12px !important;
+      border: 2px solid transparent !important;
+      border-radius: 14px !important;
+      font-family: inherit !important;
+      font-size: 14px !important;
+      font-weight: 900 !important;
+      line-height: 1.35 !important;
+      white-space: normal !important;
+      cursor: pointer !important;
+      touch-action: manipulation !important;
+      -webkit-tap-highlight-color: transparent !important;
+      user-select: none !important;
+      -webkit-user-select: none !important;
+      transition: transform .12s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease !important;
+    }
+
+    .order-card .payment-btn > span:first-child {
+      flex: 0 0 auto !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      width: 34px !important;
+      height: 34px !important;
+      border-radius: 10px !important;
+      background: rgba(255,255,255,.72) !important;
+      font-size: 21px !important;
+    }
+
+    .order-card .payment-btn strong {
+      display: block !important;
+      font-size: 14px !important;
+      font-weight: 900 !important;
+      line-height: 1.4 !important;
+    }
+
+    .order-card .payment-btn small {
+      display: block !important;
+      margin-top: 2px !important;
+      font-size: 10px !important;
+      font-weight: 700 !important;
+      opacity: .82 !important;
+      line-height: 1.35 !important;
+    }
+
+    .order-card .payment-btn.cash-btn {
+      border-color: #86d7af !important;
+      background: linear-gradient(145deg, #f0fdf6, #dcfce9) !important;
+      color: #11613c !important;
+      box-shadow: 0 3px 8px rgba(22, 163, 74, .09) !important;
+    }
+
+    .order-card .payment-btn.bank-btn {
+      border-color: #9dc4fb !important;
+      background: linear-gradient(145deg, #f1f7ff, #e1edff) !important;
+      color: #174a91 !important;
+      box-shadow: 0 3px 8px rgba(37, 99, 235, .09) !important;
+    }
+
+    .order-card .payment-btn.selected.cash-btn {
+      border-color: #15803d !important;
+      background: linear-gradient(145deg, #22a45a, #137b43) !important;
+      color: #fff !important;
+      box-shadow: 0 5px 14px rgba(21, 128, 61, .24), inset 0 0 0 1px rgba(255,255,255,.14) !important;
+    }
+
+    .order-card .payment-btn.selected.bank-btn {
+      border-color: #1d4ed8 !important;
+      background: linear-gradient(145deg, #3478e5, #1d4ed8) !important;
+      color: #fff !important;
+      box-shadow: 0 5px 14px rgba(29, 78, 216, .22), inset 0 0 0 1px rgba(255,255,255,.14) !important;
+    }
+
+    .order-card .payment-btn:active:not(:disabled) {
+      transform: scale(.975) !important;
+      box-shadow: 0 2px 5px rgba(15, 23, 42, .13) !important;
+    }
+
+    .order-card .payment-btn:focus-visible {
+      outline: 3px solid #f59e0b !important;
+      outline-offset: 3px !important;
+    }
+
+    .order-card .payment-btn.is-saving {
+      opacity: .96 !important;
+      filter: saturate(1.05) !important;
+      cursor: progress !important;
+    }
+
+    .order-card .payment-btn.is-saving::after {
+      content: '';
+      width: 17px !important;
+      height: 17px !important;
+      flex: 0 0 17px !important;
+      border: 2px solid currentColor !important;
+      border-left-color: transparent !important;
+      border-radius: 50% !important;
+      animation: payment-spin .65s linear infinite !important;
+    }
+
+    @keyframes payment-spin { to { transform: rotate(360deg); } }
+
+    .order-card .payment-btn:disabled {
+      opacity: .72 !important;
+      cursor: not-allowed !important;
+      filter: saturate(.75) !important;
+    }
+
+    @media (max-width: 380px) {
+      .order-card .payment-section { padding: 9px !important; gap: 8px !important; }
+      .order-card .payment-buttons { gap: 7px !important; }
+      .order-card .payment-btn { min-height: 62px !important; padding: 8px 6px !important; gap: 6px !important; }
+      .order-card .payment-btn > span:first-child { width: 29px !important; height: 29px !important; font-size: 18px !important; }
+      .order-card .payment-btn strong { font-size: 12px !important; }
+      .order-card .payment-btn small { font-size: 9px !important; }
+      .order-card .payment-current { font-size: 10px !important; }
     }
 
   </style>
@@ -743,12 +927,13 @@
             طريقة الدفع
           </span>
 
-          <small class="payment-current">
-            لم يتم تحديد طريقة الدفع
+          <small class="payment-current" aria-live="polite" role="status">
+            لم يتم تحديد طريقة الدفع — اختر طريقة التحصيل
           </small>
 
         </div>
 
+        <small class="payment-hint">اضغط على الزر المناسب لتسجيل طريقة التحصيل. سيتم حفظ اختيارك تلقائيًا.</small>
 
         <div class="payment-buttons">
 
@@ -757,8 +942,8 @@
             type="button"
             data-payment="cash"
           >
-            <span>💵</span>
-            <strong>دفع كاش</strong>
+            <span aria-hidden="true">💵</span>
+            <span class="payment-button-copy"><strong>دفع كاش</strong><small>تحصيل نقدي عند التسليم</small></span>
           </button>
 
 
@@ -767,8 +952,8 @@
             type="button"
             data-payment="bank_transfer"
           >
-            <span>🏦</span>
-            <strong>تحويل بنكي</strong>
+            <span aria-hidden="true">🏦</span>
+            <span class="payment-button-copy"><strong>تحويل بنكي</strong><small>تحصيل عن طريق البنك</small></span>
           </button>
 
         </div>
@@ -847,7 +1032,7 @@
       }
     }, true);
   </script>
-  <script src="/app.js?v=20261105a"></script>
+  <script src="/app.js?v=20261108-payment-v2"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
