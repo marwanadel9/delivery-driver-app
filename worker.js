@@ -917,13 +917,15 @@ export default {
 
         const sheet = auth.driver.sheet_name;
         const ordersResponse = await supabaseRequest(
-          "/rest/v1/orders?select=id,order_number,created_at,customer_name,total&sheet_name=eq." + encodeURIComponent(sheet) + "&id=in.(" + orderIds.join(",") + ")",
+          "/rest/v1/orders?select=id,order_number,created_at,customer_name,total,delivery_date&sheet_name=eq." + encodeURIComponent(sheet) + "&id=in.(" + orderIds.join(",") + ")",
           { headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey } }
         );
         const ownedOrders = await ordersResponse.json().catch(function () { return []; });
         if (!ordersResponse.ok || !Array.isArray(ownedOrders) || ownedOrders.length !== orderIds.length) {
           return json({ error: "تعذر التحقق من فواتير المندوب الحالي", detail: ownedOrders }, 403);
         }
+        const lockedOrder = ownedOrders.find(function (row) { return isFutureDeliveryDate(row.delivery_date); });
+        if (lockedOrder) return futureDeliveryLockedResponse(lockedOrder.delivery_date);
         const byId = new Map(ownedOrders.map(function (row) { return [String(row.id), row]; }));
         const now = new Date().toISOString();
         const sortRows = [];
