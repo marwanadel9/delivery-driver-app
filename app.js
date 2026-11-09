@@ -14,6 +14,91 @@
   const $ = (id) => document.getElementById(id);
   let driverDubaiDayWatcher = null;
 
+  // التحديث اللحظي: Worker يرسل إشارة عامة بدون أي بيانات عملاء، والواجهات
+  // تسحب نسختها المصرح بها من الـWorker بعد وصول الإشارة.
+  let faOrdersLiveClient = null;
+  let faOrdersLiveChannel = null;
+  let faOrdersLiveTimer = null;
+  let faOrdersLiveBusy = false;
+  let faOrdersLiveQueued = false;
+  let faOrdersLivePending = false;
+
+  function flushFaOrdersLiveRefresh() {
+    if (!faOrdersLivePending) return;
+    if (state.masterSession?.access_token && $('master-modal')?.classList.contains('open')) return;
+    if (state.session?.access_token && document.body.classList.contains('driver-invoice-open')) return;
+    faOrdersLivePending = false;
+    queueFaOrdersLiveRefresh();
+  }
+
+  function queueFaOrdersLiveRefresh() {
+    clearTimeout(faOrdersLiveTimer);
+    faOrdersLiveTimer = setTimeout(async () => {
+      if (faOrdersLiveBusy) {
+        faOrdersLiveQueued = true;
+        return;
+      }
+      if (state.masterSession?.access_token && $('master-page')) {
+        if ($('master-modal')?.classList.contains('open')) {
+          faOrdersLivePending = true;
+          return;
+        }
+        faOrdersLiveBusy = true;
+        try { await loadMasterOrders({ quiet: true }); }
+        finally {
+          faOrdersLiveBusy = false;
+          if (faOrdersLiveQueued) { faOrdersLiveQueued = false; queueFaOrdersLiveRefresh(); }
+        }
+        return;
+      }
+      if (state.session?.access_token && $('orders-view') && !$('orders-view').hidden) {
+        if (document.body.classList.contains('driver-invoice-open')) {
+          faOrdersLivePending = true;
+          return;
+        }
+        faOrdersLiveBusy = true;
+        try { await loadOrders({ quiet: true }); }
+        finally {
+          faOrdersLiveBusy = false;
+          if (faOrdersLiveQueued) { faOrdersLiveQueued = false; queueFaOrdersLiveRefresh(); }
+        }
+      }
+    }, 120);
+  }
+
+  function startFaOrdersLiveSync(client) {
+    const supabaseClient = client || window.__FA_ORDER_SYNC_SB || window.FAVoice?.sb;
+    if (!supabaseClient || typeof supabaseClient.channel !== 'function') return false;
+    if (faOrdersLiveClient === supabaseClient && faOrdersLiveChannel) return true;
+    try {
+      if (faOrdersLiveChannel && faOrdersLiveClient?.removeChannel) {
+        try { faOrdersLiveClient.removeChannel(faOrdersLiveChannel); } catch (_) {}
+      }
+      faOrdersLiveClient = supabaseClient;
+      faOrdersLiveChannel = supabaseClient
+        .channel('fa-orders-live', { config: { broadcast: { ack: false }, private: false } })
+        .on('broadcast', { event: 'orders-changed' }, () => queueFaOrdersLiveRefresh())
+        .subscribe((status) => {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.warn('[Froog] live order refresh channel:', status);
+          }
+        });
+      return true;
+    } catch (error) {
+      console.warn('[Froog] unable to start live order refresh:', error);
+      return false;
+    }
+  }
+
+  window.addEventListener('fa-order-sync-client-ready', (event) => {
+    startFaOrdersLiveSync(event.detail?.client);
+  });
+  document.addEventListener('click', (event) => {
+    if (event.target?.closest?.('#master-modal-close, .invoice-fullscreen-close')) {
+      setTimeout(flushFaOrdersLiveRefresh, 0);
+    }
+  }, true);
+
   const toEnglishDigits = (value) => String(value ?? '').replace(/[\u0660-\u0669\u06F0-\u06F9]/g, (digit) => {
     const code = digit.charCodeAt(0);
     return String(code >= 0x06F0 ? code - 0x06F0 : code - 0x0660);
@@ -218,6 +303,7 @@
         SESSION_KEY,
         JSON.stringify(session)
       );
+      startFaOrdersLiveSync();
     } else {
       localStorage.removeItem(SESSION_KEY);
     }
@@ -371,6 +457,7 @@
     try {
       response = await fetch(path, {
         ...options,
+        cache: options.cache || 'no-store',
         headers,
         signal: requestController.signal
       });
@@ -470,10 +557,12 @@
     }
 
     startDriverDubaiDayWatcher();
+    startFaOrdersLiveSync();
     loadOrders();
   }
 
-  async function loadOrders() {
+  async function loadOrders(options = {}) {
+    const quiet = options?.quiet === true;
     const list =
       $('orders-list');
 
@@ -484,12 +573,12 @@
       return;
     }
 
-    if (!state.orders.length) {
+    if (!quiet && !state.orders.length) {
       list.innerHTML =
         '<p class="loading">جارٍ تحميل الطلبات…</p>';
     }
 
-    if (refreshButton) {
+    if (refreshButton && !quiet) {
       refreshButton.classList.add('spin');
       refreshButton.disabled = true;
     }
@@ -575,7 +664,12 @@
             : 'قائمة الطلبات';
       }
 
-      render();
+      if (quiet && document.body.classList.contains('driver-invoice-open')) {
+        faOrdersLivePending = true;
+        updateStats();
+      } else {
+        render();
+      }
     } catch (error) {
       if (
         error.message === 'expired'
@@ -589,7 +683,7 @@
           ${escapeHtml(error.message)}
         </p>`;
     } finally {
-      if (refreshButton) {
+      if (refreshButton && !quiet) {
         refreshButton.classList.remove(
           'spin'
         );
@@ -2270,6 +2364,7 @@
       MASTER_SESSION_KEY,
       JSON.stringify(normalized)
     );
+    startFaOrdersLiveSync();
   }
 
   function loadStoredMasterSession() {
@@ -2318,6 +2413,7 @@
     try {
       response = await fetch(path, {
         ...options,
+        cache: options.cache || 'no-store',
         headers,
         signal: requestController.signal
       });
@@ -2764,6 +2860,7 @@
 
   function showMasterDashboard() {
     state.role = 'master_admin';
+    startFaOrdersLiveSync();
 
     const loginView = $('login-view');
     const ordersView = $('orders-view');
@@ -3249,10 +3346,11 @@
     body.innerHTML = rows.map((row, index) => `<tr><td>${(index + 1).toLocaleString('ar-EG-u-nu-latn')}</td><td><strong>${masterEscape(row.customer_code || '—')}</strong></td><td>${masterEscape(row.customer_name || '—')}</td><td dir="ltr">${masterEscape(row.phone || '—')}</td><td>${masterEscape(row.emirate || '—')}</td><td>${masterEscape(row.area || '—')}</td><td>${masterMoney(row.amount_added || 0)} درهم</td><td>${masterMoney(row.amount_paid || 0)} درهم</td><td style="font-weight:900;color:${Number(row.current_balance) > 0 ? '#c62828' : '#168052'}">${masterMoney(row.current_balance || 0)} درهم</td><td>${masterEscape(row.notes || '—')}</td></tr>`).join('');
   }
 
-  async function loadMasterOrders() {
+  async function loadMasterOrders(options = {}) {
+    const quiet = options?.quiet === true;
     const body = $('master-orders-body');
 
-    if (body) {
+    if (body && !quiet) {
       body.innerHTML = '<tr><td colspan="11" class="master-empty">جارٍ تحميل الفواتير…</td></tr>';
     }
 
@@ -5254,6 +5352,8 @@
     document.addEventListener(
       'visibilitychange',
       () => {
+
+        if (!document.hidden) flushFaOrdersLiveRefresh();
 
         if (
           !document.hidden &&
