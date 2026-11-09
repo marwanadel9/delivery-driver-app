@@ -1013,7 +1013,7 @@
       }
     }, true);
   </script>
-  <script src="/app.js?v=20261109-syncfix2"></script>
+  <script src="/app.js?v=20261109-live-orders-broadcast1"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
@@ -1368,7 +1368,23 @@
       cfg.id   = s.sheet_name || s.username || 'mandoub';
       cfg.name = s.mandoub_name || s.username || 'مندوب';
     } catch(e){}
-    if (window.FAVoice) FAVoice.init(cfg);
+    // فشل تهيئة الصوت لا يجب أن يمنع قناة تحديث الفواتير.
+    try { if (window.FAVoice) FAVoice.init(cfg); }
+    catch (voiceError) { console.warn('[Froog] voice init failed; order sync will initialize independently:', voiceError); }
+
+    // عميل مستقل لإشعارات تغيّر الفواتير؛ لا يعتمد على دعم الصوت/WebRTC.
+    try {
+      var liveClient = (window.FAVoice && FAVoice.sb) ||
+        (window.supabase && window.supabase.createClient ? window.supabase.createClient(cfg.url, cfg.key) : null);
+      if (liveClient) {
+        window.__FA_ORDER_SYNC_SB = liveClient;
+        window.dispatchEvent(new CustomEvent('fa-order-sync-client-ready', { detail: { client: liveClient } }));
+      } else {
+        console.warn('[Froog] Supabase client unavailable; live order refresh is not connected.');
+      }
+    } catch (liveError) {
+      console.warn('[Froog] live order client init failed:', liveError);
+    }
   })();
   </script>
 </body>
