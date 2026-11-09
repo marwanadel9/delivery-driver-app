@@ -65,6 +65,41 @@ async function supabaseRequest(path, options) {
   });
 }
 
+// إشعار لحظي عام بعد نجاح الكتابة فقط. لا يحمل بيانات العميل أو الفاتورة.
+// يستخدم REST Broadcast حتى لا يعتمد تحديث الواجهات على صلاحيات SELECT/RLS للجداول.
+async function broadcastOrdersChanged(env, source) {
+  const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (!serviceKey) return false;
+  try {
+    const response = await supabaseRequest("/realtime/v1/api/broadcast", {
+      method: "POST",
+      headers: {
+        apikey: serviceKey,
+        Authorization: "Bearer " + serviceKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messages: [{
+          topic: "fa-orders-live",
+          event: "orders-changed",
+          payload: {
+            source: String(source || "system"),
+            emitted_at: new Date().toISOString()
+          }
+        }]
+      })
+    });
+    if (!response.ok) {
+      try { console.error("Realtime broadcast failed:", response.status, await response.text()); } catch (_) {}
+      return false;
+    }
+    return true;
+  } catch (error) {
+    try { console.error("Realtime broadcast exception:", error && error.message || error); } catch (_) {}
+    return false;
+  }
+}
+
 // مرجع اليوم دائمًا هو تاريخ الإمارات، وليس توقيت جهاز المندوب.
 function dubaiDateKey(date) {
   const value = date instanceof Date ? date : new Date();
@@ -1378,12 +1413,14 @@ export default {
           return json({ error: (archiveData && (archiveData.message || archiveData.hint || archiveData.error)) || "تم تحديث المناديب لكن تعذر تحديث طريقة الدفع في الماستر" }, 502);
         }
 
+        const liveNotified = await broadcastOrdersChanged(env, "driver_payment_update");
         return json({
           success: true,
           payment_method: paymentMethod,
           payment_label: paymentLabel(paymentMethod),
           synced_orders: Array.isArray(updatedOrders) ? updatedOrders.length : duplicateRows.length,
-          synced_master: Array.isArray(archiveData) ? archiveData.length : 0
+          synced_master: Array.isArray(archiveData) ? archiveData.length : 0,
+          live_notified: liveNotified
         });
       }
 
@@ -2022,10 +2059,12 @@ export default {
           }, 400);
         }
 
+        const liveNotified = await broadcastOrdersChanged(env, "master_transfer_received");
         return json({
           success: true,
           order: rpcData,
-          bank_transfer_received: received
+          bank_transfer_received: received,
+          live_notified: liveNotified
         });
       }
 
@@ -2486,8 +2525,12 @@ export default {
         const rpcExplicitFailure = rpcResult.success === false || Boolean(rpcResult.error);
         const syncSucceeded = !rpcExplicitFailure && rejectedCount === 0 && skippedCount === 0 && insertedCount + updatedCount === orders.length;
 
+        const liveNotified = syncSucceeded
+          ? await broadcastOrdersChanged(env, "desktop_excel_sync")
+          : false;
         return json({
           success: syncSucceeded,
+          live_notified: liveNotified,
           error: syncSucceeded ? null : (rpcExplicitFailure
             ? String(rpcResult.error || "قاعدة البيانات رفضت المزامنة؛ لم يتم اعتمادها محليًا.")
             : rejectedCount > 0
@@ -2644,7 +2687,8 @@ export default {
           { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: new Date().toISOString() }) }
         );
         if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة لكن تعذر إغلاق طلب الاعتماد" }, 502);
-        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
+        const liveNotified = await broadcastOrdersChanged(env, "desktop_delivery_approved");
+        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered", live_notified: liveNotified });
       }
 
       if (path === "/api/resolve-map" && method === "POST") {
@@ -2784,12 +2828,11 @@ export default {
           ordersPatch.sync_revision = Math.max(0, Number(order.sync_revision) || 0);
         }
 
-        // نفس قاعدة الدفع الحالية: قرار المندوب لا يُفرض عليه قبل إتمام التسليم.
+        // تعديل الكمبيوتر هو التعديل المركزي: لا نمسح طريقة الدفع من نسخ المناديب.
+        // يجب أن تصل القيمة المختارة في الكمبيوتر إلى كل نسخة مطابقة فورًا.
         const statusRaw = String(ordersPatch.delivery_status || "").toLowerCase();
         const delivered = statusRaw === "delivered" || statusRaw.includes("تم");
         const paymentRaw = String(ordersPatch.payment_method || "").trim();
-        const driverPaymentChoice = paymentRaw === "cash" || paymentRaw === "bank_transfer" || paymentRaw === "كاش" || paymentRaw === "تحويل بنكي";
-        if (driverPaymentChoice && !delivered) ordersPatch.payment_method = "";
         if (ordersPatch.paid_in_advance === true || /مقدم/.test(paymentRaw)) {
           ordersPatch.paid_in_advance = true;
           archivePatch.paid_in_advance = true;
@@ -2832,6 +2875,7 @@ export default {
         }
         const updatedSheets = Array.from(new Set(foundOrders.rows.concat(foundArchive.rows)
           .map(function (row) { return String(row.sheet_name || '').trim(); }).filter(Boolean)));
+        const liveNotified = await broadcastOrdersChanged(env, "desktop_invoice_update");
         return json({
           success: true,
           order_number: orderNumber,
@@ -2841,6 +2885,7 @@ export default {
           updated_sheets: updatedSheets,
           driver_assignment_preserved: hasMultipleDriverCopies || requestedAllDrivers,
           delivery_date: deliveryDate,
+          live_notified: liveNotified,
           created_at_unchanged: true
         });
       }
@@ -2881,7 +2926,8 @@ export default {
           const e2 = await r2.json().catch(function () { return null; });
           return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
         }
-        return json({ success: true, updated: orderNumber });
+        const liveNotified = await broadcastOrdersChanged(env, "master_update_by_number");
+        return json({ success: true, updated: orderNumber, live_notified: liveNotified });
       }
 
       /* تصحيح فوري من برنامج الكمبيوتر (بسر المزامنة): حالة تسليم / طريقة دفع / تأكيد تحويل.
@@ -2899,11 +2945,8 @@ export default {
         const driverPatch = Object.assign({}, set);
         const archivePatch = Object.assign({}, set);
         archivePatch.updated_at = new Date().toISOString();
-        const stRaw = String(set.delivery_status || "").toLowerCase();
-        const isDelivered = stRaw === "delivered" || stRaw.includes("تم");
         const pmRaw = String(set.payment_method || "").trim();
-        const isDriverChoice = pmRaw === "cash" || pmRaw === "bank_transfer" || pmRaw === "كاش" || pmRaw === "تحويل بنكي";
-        if (isDriverChoice && !isDelivered) driverPatch.payment_method = "";
+        // مسار excel-correct خاص بتعديلات الكمبيوتر؛ لا تُخفِ الدفع المختار عن المندوب.
         if (set.paid_in_advance === true || /مقدم/.test(pmRaw)) { driverPatch.paid_in_advance = true; archivePatch.paid_in_advance = true; }
         const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(driverPatch) });
         if (!r1.ok) {
@@ -2915,7 +2958,8 @@ export default {
           const e2 = await r2.json().catch(function () { return null; });
           return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
         }
-        return json({ success: true, updated: orderNumber });
+        const liveNotified = await broadcastOrdersChanged(env, "desktop_excel_correct");
+        return json({ success: true, updated: orderNumber, live_notified: liveNotified });
       }
 
       if (path === "/api/master/delete-by-date" && request.method === "POST") {
@@ -3091,7 +3135,8 @@ export default {
             return json({ error: "تم حذف نسخة الماستر لكن تعذر حذف كل نسخ المناديب. لا تعتبر العملية مكتملة حتى مراجعة الفاتورة.", deleted_archive: deletedArchive.length, deleted_orders: Array.isArray(deletedOrders) ? deletedOrders.length : 0, expected_orders: orderIds.length }, 502);
           }
         }
-        return json({ success: true, deleted: orderNumber, deleted_orders: deletedOrders.length, deleted_archive: deletedArchive.length, driver_departures_removed: orderIds.length });
+        const liveNotified = await broadcastOrdersChanged(env, "master_delete_by_identity");
+        return json({ success: true, deleted: orderNumber, deleted_orders: deletedOrders.length, deleted_archive: deletedArchive.length, driver_departures_removed: orderIds.length, live_notified: liveNotified });
       }
 
       if (
@@ -3176,15 +3221,20 @@ export default {
         }
 
         // 4) حذف نسخة الأرشيف أيضًا (لو وُجدت)
-        await supabaseRequest(
+        const archiveDeleteResponse = await supabaseRequest(
           "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber),
           { method: "DELETE", headers: svcHeaders }
         );
+        if (!archiveDeleteResponse.ok) {
+          return json({ error: "تم حذف الفاتورة من الطلبات لكن تعذر حذف نسخة الأرشيف" }, 502);
+        }
 
+        const liveNotified = await broadcastOrdersChanged(env, "master_delete_by_number");
         return json({
           success: true,
           deleted: orderNumber,
-          orders_deleted: found.length
+          orders_deleted: found.length,
+          live_notified: liveNotified
         });
       }
 
