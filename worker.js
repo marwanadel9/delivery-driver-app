@@ -3058,6 +3058,18 @@ export default {
         foundArchive.rows = foundArchive.rows.concat(exactArchiveCounterparts).filter(function (row, index, rows) {
           return rows.findIndex(function (item) { return String(item.id) === String(row.id); }) === index;
         });
+        // Health-check mode: return match counts only and never issue DELETE requests.
+        // Used by the desktop settings diagnostics to verify the live route safely.
+        if (body.dry_run === true) {
+          return json({
+            success: true,
+            dry_run: true,
+            no_changes: true,
+            order_number: orderNumber,
+            matched_orders: foundOrders.rows.length,
+            matched_archive: foundArchive.rows.length
+          });
+        }
         if (!foundOrders.rows.length && !foundArchive.rows.length) return json({ error: "not_found — الفاتورة غير موجودة بنفس بيانات العميل" }, 404);
 
         const orderIds = foundOrders.rows.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
