@@ -3306,46 +3306,47 @@
       .replace(/[^a-z0-9\u0600-\u06FF]/g, '');
   }
 
-  // في فروج الزين رقم الفاتورة متسلسل يوميًا على مستوى النظام كله،
-  // لذلك هوية الفاتورة المنطقية = رقم الفاتورة + تاريخ التوصيل.
-  // sheet_name وid وبيانات العميل قد تختلف بين نسخ المندوبين، لكنها لا تنشئ فاتورة جديدة.
-  // اختلاف التاريخ يعني فاتورة مختلفة حتى لو تكرر رقم F نفسه.
+  // Same logical invoice across driver sheets: invoice number + compatible
+  // customer identity + compatible delivery date. A known date mismatch MUST
+  // remain two separate invoices, even when the customer phone is identical.
   function masterSameInvoiceCopy(left, right) {
     const leftNumber = masterOrderInvoiceNumber(left);
     const rightNumber = masterOrderInvoiceNumber(right);
     if (!leftNumber || leftNumber !== rightNumber) return false;
 
-    const leftDate = masterOrderDateAreaKey(left?.delivery_date || left?.date || left?.created_at);
-    const rightDate = masterOrderDateAreaKey(right?.delivery_date || right?.date || right?.created_at);
-    if (leftDate && rightDate) return leftDate === rightDate;
-
-    // احتياط للسجلات التاريخية التي لا تحتوي على تاريخ توصيل صالح.
-    const leftPhone = masterOrderPhoneDigits(left);
-    const rightPhone = masterOrderPhoneDigits(right);
-    if (leftPhone.length >= 5 && rightPhone.length >= 5 && leftPhone === rightPhone) return true;
+    const leftDate = masterOrderDateAreaKey(left?.delivery_date);
+    const rightDate = masterOrderDateAreaKey(right?.delivery_date);
+    if (leftDate && rightDate && leftDate !== rightDate) return false;
 
     const leftName = masterOrderCustomerName(left);
     const rightName = masterOrderCustomerName(right);
-    if (!leftName || leftName.length < 3 || leftName !== rightName) return false;
+    if (leftName && rightName && leftName !== rightName) return false;
 
     const leftEmirate = masterOrderAreaKey(left, 'emirate');
     const rightEmirate = masterOrderAreaKey(right, 'emirate');
+    if (leftEmirate && rightEmirate && leftEmirate !== rightEmirate) return false;
+
     const leftArea = masterOrderAreaKey(left, 'area');
     const rightArea = masterOrderAreaKey(right, 'area');
-    return (!leftEmirate || !rightEmirate || leftEmirate === rightEmirate) &&
-      (!leftArea || !rightArea || leftArea === rightArea);
+    if (leftArea && rightArea && leftArea !== rightArea) return false;
+
+    const leftPhone = masterOrderPhoneDigits(left);
+    const rightPhone = masterOrderPhoneDigits(right);
+    if (leftPhone.length >= 5 && rightPhone.length >= 5) {
+      // Equal phones are strong evidence; different phones may still be old
+      // copies of the same invoice when the customer and area match exactly.
+      if (leftPhone === rightPhone) return true;
+      return leftName.length >= 3 && leftName === rightName &&
+        (!leftEmirate || !rightEmirate || leftEmirate === rightEmirate) &&
+        (!leftArea || !rightArea || leftArea === rightArea);
+    }
+
+    return leftName.length >= 3 && leftName === rightName;
   }
 
   function masterOrderDateAreaKey(value) {
     const raw = String(value || '').trim();
-    if (!raw) return '';
-    const iso = raw.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
-    if (iso) return iso[1] + '-' + iso[2].padStart(2, '0') + '-' + iso[3].padStart(2, '0');
-    const dmy = raw.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
-    if (dmy) return dmy[3] + '-' + dmy[2].padStart(2, '0') + '-' + dmy[1].padStart(2, '0');
-    const parsed = new Date(raw);
-    if (!Number.isNaN(parsed.getTime())) return masterDateInput(parsed);
-    return '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '';
   }
 
   function masterInvoiceFingerprint(order) {
@@ -3445,27 +3446,13 @@
       }
     });
 
-    // عرض صف واحد لكل فاتورة منطقية، مع الاحتفاظ بكل النسخ الأصلية في state.masterOrders.
-    // حالة الاستلام تُجمع من كل نسخ التحويل حتى لا يظهر نفس التحويل مستلمًا عند مندوب
-    // وغير مستلم عند الآخر. هذا كائن عرض جديد ولا يغيّر أي سجل مصدر.
-    return groups.map((items) => {
-      const preferred = items.reduce((best, candidate) =>
-        masterOrderRecency(candidate) > masterOrderRecency(best) ? candidate : best
-      );
-      const bankCopies = items.filter((item) =>
-        !isPaidInAdvance(item) && normalizePayment(item.payment_method) === 'bank_transfer'
-      );
-      const display = Object.assign({}, preferred, {
-        _master_display_copy_count: items.length,
-        _master_display_drivers: Array.from(new Set(items
-          .map((item) => String(item?.sheet_name || '').trim())
-          .filter(Boolean)))
-      });
-      if (bankCopies.length) {
-        display.bank_transfer_received = bankCopies.some((item) => item.bank_transfer_received === true);
-      }
-      return display;
-    });
+    // One display row per logical invoice. Keep the freshest original record as
+    // the representative; editing and transfer confirmation still target all copies.
+    return groups.map((items) => items.reduce((preferred, candidate) =>
+      masterOrderRecency(candidate) > masterOrderRecency(preferred)
+        ? candidate
+        : preferred
+    ));
   }
 
   function getMasterFilteredOrders() {
@@ -3674,27 +3661,9 @@
   function getMasterMonthlyBankTransfers() {
     const month = String($('master-transfer-month')?.value || masterDateInput(new Date()).slice(0, 7));
     const emirateCompare = new Intl.Collator('ar', { numeric: true, sensitivity: 'base' });
-
-    // صف عرض واحد لكل فاتورة. نقرأ كل نسخها الأصلية لتوحيد حالة الاستلام،
-    // لكن لا نحذفها ولا نغيّر IDs أو sheet_name الخاصة بالمناديب.
     return getMasterUniqueOrders()
-      .map((order) => {
-        const copies = masterGetInvoiceCopies(order);
-        const bankCopies = copies.filter((item) =>
-          !isPaidInAdvance(item) && normalizePayment(item.payment_method) === 'bank_transfer'
-        );
-        if (!bankCopies.length) return null;
-        const preferred = bankCopies.reduce((best, candidate) =>
-          masterOrderRecency(candidate) > masterOrderRecency(best) ? candidate : best
-        );
-        const received = bankCopies.some((item) => item.bank_transfer_received === true);
-        return Object.assign({}, preferred, {
-          bank_transfer_received: received,
-          _master_display_copy_count: copies.length
-        });
-      })
       .filter((order) => {
-        if (!order) return false;
+        if (isPaidInAdvance(order) || normalizePayment(order.payment_method) !== 'bank_transfer') return false;
         const date = masterDeliveryDateInput(order);
         return date && date.slice(0, 7) === month;
       })
