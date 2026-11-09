@@ -2415,25 +2415,22 @@ export default {
         ));
         const deletedPhotoCounts = {};
 
+        const syncServiceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!syncServiceKey) {
+          return json({ error: "مفتاح SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار Worker؛ لم تتم مزامنة أي فاتورة." }, 500);
+        }
+
         const rpcResponse =
           await supabaseRequest(
             "/rest/v1/rpc/sync_orders_from_excel",
             {
               method: "POST",
               headers: {
-                apikey:
-                  env.SUPABASE_ANON_KEY,
-                Authorization:
-                  "Bearer " +
-                  env.SUPABASE_ANON_KEY,
-                "Content-Type":
-                  "application/json"
+                apikey: syncServiceKey,
+                Authorization: "Bearer " + syncServiceKey,
+                "Content-Type": "application/json"
               },
-              body:
-                JSON.stringify({
-                  p_orders:
-                    orders
-                })
+              body: JSON.stringify({ p_orders: orders })
             }
           );
 
@@ -2481,13 +2478,33 @@ export default {
           photosDeletionSkipped = true;
         }
 
+        const rpcResult = Array.isArray(rpcData) ? (rpcData[0] || {}) : (rpcData || {});
+        const insertedCount = Number(rpcResult.inserted || 0) || 0;
+        const updatedCount = Number(rpcResult.updated || 0) || 0;
+        const skippedCount = Number(skippedOldRevision || 0) || 0;
+        const rejectedCount = Number(rpcResult.failed || rpcResult.rejected || rpcResult.error_count || 0) || 0;
+        const rpcExplicitFailure = rpcResult.success === false || Boolean(rpcResult.error);
+        const syncSucceeded = !rpcExplicitFailure && rejectedCount === 0 && skippedCount === 0 && insertedCount + updatedCount === orders.length;
+
         return json({
-          success: true,
+          success: syncSucceeded,
+          error: syncSucceeded ? null : (rpcExplicitFailure
+            ? String(rpcResult.error || "قاعدة البيانات رفضت المزامنة؛ لم يتم اعتمادها محليًا.")
+            : rejectedCount > 0
+              ? "قاعدة البيانات رفضت " + rejectedCount + " سجل؛ لم يتم اعتماد المزامنة محليًا."
+              : skippedCount > 0
+                ? "تم تجاهل " + skippedCount + " فاتورة بسبب رقم مراجعة قديم؛ لم يتم اعتماد المزامنة محليًا."
+                : "عدد الفواتير التي أكدت قاعدة البيانات معالجتها لا يطابق عدد الفواتير المرسلة."),
+          received: orders.length,
+          processed: insertedCount + updatedCount,
+          inserted: insertedCount,
+          updated: updatedCount,
+          failed: skippedCount + rejectedCount,
           data: rpcData,
-          gate_photos_cleared: skippedOldRevision === 0 ? clearInvoices.length : 0,
+          gate_photos_cleared: syncSucceeded ? clearInvoices.length : 0,
           gate_photo_files_deleted: deletedPhotoCounts,
-          gate_photo_file_deletion_skipped: photosDeletionSkipped,
-          skipped_old_revision: skippedOldRevision
+          gate_photo_file_deletion_skipped: photosDeletionSkipped || !syncSucceeded,
+          skipped_old_revision: skippedCount
         });
       }
 
@@ -2531,19 +2548,17 @@ export default {
           );
         }
 
+        const statusServiceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!statusServiceKey) return json({ error: "مفتاح SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار Worker" }, 500);
         const rpcResponse =
           await supabaseRequest(
             "/rest/v1/rpc/get_order_delivery_statuses",
             {
               method: "POST",
               headers: {
-                apikey:
-                  env.SUPABASE_ANON_KEY,
-                Authorization:
-                  "Bearer " +
-                  env.SUPABASE_ANON_KEY,
-                "Content-Type":
-                  "application/json"
+                apikey: statusServiceKey,
+                Authorization: "Bearer " + statusServiceKey,
+                "Content-Type": "application/json"
               }
             }
           );
