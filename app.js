@@ -3439,13 +3439,27 @@
       }
     });
 
-    // One display row per logical invoice. Keep the freshest original record as
-    // the representative; editing and transfer confirmation still target all copies.
-    return groups.map((items) => items.reduce((preferred, candidate) =>
-      masterOrderRecency(candidate) > masterOrderRecency(preferred)
-        ? candidate
-        : preferred
-    ));
+    // عرض صف واحد لكل فاتورة منطقية، مع الاحتفاظ بكل النسخ الأصلية في state.masterOrders.
+    // حالة الاستلام تُجمع من كل نسخ التحويل حتى لا يظهر نفس التحويل مستلمًا عند مندوب
+    // وغير مستلم عند الآخر. هذا كائن عرض جديد ولا يغيّر أي سجل مصدر.
+    return groups.map((items) => {
+      const preferred = items.reduce((best, candidate) =>
+        masterOrderRecency(candidate) > masterOrderRecency(best) ? candidate : best
+      );
+      const bankCopies = items.filter((item) =>
+        !isPaidInAdvance(item) && normalizePayment(item.payment_method) === 'bank_transfer'
+      );
+      const display = Object.assign({}, preferred, {
+        _master_display_copy_count: items.length,
+        _master_display_drivers: Array.from(new Set(items
+          .map((item) => String(item?.sheet_name || '').trim())
+          .filter(Boolean)))
+      });
+      if (bankCopies.length) {
+        display.bank_transfer_received = bankCopies.some((item) => item.bank_transfer_received === true);
+      }
+      return display;
+    });
   }
 
   function getMasterFilteredOrders() {
