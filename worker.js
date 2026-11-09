@@ -2933,27 +2933,172 @@ export default {
         if (auth.error) return json({ error: auth.error }, auth.status);
         const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
         if (!svc) return json({ error: "إعداد التنضيف غير مكتمل: SUPABASE_SERVICE_ROLE_KEY" }, 500);
-        const H = { apikey: svc, Authorization: "Bearer " + svc };
-        async function dedupeTable(table, withSheet) {
-          const cols = withSheet ? "id,order_number,sheet_name" : "id,order_number";
-          const res = await supabaseRequest("/rest/v1/" + table + "?select=" + cols + "&order=id.asc", { headers: H });
-          const rows = await res.json().catch(function () { return []; });
-          if (!res.ok || !Array.isArray(rows)) return { error: "تعذر قراءة " + table };
-          const keep = new Map();
-          for (const r of rows) {
-            const key = (withSheet ? String(r.sheet_name) + "|" : "") + String(r.order_number);
-            keep.set(key, r.id);
-          }
-          const del = rows
-            .filter((r) => keep.get((withSheet ? String(r.sheet_name) + "|" : "") + String(r.order_number)) !== r.id)
-            .map((r) => r.id);
-          if (!del.length) return { removed: 0 };
-          const dres = await supabaseRequest("/rest/v1/" + table + "?id=in.(" + del.join(",") + ")", { method: "DELETE", headers: H });
-          return { removed: del.length, ok: dres.ok };
+        const body = await request.json().catch(function () { return {}; });
+        const dryRun = body.dry_run === true;
+        const H = {
+          apikey: svc,
+          Authorization: "Bearer " + svc,
+          "Content-Type": "application/json",
+          Prefer: "return=representation"
+        };
+
+        function dedupeInvoiceKey(row) {
+          const number = String(row && row.order_number || "").normalize("NFKC").trim().replace(/\s+/g, "").toUpperCase();
+          const sheet = String(row && row.sheet_name || "").normalize("NFKC").trim().toLowerCase();
+          const rawDate = String(row && row.delivery_date || "").trim();
+          const date = rawDate.slice(0, 10);
+          // لا نحذف سجلًا يفتقد التاريخ أو المندوب: قد يكون فاتورة صحيحة لا نعرف هويتها كاملة.
+          if (!number || !sheet || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+          return number + "|" + date + "|" + sheet;
         }
-        const o = await dedupeTable("orders", true);
-        const a = await dedupeTable("master_orders_archive", false);
-        return json({ success: true, orders: o, archive: a });
+
+        async function readAllDedupeRows(tableName) {
+          const allRows = [];
+          const pageSize = 500;
+          const maxPages = 200;
+          for (let page = 0; page < maxPages; page++) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+            const response = await supabaseRequest(
+              "/rest/v1/" + tableName + "?select=id,order_number,sheet_name,delivery_date,bank_transfer_received,paid_in_advance,delivery_status&order=id.asc&limit=" + pageSize,
+              {
+                headers: Object.assign({}, H, {
+                  Range: from + "-" + to,
+                  "Range-Unit": "items"
+                })
+              }
+            );
+            const rows = await response.json().catch(function () { return null; });
+            if (!response.ok || !Array.isArray(rows)) {
+              return { ok: false, error: "تعذر قراءة " + tableName, status: response.status, details: rows };
+            }
+            allRows.push.apply(allRows, rows);
+            if (rows.length < pageSize) return { ok: true, rows: allRows };
+          }
+          return { ok: false, error: "تجاوز عدد سجلات " + tableName + " حد القراءة الآمن (100000 صف)." };
+        }
+
+        async function dedupeTable(tableName) {
+          const read = await readAllDedupeRows(tableName);
+          if (!read.ok) return { table: tableName, success: false, error: read.error, details: read.details || null };
+
+          const groups = new Map();
+          let skippedMissingIdentity = 0;
+          for (const row of read.rows) {
+            const key = dedupeInvoiceKey(row);
+            if (!key) {
+              skippedMissingIdentity++;
+              continue;
+            }
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(row);
+          }
+
+          const duplicateGroups = [];
+          for (const [key, rows] of groups.entries()) {
+            if (rows.length < 2) continue;
+            // rows مرتبة تصاعديًا حسب id؛ نحتفظ بأحدث id، ولا ندمج مندوبين مختلفين أو تواريخ مختلفة.
+            const sorted = rows.slice().sort(function (a, b) { return Number(a.id) - Number(b.id); });
+            const survivor = sorted[sorted.length - 1];
+            const duplicateRows = sorted.slice(0, -1);
+            duplicateGroups.push({ key: key, survivor: survivor, duplicates: duplicateRows, all: sorted });
+          }
+
+          const result = {
+            table: tableName,
+            scanned: read.rows.length,
+            unique_groups: groups.size,
+            duplicate_groups: duplicateGroups.length,
+            duplicate_rows: duplicateGroups.reduce(function (sum, group) { return sum + group.duplicates.length; }, 0),
+            skipped_missing_identity: skippedMissingIdentity,
+            would_remove: duplicateGroups.reduce(function (sum, group) { return sum + group.duplicates.length; }, 0),
+            removed: 0,
+            success: true,
+            errors: []
+          };
+
+          if (dryRun || !duplicateGroups.length) return result;
+
+          const approvedGroups = [];
+          for (const group of duplicateGroups) {
+            // لا نفقد حالة الاستلام أو الدفع المقدم أو التسليم إذا كانت موجودة في نسخة أقدم.
+            const patch = {};
+            const receivedSomewhere = group.all.some(function (row) {
+              return row.bank_transfer_received === true || row.bank_transfer_received === 1 || String(row.bank_transfer_received).toLowerCase() === "true";
+            });
+            const survivorReceived = group.survivor.bank_transfer_received === true || group.survivor.bank_transfer_received === 1 || String(group.survivor.bank_transfer_received).toLowerCase() === "true";
+            if (receivedSomewhere && !survivorReceived) patch.bank_transfer_received = true;
+
+            const advanceSomewhere = group.all.some(function (row) {
+              return row.paid_in_advance === true || row.paid_in_advance === 1 || String(row.paid_in_advance).toLowerCase() === "true";
+            });
+            const survivorAdvance = group.survivor.paid_in_advance === true || group.survivor.paid_in_advance === 1 || String(group.survivor.paid_in_advance).toLowerCase() === "true";
+            if (advanceSomewhere && !survivorAdvance) patch.paid_in_advance = true;
+
+            const deliveredCopy = group.all.find(function (row) {
+              const status = String(row.delivery_status || "").toLowerCase();
+              return status === "delivered" || status.includes("تم التسليم");
+            });
+            const survivorStatus = String(group.survivor.delivery_status || "").toLowerCase();
+            const survivorDelivered = survivorStatus === "delivered" || survivorStatus.includes("تم التسليم");
+            if (deliveredCopy && !survivorDelivered) patch.delivery_status = deliveredCopy.delivery_status;
+
+            if (Object.keys(patch).length) {
+              const patchResponse = await supabaseRequest(
+                "/rest/v1/" + tableName + "?id=eq." + encodeURIComponent(String(group.survivor.id)),
+                { method: "PATCH", headers: H, body: JSON.stringify(patch) }
+              );
+              if (!patchResponse.ok) {
+                await patchResponse.json().catch(function () { return null; });
+                result.errors.push("تعذر حفظ حالة الفاتورة قبل حذف النسخ المكررة للصف " + group.survivor.id);
+                continue;
+              }
+            }
+            approvedGroups.push(group);
+          }
+
+          const deleteIds = approvedGroups.flatMap(function (group) {
+            return group.duplicates.map(function (row) { return Number(row.id); });
+          }).filter(function (id) { return Number.isInteger(id) && id > 0; });
+
+          // تقسيم الحذف إلى دفعات صغيرة لتفادي طول عنوان REST.
+          for (let offset = 0; offset < deleteIds.length; offset += 100) {
+            const batch = deleteIds.slice(offset, offset + 100);
+            const deleteResponse = await supabaseRequest(
+              "/rest/v1/" + tableName + "?id=in.(" + batch.join(",") + ")",
+              { method: "DELETE", headers: H }
+            );
+            const deletedRows = await deleteResponse.json().catch(function () { return null; });
+            const returnedIds = new Set(Array.isArray(deletedRows) ? deletedRows.map(function (row) { return Number(row && row.id); }) : []);
+            const exactBatchReturned = Array.isArray(deletedRows) && deletedRows.length === batch.length && batch.every(function (id) { return returnedIds.has(id); });
+            if (!deleteResponse.ok || !exactBatchReturned) {
+              result.removed += Array.isArray(deletedRows) ? deletedRows.length : 0;
+              result.errors.push("لم يتأكد حذف كل سجلات الدفعة من " + tableName + " ابتداءً من السجل " + batch[0] + " (المتوقع " + batch.length + "، الفعلي " + (Array.isArray(deletedRows) ? deletedRows.length : "غير معروف") + ").");
+              continue;
+            }
+            result.removed += deletedRows.length;
+          }
+
+          result.success = result.errors.length === 0 && result.removed === deleteIds.length;
+          if (!result.success) {
+            result.error = "تم التنظيف جزئيًا أو تعذر التحقق من كل عمليات الحذف؛ راجع تفاصيل الأخطاء قبل إعادة المحاولة.";
+          }
+          return result;
+        }
+
+        const [ordersResult, archiveResult] = await Promise.all([
+          dedupeTable("orders"),
+          dedupeTable("master_orders_archive")
+        ]);
+        const success = ordersResult.success && archiveResult.success;
+        return json({
+          success: success,
+          dry_run: dryRun,
+          rule: "order_number + delivery_date + sheet_name",
+          preserved: "يتم الاحتفاظ بنسخة واحدة لكل مندوب في نفس تاريخ التوصيل. لا يتم دمج نسخ Mandoub وMandoub2، ولا حذف رقم الفاتورة نفسه في تاريخ مختلف.",
+          orders: ordersResult,
+          archive: archiveResult
+        }, success ? 200 : 502);
       }
 
       /* سحب فاتورة مستقبلية من قوائم المناديب مع الاحتفاظ بأرشيف الماستر */
