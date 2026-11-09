@@ -3338,8 +3338,14 @@
 
   function masterOrderDateAreaKey(value) {
     const raw = String(value || '').trim();
-    const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-    return match ? match[1] : '';
+    if (!raw) return '';
+    const iso = raw.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+    if (iso) return iso[1] + '-' + iso[2].padStart(2, '0') + '-' + iso[3].padStart(2, '0');
+    const dmy = raw.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+    if (dmy) return dmy[3] + '-' + dmy[2].padStart(2, '0') + '-' + dmy[1].padStart(2, '0');
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return masterDateInput(parsed);
+    return '';
   }
 
   function masterInvoiceFingerprint(order) {
