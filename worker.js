@@ -309,6 +309,22 @@ function monthlyInvoiceKey(row) {
   if (!invoiceNumber || !customerCode || !/^\d{4}-\d{2}-\d{2}$/.test(invoiceDate)) return "";
   return "master|" + invoiceNumber + "|" + customerCode + "|" + invoiceDate;
 }
+function monthlyPhoneCanonical(value) {
+  let digits = String(value == null ? "" : value).replace(/[^0-9]/g, "");
+  if (digits.startsWith("00971")) digits = digits.slice(5);
+  else if (digits.startsWith("971")) digits = digits.slice(3);
+  else if (digits.startsWith("0")) digits = digits.slice(1);
+  return /^5\d{8}$/.test(digits) ? digits : digits;
+}
+function monthlyFallbackKey(row) {
+  const number = monthlyInvoiceNumber(row);
+  const date = monthlyInvoiceDate(row);
+  const phone = monthlyPhoneCanonical(row && row.phone);
+  return number && date && phone ? "phone|" + number + "|" + date + "|" + phone : "";
+}
+function monthlyLookupKey(row) {
+  return monthlyInvoiceKey(row) || monthlyFallbackKey(row);
+}
 
 function postgrestIn(values) {
   // كل القيم المستعملة هنا معرفات آمنة ومفتاح invoice_key لا يحتوي فواصل أو أقواس.
@@ -341,22 +357,49 @@ async function monthlyTableRead(table, query, env) {
 
 async function monthlyLinkMapForOrders(rows, env) {
   const list = Array.isArray(rows) ? rows : [];
-  const keys = Array.from(new Set(list.map(monthlyInvoiceKey).filter(Boolean)));
-  if (!keys.length) return { ok: true, map: new Map() };
+  if (!list.length) return { ok: true, map: new Map() };
+  const numbers = Array.from(new Set(list.map(monthlyInvoiceNumber).filter(Boolean)));
+  if (!numbers.length) return { ok: true, map: new Map() };
   const links = await monthlyTableRead(MONTHLY_CONTRACT_LINKS_TABLE,
-    "?invoice_key=" + encodeURIComponent(postgrestIn(keys)) + "&select=invoice_key,contract_id,customer_code", env);
+    "?invoice_number=" + encodeURIComponent(postgrestIn(numbers)) +
+    "&select=invoice_key,contract_id,customer_code,invoice_number,invoice_date,master_order_ids", env);
   if (!links.ok) return links;
+  if (!links.rows.length) return { ok: true, map: new Map() };
   const contractIds = Array.from(new Set(links.rows.map(function (r) { return String(r.contract_id || ""); }).filter(Boolean)));
-  if (!contractIds.length) return { ok: true, map: new Map() };
   const active = await monthlyTableRead(MONTHLY_CONTRACTS_TABLE,
-    "?contract_id=" + encodeURIComponent(postgrestIn(contractIds)) + "&pay_type=eq.deferred&select=contract_id,customer_code", env);
+    "?contract_id=" + encodeURIComponent(postgrestIn(contractIds)) +
+    "&pay_type=eq.deferred&is_active=eq.true&select=contract_id,customer_code,customer_phone", env);
   if (!active.ok) return active;
-  const activeMap = new Map(active.rows.map(function (r) { return [String(r.contract_id), String(r.customer_code || "")]; }));
+  const activeMap = new Map(active.rows.map(function (r) {
+    return [String(r.contract_id), {
+      code: String(r.customer_code || ""),
+      phone: monthlyPhoneCanonical(r.customer_phone)
+    }];
+  }));
   const map = new Map();
-  links.rows.forEach(function (link) {
-    const id = String(link.contract_id || "");
-    const code = activeMap.get(id);
-    if (code && code === String(link.customer_code || "")) map.set(String(link.invoice_key), id);
+  list.forEach(function (order) {
+    const number = monthlyInvoiceNumber(order);
+    const date = monthlyInvoiceDate(order);
+    const code = String(order && (order.customer_code || order.customerCode) || "");
+    const phone = monthlyPhoneCanonical(order && order.phone);
+    const id = Number(order && order.id);
+    const match = links.rows.find(function (link) {
+      if (String(link.invoice_number || "").trim().toUpperCase() !== number.toUpperCase()) return false;
+      if (String(link.invoice_date || "").slice(0, 10) !== date) return false;
+      const contract = activeMap.get(String(link.contract_id || ""));
+      if (!contract || contract.code !== String(link.customer_code || "")) return false;
+      if (code && code !== contract.code) return false;
+      const ids = Array.isArray(link.master_order_ids) ? link.master_order_ids.map(Number) : [];
+      const idMatch = Number.isInteger(id) && ids.includes(id);
+      const phoneMatch = !!phone && !!contract.phone && phone === contract.phone;
+      return idMatch || phoneMatch;
+    });
+    if (!match) return;
+    const contractId = String(match.contract_id || "");
+    const canonicalKey = monthlyInvoiceKey(order);
+    const fallbackKey = monthlyFallbackKey(order);
+    if (canonicalKey) map.set(canonicalKey, contractId);
+    if (fallbackKey) map.set(fallbackKey, contractId);
   });
   return { ok: true, map: map };
 }
@@ -383,7 +426,7 @@ async function refreshMonthlyLinkSnapshots(links, env) {
   }
   const byKey = new Map();
   all.forEach(function (row) {
-    const key = monthlyInvoiceKey(row);
+    const key = monthlyLookupKey(row);
     if (!key) return;
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key).push(row);
@@ -1341,7 +1384,7 @@ export default {
           const monthlyLinks = await monthlyLinkMapForOrders(safeOrders, env);
           if (monthlyLinks.ok) {
             safeOrders.forEach(function (row) {
-              const key = monthlyInvoiceKey(row);
+              const key = monthlyLookupKey(row);
               const contractId = monthlyLinks.map.get(key);
               if (contractId) {
                 row.monthly_contract_deferred = true;
@@ -1512,7 +1555,7 @@ export default {
           const monthlyLinks = await monthlyLinkMapForOrders(combinedOrders, env);
           if (monthlyLinks.ok) {
             combinedOrders.forEach(function (row) {
-              const key = monthlyInvoiceKey(row);
+              const key = monthlyLookupKey(row);
               const contractId = monthlyLinks.map.get(key);
               if (contractId) {
                 row.monthly_contract_deferred = true;
