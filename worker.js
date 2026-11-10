@@ -448,86 +448,9 @@ function paymentLabel(value) {
 
 
 async function clearGatePhotosForInvoice(invoiceNumber, env) {
-  const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-  if (!serviceKey) {
-    throw new Error("إعداد حذف الصور غير مكتمل: SUPABASE_SERVICE_ROLE_KEY");
-  }
-
-  const headers = {
-    apikey: serviceKey,
-    Authorization: "Bearer " + serviceKey
-  };
-  const encodedInvoice = encodeURIComponent(invoiceNumber);
-  const rowsResponse = await supabaseRequest(
-    "/rest/v1/orders?order_number=eq." + encodedInvoice +
-      "&select=id,order_number,gate_photo_url,gate_photo_urls",
-    { headers: headers }
-  );
-  const rows = await rowsResponse.json().catch(function () { return null; });
-  if (!rowsResponse.ok || !Array.isArray(rows)) {
-    throw new Error((rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة صور الفاتورة");
-  }
-
-  const bucketName = "gate-photos 3";
-  const bucketMarker = "/storage/v1/object/public/" + encodeURIComponent(bucketName) + "/";
-  const paths = [];
-  const addPath = function (value) {
-    const photoUrl = String(value || "").trim();
-    const at = photoUrl.indexOf(bucketMarker);
-    if (at < 0) return;
-    const rawPath = photoUrl.slice(at + bucketMarker.length).split("?")[0];
-    let decoded;
-    try {
-      decoded = rawPath.split("/").map(function (part) { return decodeURIComponent(part); }).join("/");
-    } catch (_) { return; }
-    if (decoded.startsWith("invoices/") && !decoded.includes("..") && !paths.includes(decoded)) {
-      paths.push(decoded);
-    }
-  };
-
-  for (const row of rows) {
-    addPath(row.gate_photo_url);
-    let photos = row.gate_photo_urls;
-    if (typeof photos === "string") {
-      try { photos = JSON.parse(photos); } catch (_) { photos = []; }
-    }
-    if (Array.isArray(photos)) {
-      for (const photo of photos) {
-        addPath(typeof photo === "string" ? photo : (photo && (photo.url || photo.gate_photo_url)) || "");
-      }
-    }
-  }
-
-  if (paths.length) {
-    const storageResponse = await supabaseRequest(
-      "/storage/v1/object/" + encodeURIComponent(bucketName),
-      {
-        method: "DELETE",
-        headers: Object.assign({}, headers, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ prefixes: paths })
-      }
-    );
-    const storageData = await storageResponse.json().catch(function () { return null; });
-    if (!storageResponse.ok) {
-      throw new Error((storageData && (storageData.message || storageData.error)) || "تعذر حذف الصور من التخزين السحابي");
-    }
-  }
-
-  const clearBody = JSON.stringify({ gate_photo_url: null, gate_photo_urls: [] });
-  const ordersPatch = await supabaseRequest(
-    "/rest/v1/orders?order_number=eq." + encodedInvoice,
-    { method: "PATCH", headers: Object.assign({}, headers, { "Content-Type": "application/json", Prefer: "return=minimal" }), body: clearBody }
-  );
-  if (!ordersPatch.ok) throw new Error("تم حذف الصور من التخزين لكن تعذر مسح روابط الطلبات");
-
-  const archivePatch = await supabaseRequest(
-    "/rest/v1/master_orders_archive?order_number=eq." + encodedInvoice,
-    { method: "PATCH", headers: Object.assign({}, headers, { "Content-Type": "application/json", Prefer: "return=minimal" }), body: clearBody }
-  );
-  if (!archivePatch.ok && archivePatch.status !== 404) {
-    throw new Error("تم تحديث الطلبات لكن تعذر مسح روابط صور أرشيف الماستر");
-  }
-  return paths.length;
+  // أمان الصور: لا نحذف ملفات Storage ولا نفك ارتباطاتها آليًا قبل إثبات الملكية
+  // ومراجعة كل سجلات orders وmaster_orders_archive والعملاء التي تشير إلى الملف.
+  return 0;
 }
 
 export default {
@@ -1344,7 +1267,7 @@ export default {
         const sourceResponse = await supabaseRequest(
           "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) +
           "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) +
-          "&select=id,order_number,customer_name,sheet_name,paid_in_advance,delivery_status,delivery_date&limit=1",
+          "&select=id,order_number,customer_name,sheet_name,paid_in_advance,delivery_status,delivery_date,payment_method&limit=1",
           { headers: paymentHeaders }
         );
         const sourceRows = await sourceResponse.json().catch(function () { return null; });
@@ -1356,6 +1279,10 @@ export default {
         }
 
         const sourceOrder = sourceRows[0];
+        const sourcePaymentMarker = String(sourceOrder.payment_method || "").trim().toLowerCase();
+        if (sourcePaymentMarker === "monthly_contract_deferred" || sourcePaymentMarker === "تعاقد شهري آجل") {
+          return json({ error: "هذه الفاتورة مرتبطة بتعاقد شهري آجل؛ لا يمكن اختيار الكاش أو التحويل من كارت المندوب." }, 403);
+        }
         if (isFutureDeliveryDate(sourceOrder.delivery_date)) {
           return futureDeliveryLockedResponse(sourceOrder.delivery_date);
         }
@@ -2073,137 +2000,12 @@ export default {
         request.method === "POST"
       ) {
         const secret = request.headers.get("X-Excel-Sync-Secret") || "";
-        if (secret !== env.EXCEL_SYNC_SECRET) {
-          return json({ error: "غير مصرح" }, 401);
-        }
-        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!serviceKey) {
-          return json({ error: "إعداد حذف الصور غير مكتمل: أضف SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
-        }
-
-        const body = await request.json().catch(function () { return {}; });
-        const invoiceNumber = String(body.invoice_number || "").trim();
-        if (!invoiceNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(invoiceNumber)) {
-          return json({ error: "رقم الفاتورة غير صحيح" }, 400);
-        }
-        if (body.confirm_delete !== true) {
-          return json({ error: "يجب تأكيد حذف صورة البوابة بإرسال confirm_delete: true" }, 400);
-        }
-
-        const authHeaders = {
-          apikey: serviceKey,
-          Authorization: "Bearer " + serviceKey
-        };
-        const queryPath = "/rest/v1/orders?order_number=eq." +
-          encodeURIComponent(invoiceNumber) +
-          "&select=id,order_number,gate_photo_url,gate_photo_urls";
-        const ordersResponse = await supabaseRequest(queryPath, { headers: authHeaders });
-        const ordersData = await ordersResponse.json().catch(function () { return null; });
-        if (!ordersResponse.ok || !Array.isArray(ordersData)) {
-          return json({
-            error: (ordersData && (ordersData.message || ordersData.hint || ordersData.error)) || "تعذر قراءة صور الفاتورة من قاعدة البيانات"
-          }, 502);
-        }
-        if (ordersData.length === 0) {
-          return json({ error: "الفاتورة غير موجودة في جدول الطلبات؛ لم يتم حذف أي ملف" }, 404);
-        }
-
-        const bucketName = "gate-photos 3";
-        const bucketMarker = "/storage/v1/object/public/" + encodeURIComponent(bucketName) + "/";
-        const prefixes = [];
-        const addPhotoPath = function (photoUrl) {
-          const value = String(photoUrl || "").trim();
-          const markerIndex = value.indexOf(bucketMarker);
-          if (markerIndex < 0) return;
-          const pathPart = value.slice(markerIndex + bucketMarker.length).split("?")[0];
-          let decodedPath;
-          try {
-            decodedPath = pathPart.split("/").map(function (part) { return decodeURIComponent(part); }).join("/");
-          } catch (_) {
-            return;
-          }
-          if (decodedPath.startsWith("invoices/") && !decodedPath.includes("..")) {
-            if (!prefixes.includes(decodedPath)) prefixes.push(decodedPath);
-          }
-        };
-
-        for (const row of ordersData) {
-          addPhotoPath(row.gate_photo_url);
-          let photos = row.gate_photo_urls;
-          if (typeof photos === "string") {
-            try { photos = JSON.parse(photos); } catch (_) { photos = []; }
-          }
-          if (Array.isArray(photos)) {
-            for (const photo of photos) {
-              addPhotoPath(typeof photo === "string" ? photo : (photo && (photo.url || photo.gate_photo_url)) || "");
-            }
-          }
-        }
-
-        if (prefixes.length > 0) {
-          const encodedBucket = encodeURIComponent(bucketName);
-          const deleteResponse = await supabaseRequest(
-            "/storage/v1/object/" + encodedBucket,
-            {
-              method: "DELETE",
-              headers: Object.assign({}, authHeaders, {
-                "Content-Type": "application/json"
-              }),
-              body: JSON.stringify({ prefixes: prefixes })
-            }
-          );
-          const deleteData = await deleteResponse.json().catch(function () { return null; });
-          if (!deleteResponse.ok) {
-            return json({
-              error: (deleteData && (deleteData.message || deleteData.error)) || "تعذر حذف الصور من التخزين السحابي؛ لم يتم مسح روابطها من قاعدة البيانات",
-              photo_count: prefixes.length
-            }, 502);
-          }
-        }
-
-        const patchResponse = await supabaseRequest(
-          "/rest/v1/orders?order_number=eq." + encodeURIComponent(invoiceNumber),
-          {
-            method: "PATCH",
-            headers: Object.assign({}, authHeaders, {
-              "Content-Type": "application/json",
-              Prefer: "return=representation"
-            }),
-            body: JSON.stringify({ gate_photo_url: null, gate_photo_urls: [] })
-          }
-        );
-        const patchData = await patchResponse.json().catch(function () { return null; });
-        if (!patchResponse.ok) {
-          return json({
-            error: (patchData && (patchData.message || patchData.hint || patchData.error)) || "تم طلب حذف الصور من التخزين، لكن تعذر مسح روابطها من جدول الطلبات",
-            photos_deleted: prefixes.length
-          }, 502);
-        }
-
-        const archiveResponse = await supabaseRequest(
-          "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(invoiceNumber),
-          {
-            method: "PATCH",
-            headers: Object.assign({}, authHeaders, {
-              "Content-Type": "application/json",
-              Prefer: "return=minimal"
-            }),
-            body: JSON.stringify({ gate_photo_url: null, gate_photo_urls: [] })
-          }
-        );
-        if (!archiveResponse.ok && archiveResponse.status !== 404) {
-          return json({
-            error: "تم تحديث الطلبات، لكن تعذر مسح رابط الصورة من أرشيف الماستر",
-            photos_deleted: prefixes.length
-          }, 502);
-        }
-
+        if (secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
         return json({
-          success: true,
-          invoice_number: invoiceNumber,
-          photos_deleted: prefixes.length,
-          message: "تم حذف روابط صور البوابة من الطلبات والأرشيف"
-        });
+          success: false,
+          code: "PHOTO_DELETE_DISABLED_PENDING_OWNERSHIP_AUDIT",
+          error: "حذف صور البوابات موقوف لحين التحقق من ملكية كل صورة وجميع ارتباطاتها. لم يتم حذف ملف أو تعديل رابط."
+        }, 409);
       }
 
       if (
@@ -2229,8 +2031,19 @@ export default {
         }
 
         const invoiceNumber = String(form.get("invoice_number") || "").trim();
+        const photoScope = String(form.get("photo_scope") || "invoice").trim().toLowerCase();
+        const customerCode = String(form.get("customer_code") || "").trim();
         if (!invoiceNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(invoiceNumber)) {
-          return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+          return json({ error: "رقم الفاتورة أو مفتاح العميل غير صحيح" }, 400);
+        }
+        if (photoScope !== "invoice" && photoScope !== "customer") {
+          return json({ error: "نوع ارتباط الصورة غير صحيح" }, 400);
+        }
+        if (!/^[A-Za-z0-9_-]{1,70}$/.test(customerCode)) {
+          return json({ error: "كود العميل مطلوب لربط الصورة بمالكها" }, 400);
+        }
+        if (photoScope === "customer" && invoiceNumber !== "CUSTOMER-" + customerCode) {
+          return json({ error: "مفتاح صورة العميل لا يطابق كود العميل" }, 400);
         }
 
         // يدعم الملف القديم (file) وكذلك عدة ملفات تحت file أو files أو photo.
@@ -2276,17 +2089,15 @@ export default {
             return json({ error: "حجم كل صورة يجب ألا يتجاوز 8 ميجابايت" }, 400);
           }
 
-          let objectName;
-          if (files.length > 1) {
-            objectName = invoiceNumber + "-photo-" + (i + 1) + "." + allowedTypes[mimeType];
-          } else if (requestedIndex && /^\d{1,3}$/.test(requestedIndex)) {
-            objectName = invoiceNumber + "-photo-" + requestedIndex + "." + allowedTypes[mimeType];
-          } else {
-            // الحفاظ على مسار الصور القديمة عند استخدام واجهة الرفع القديمة.
-            objectName = invoiceNumber + "." + allowedTypes[mimeType];
-          }
-
-          const objectPath = "invoices/" + objectName;
+          // لا نعيد استخدام اسم ملف قديم ولا نسمح بالكتابة فوق كائن موجود.
+          const uniqueToken = (typeof crypto.randomUUID === "function")
+            ? crypto.randomUUID()
+            : Array.from(crypto.getRandomValues(new Uint8Array(16))).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+          const suffix = customerCode + "-" + uniqueToken + (files.length > 1 ? "-" + (i + 1) : "");
+          const extension = allowedTypes[mimeType];
+          const objectPath = photoScope === "customer"
+            ? "customers/" + customerCode + "/" + suffix + "." + extension
+            : "invoices/" + invoiceNumber + "/" + suffix + "." + extension;
           const storagePath = "/storage/v1/object/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
           const uploadResponse = await supabaseRequest(storagePath, {
             method: "POST",
@@ -2294,7 +2105,7 @@ export default {
               apikey: env.SUPABASE_SERVICE_ROLE_KEY,
               Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
               "Content-Type": mimeType,
-              "x-upsert": "true",
+              "x-upsert": "false",
               "Cache-Control": "3600"
             },
             body: await file.arrayBuffer()
@@ -2316,6 +2127,8 @@ export default {
         return json({
           success: true,
           invoice_number: invoiceNumber,
+          customer_code: customerCode,
+          photo_scope: photoScope,
           gate_photo_urls: uploadedUrls,
           gate_photo_url: uploadedUrls[0],
           uploaded_count: uploadedUrls.length
@@ -2544,9 +2357,9 @@ export default {
           updated: updatedCount,
           failed: skippedCount + rejectedCount,
           data: rpcData,
-          gate_photos_cleared: syncSucceeded ? clearInvoices.length : 0,
-          gate_photo_files_deleted: deletedPhotoCounts,
-          gate_photo_file_deletion_skipped: photosDeletionSkipped || !syncSucceeded,
+          gate_photos_cleared: 0,
+          gate_photo_files_deleted: {},
+          gate_photo_file_deletion_skipped: clearInvoices.length > 0 || photosDeletionSkipped || !syncSucceeded,
           skipped_old_revision: skippedCount
         });
       }
