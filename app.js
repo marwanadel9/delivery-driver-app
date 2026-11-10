@@ -140,9 +140,16 @@
   };
 
   const isMonthlyContractDeferred = (order) => {
-    if (order?.monthly_contract_deferred === true && String(order?.monthly_contract_id || '').trim()) return true;
+    const flag = order?.monthly_contract_deferred;
+    const flagged = flag === true || flag === 1 ||
+      String(flag ?? '').trim().toLowerCase() === 'true' ||
+      String(flag ?? '').trim() === '1';
+    if (flagged) return true;
+
     const value = String(order?.payment_method ?? order?.paymentMethod ?? '').trim().toLowerCase();
-    return value === 'monthly_contract_deferred' || value === 'تعاقد شهري آجل';
+    return value === 'monthly_contract_deferred' ||
+      value === 'monthly contract deferred' ||
+      value === 'تعاقد شهري آجل';
   };
 
   const paymentLabel = (value) => {
@@ -2042,10 +2049,14 @@
       const paymentSection =
         node.querySelector('.payment-section');
 
+      node.classList.toggle('is-monthly-contract-deferred', monthlyContractDeferred);
       if (paymentSection && (paidInAdvance || monthlyContractDeferred)) {
-        paymentSection.style.display = 'none';
+        // ملف الواجهة يفرض display:flex!important؛ لذلك يجب أن يكون الإخفاء مهمًا أيضًا.
+        paymentSection.style.setProperty('display', 'none', 'important');
+        paymentSection.setAttribute('aria-hidden', 'true');
       } else if (paymentSection) {
-        paymentSection.style.display = '';
+        paymentSection.style.removeProperty('display');
+        paymentSection.removeAttribute('aria-hidden');
       }
 
       const paymentCurrent =
