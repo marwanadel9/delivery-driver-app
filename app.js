@@ -140,6 +140,7 @@
   };
 
   const isMonthlyContractDeferred = (order) => {
+    if (order?.monthly_contract_deferred === true && String(order?.monthly_contract_id || '').trim()) return true;
     const value = String(order?.payment_method ?? order?.paymentMethod ?? '').trim().toLowerCase();
     return value === 'monthly_contract_deferred' || value === 'تعاقد شهري آجل';
   };
@@ -1460,7 +1461,7 @@
       if (monthlyContractDeferred) {
         const badge = document.createElement('span');
         badge.className = 'monthly-contract-deferred-badge';
-        badge.textContent = 'تعاقد شهري آجل';
+        badge.textContent = 'تعاقد شهري';
         badge.setAttribute('aria-label', 'فاتورة مرتبطة بعقد شهري آجل');
         badge.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;background:linear-gradient(135deg,#fff3bf,#facc15)!important;color:#713f12!important;border:2px solid #eab308!important;border-radius:14px!important;padding:10px 16px!important;font-size:18px!important;line-height:1.35!important;font-weight:900!important;width:fit-content!important;max-width:100%!important;margin:4px 0 10px auto!important;box-shadow:0 4px 12px rgba(202,138,4,.16)!important;';
         node.insertBefore(badge, node.firstChild);
@@ -2195,6 +2196,7 @@
     clickedButton,
     allButtons
   ) {
+    if (isMonthlyContractDeferred(order)) { toast('هذه الفاتورة على تعاقد شهري؛ لا يتم اختيار طريقة الدفع من كارت المندوب.', true); return; }
     if (isFutureDeliveryLocked(order)) { toast('🔒 طريقة الدفع تُفتح مع بداية يوم التوصيل بتوقيت دبي', true); return; }
     if (
       !method ||
