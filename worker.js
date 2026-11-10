@@ -285,6 +285,213 @@ async function requireMaster(request, env) {
   };
 }
 
+// عقود فروج الزين: جداول إضافية مستقلة. لا نضيف أعمدة إلى orders ولا نغيّر payment_method.
+const MONTHLY_CONTRACTS_TABLE = "froog_monthly_contracts";
+const MONTHLY_CONTRACT_LINKS_TABLE = "froog_monthly_contract_invoice_links";
+
+function monthlyInvoiceDate(row) {
+  const direct = String(row && (row.delivery_date || row.date) || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(direct)) return direct.slice(0, 10);
+  const created = String(row && row.created_at || "").trim();
+  if (!created) return "";
+  const parsed = new Date(created);
+  return Number.isNaN(parsed.getTime()) ? "" : dubaiDateKey(parsed);
+}
+
+function monthlyInvoiceNumber(row) {
+  return String(row && (row.invoice_number || row.invoice_no || row.order_number) || "").trim().toUpperCase();
+}
+
+function monthlyInvoiceKey(row) {
+  const invoiceNumber = monthlyInvoiceNumber(row);
+  const customerCode = String(row && (row.customer_code || row.customerCode) || "").trim();
+  const invoiceDate = monthlyInvoiceDate(row);
+  if (!invoiceNumber || !customerCode || !/^\d{4}-\d{2}-\d{2}$/.test(invoiceDate)) return "";
+  return "master|" + invoiceNumber + "|" + customerCode + "|" + invoiceDate;
+}
+
+function postgrestIn(values) {
+  // كل القيم المستعملة هنا معرفات آمنة ومفتاح invoice_key لا يحتوي فواصل أو أقواس.
+  const safe = (Array.isArray(values) ? values : []).map(function (value) {
+    const text = String(value);
+    if (!/^[A-Za-z0-9_:-]+(?:\|[A-Za-z0-9_-]+)*$/.test(text)) {
+      throw new Error("قيمة غير صالحة لفلتر PostgREST");
+    }
+    return text;
+  });
+  return "in.(" + safe.join(",") + ")";
+}
+
+function monthlyServiceHeaders(env, extra) {
+  const key = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (!key) return null;
+  return Object.assign({ apikey: key, Authorization: "Bearer " + key }, extra || {});
+}
+
+async function monthlyTableRead(table, query, env) {
+  const headers = monthlyServiceHeaders(env);
+  if (!headers) return { ok: false, status: 500, error: "SUPABASE_SERVICE_ROLE_KEY غير مضبوط في Worker" };
+  const response = await supabaseRequest("/rest/v1/" + table + (query || "?select=*"), { headers: headers });
+  const data = await response.json().catch(function () { return null; });
+  if (!response.ok || !Array.isArray(data)) {
+    return { ok: false, status: response.status || 502, error: data && (data.message || data.details || data.hint || data.error) || "تعذر قراءة " + table };
+  }
+  return { ok: true, rows: data };
+}
+
+async function monthlyLinkMapForOrders(rows, env) {
+  const list = Array.isArray(rows) ? rows : [];
+  const keys = Array.from(new Set(list.map(monthlyInvoiceKey).filter(Boolean)));
+  if (!keys.length) return { ok: true, map: new Map() };
+  const links = await monthlyTableRead(MONTHLY_CONTRACT_LINKS_TABLE,
+    "?invoice_key=" + encodeURIComponent(postgrestIn(keys)) + "&select=invoice_key,contract_id,customer_code", env);
+  if (!links.ok) return links;
+  const contractIds = Array.from(new Set(links.rows.map(function (r) { return String(r.contract_id || ""); }).filter(Boolean)));
+  if (!contractIds.length) return { ok: true, map: new Map() };
+  const active = await monthlyTableRead(MONTHLY_CONTRACTS_TABLE,
+    "?contract_id=" + encodeURIComponent(postgrestIn(contractIds)) + "&pay_type=eq.deferred&select=contract_id,customer_code", env);
+  if (!active.ok) return active;
+  const activeMap = new Map(active.rows.map(function (r) { return [String(r.contract_id), String(r.customer_code || "")]; }));
+  const map = new Map();
+  links.rows.forEach(function (link) {
+    const id = String(link.contract_id || "");
+    const code = activeMap.get(id);
+    if (code && code === String(link.customer_code || "")) map.set(String(link.invoice_key), id);
+  });
+  return { ok: true, map: map };
+}
+
+async function refreshMonthlyLinkSnapshots(links, env) {
+  const rows = Array.isArray(links) ? links : [];
+  if (!rows.length) return rows;
+  const numbers = Array.from(new Set(rows.map(function (r) { return String(r.invoice_number || "").trim(); }).filter(Boolean)));
+  const all = [];
+  for (let offset = 0; offset < numbers.length; offset += 50) {
+    const batch = numbers.slice(offset, offset + 50);
+    const query = "?order_number=" + encodeURIComponent(postgrestIn(batch)) + "&select=*";
+    const [active, archive] = await Promise.all([
+      monthlyTableRead("orders", query, env),
+      monthlyTableRead("master_orders_archive", query, env)
+    ]);
+    if (!active.ok || !archive.ok) {
+      // لا نخفي السجل المرتبط عند تعذر تحديث اللقطة؛ نعيد اللقطة المخزنة مع تحذير.
+      rows.forEach(function (r) { r.snapshot_refresh_unavailable = true; });
+      return rows;
+    }
+    all.push.apply(all, active.rows);
+    all.push.apply(all, archive.rows);
+  }
+  const byKey = new Map();
+  all.forEach(function (row) {
+    const key = monthlyInvoiceKey(row);
+    if (!key) return;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(row);
+  });
+  return rows.map(function (link) {
+    const copies = byKey.get(String(link.invoice_key || "")) || [];
+    if (!copies.length) return Object.assign({}, link, { snapshot_missing: true });
+    const total = Number(copies[0].total);
+    const rawPayment = String(copies[0].payment_method || "");
+    const payment = normalizePayment(rawPayment) || rawPayment;
+    const mismatch = copies.some(function (row) {
+      const rowRawPayment = String(row.payment_method || "");
+      const rowPayment = normalizePayment(rowRawPayment) || rowRawPayment;
+      return Math.abs(Number(row.total) - total) > 0.009 || rowPayment !== payment;
+    });
+    if (mismatch) return Object.assign({}, link, { snapshot_conflict: true });
+    const bankReceived = copies.some(function (row) { return row.bank_transfer_received === true || row.bank_transfer_received === 1 || String(row.bank_transfer_received).toLowerCase() === "true"; });
+    const paid = payment === "cash" || bankReceived;
+    return Object.assign({}, link, {
+      invoice_total: Number.isFinite(total) ? total : Number(link.invoice_total || 0),
+      payment_method: payment,
+      bank_transfer_received: bankReceived,
+      is_paid: paid,
+      master_order_ids: copies.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; }),
+      snapshot_conflict: false,
+      snapshot_missing: false
+    });
+  });
+}
+
+async function attachMonthlyContractInvoices(orders, env) {
+  const candidates = (Array.isArray(orders) ? orders : []).filter(function (order) {
+    return order && order.monthly_contract_deferred === true && String(order.monthly_contract_id || "").trim();
+  });
+  if (!candidates.length) return { ok: true, linked: 0, already: 0 };
+  const headers = monthlyServiceHeaders(env, { "Content-Type": "application/json", Prefer: "return=representation" });
+  if (!headers) return { ok: false, error: "SUPABASE_SERVICE_ROLE_KEY غير مضبوط؛ لم يكتمل ربط فواتير العقد" };
+  let linked = 0, already = 0;
+  const unique = new Map();
+  candidates.forEach(function (order) {
+    const key = monthlyInvoiceKey(order);
+    if (!key) throw new Error("فاتورة تعاقد جديدة لا تحمل رقمًا أو كود عميل أو تاريخًا صالحًا");
+    const id = String(order.monthly_contract_id || "").trim();
+    if (!unique.has(key)) unique.set(key, { order: order, key: key, contractId: id });
+    else if (unique.get(key).contractId !== id) throw new Error("الفاتورة نفسها أُرسلت بعقدين مختلفين؛ أوقفنا الربط للحماية");
+  });
+  for (const item of unique.values()) {
+    const savedOrders = await monthlyTableRead("orders",
+      "?order_number=eq." + encodeURIComponent(monthlyInvoiceNumber(item.order)) + "&select=id,order_number,customer_code,delivery_date,created_at,total,payment_method,bank_transfer_received", env);
+    if (!savedOrders.ok) return { ok: false, error: savedOrders.error };
+    const exactSaved = savedOrders.rows.filter(function (row) {
+      return monthlyInvoiceKey(row) === item.key && Math.abs(Number(row.total || 0) - Number(item.order.total || 0)) <= 0.009;
+    });
+    if (!exactSaved.length) return { ok: false, error: "لم يتم العثور على الفاتورة المحفوظة بهويتها وقيمتها في orders: " + monthlyInvoiceNumber(item.order) };
+    const contractResult = await monthlyTableRead(MONTHLY_CONTRACTS_TABLE,
+      "?contract_id=eq." + encodeURIComponent(item.contractId) + "&is_active=eq.true&pay_type=eq.deferred&select=contract_id,customer_code,customer_id", env);
+    if (!contractResult.ok) return { ok: false, error: contractResult.error };
+    const contract = contractResult.rows[0];
+    if (!contract || String(contract.customer_code || "") !== String(item.order.customer_code || "")) {
+      return { ok: false, error: "لا يوجد عقد آجل نشط مطابق لكود العميل للفاتورة " + monthlyInvoiceNumber(item.order) };
+    }
+    if (contract.customer_id && item.order.customer_id && String(contract.customer_id) !== String(item.order.customer_id)) {
+      return { ok: false, error: "معرف العميل لا يطابق العقد للفاتورة " + monthlyInvoiceNumber(item.order) };
+    }
+    const savedPaymentRaw = String(exactSaved[0].payment_method || "");
+    const savedPayment = normalizePayment(savedPaymentRaw) || savedPaymentRaw;
+    const savedTransferReceived = exactSaved.some(function (row) { return row.bank_transfer_received === true || row.bank_transfer_received === 1 || String(row.bank_transfer_received).toLowerCase() === "true"; });
+    const body = {
+      invoice_key: item.key,
+      contract_id: item.contractId,
+      customer_code: String(item.order.customer_code || ""),
+      customer_id: String(exactSaved[0].customer_id || contract.customer_id || ""),
+      invoice_number: monthlyInvoiceNumber(item.order),
+      invoice_date: monthlyInvoiceDate(item.order),
+      invoice_total: Number(exactSaved[0].total || 0),
+      payment_method: savedPayment,
+      bank_transfer_received: savedTransferReceived,
+      is_paid: savedPayment === "cash" || savedTransferReceived,
+      master_order_ids: exactSaved.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; })
+    };
+    const response = await supabaseRequest("/rest/v1/" + MONTHLY_CONTRACT_LINKS_TABLE, {
+      method: "POST", headers: headers, body: JSON.stringify(body)
+    });
+    const result = await response.json().catch(function () { return null; });
+    if (response.ok) { linked++; continue; }
+    if (response.status === 409 || result && String(result.code || "") === "23505") {
+      const existing = await monthlyTableRead(MONTHLY_CONTRACT_LINKS_TABLE,
+        "?invoice_key=eq." + encodeURIComponent(item.key) + "&select=invoice_key,contract_id&limit=1", env);
+      if (!existing.ok) return { ok: false, error: existing.error };
+      if (existing.rows[0] && String(existing.rows[0].contract_id) === item.contractId) { already++; continue; }
+      return { ok: false, error: "الفاتورة " + monthlyInvoiceNumber(item.order) + " مرتبطة بالفعل بعقد آخر" };
+    }
+    return { ok: false, error: result && (result.message || result.hint || result.error) || "تعذر حفظ ارتباط الفاتورة بالعقد" };
+  }
+  return { ok: true, linked: linked, already: already };
+}
+
+async function invoiceHasActiveMonthlyContractLink(order, env) {
+  const key = monthlyInvoiceKey(order);
+  if (!key) return { ok: true, linked: false };
+  const result = await monthlyLinkMapForOrders([order], env);
+  if (!result.ok) {
+    const missingTable = Number(result.status) === 404 || /PGRST205|does not exist|Could not find the table/i.test(String(result.error || ""));
+    if (missingTable) return { ok: true, linked: false, tablesUnavailable: true };
+    return result;
+  }
+  return { ok: true, linked: result.map.has(key) };
+}
 
 // مطابقة هوية الفاتورة بين الكمبيوتر ونسخ المندوبين والماستر.
 // رقم الفاتورة وحده لا يكفي دائمًا؛ نستخدم تاريخ التوصيل والهاتف والعميل.
@@ -901,6 +1108,154 @@ export default {
         return json({ success: true, saved: sortRows.length, scope: "shared_invoice_fingerprint" });
       }
 
+      if (path === "/api/master/monthly-contracts" && request.method === "GET") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const [contractsResult, linksResult] = await Promise.all([
+          monthlyTableRead(MONTHLY_CONTRACTS_TABLE, "?select=*&order=created_at.asc&limit=10000", env),
+          monthlyTableRead(MONTHLY_CONTRACT_LINKS_TABLE, "?select=*&order=created_at.asc&limit=20000", env)
+        ]);
+        if (!contractsResult.ok || !linksResult.ok) {
+          return json({
+            error: "جداول التعاقد الشهري غير جاهزة أو تعذرت قراءتها. نفّذ ملف SQL الإضافي ثم أعد المحاولة.",
+            contracts_error: contractsResult.ok ? null : contractsResult.error,
+            links_error: linksResult.ok ? null : linksResult.error,
+            hint: "لا يوجد عمود monthly_contract_deferred مطلوب في orders؛ الربط محفوظ في جداول مستقلة."
+          }, 503);
+        }
+        const freshLinks = await refreshMonthlyLinkSnapshots(linksResult.rows, env);
+        return json({ contracts: contractsResult.rows, invoice_links: freshLinks, source: "supabase" });
+      }
+
+      if (path === "/api/master/monthly-contracts/upsert" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(function () { return {}; });
+        const contract = body && body.contract && typeof body.contract === "object" ? body.contract : body;
+        const contractId = String(contract.contract_id || contract.id || "").trim();
+        const customerCode = String(contract.customer_code || contract.code || "").trim();
+        const payType = String(contract.pay_type || contract.payType || "deferred").trim().toLowerCase();
+        const cycleDay = String(contract.cycle_day || contract.cycleDay || "1").trim();
+        if (!/^[A-Za-z0-9_-]{3,120}$/.test(contractId) || !/^[A-Za-z0-9_-]{1,70}$/.test(customerCode)) {
+          return json({ error: "معرف العقد أو كود العميل غير صالح" }, 400);
+        }
+        if (payType !== "deferred" && payType !== "advance") return json({ error: "نوع التعاقد غير صالح" }, 400);
+        if (!["1", "15", "last"].includes(cycleDay)) return json({ error: "دورة الحساب غير صالحة" }, 400);
+        const amount = payType === "deferred" ? null : Number(contract.contract_amount ?? contract.amount);
+        const advancePaid = payType === "advance" ? Number(contract.advance_paid ?? contract.advancePaid ?? 0) : 0;
+        if (payType === "advance" && (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(advancePaid) || advancePaid < 0 || advancePaid > amount)) {
+          return json({ error: "قيمة العقد المقدم أو الدفعة المقدمة غير صحيحة" }, 400);
+        }
+        const row = {
+          contract_id: contractId,
+          customer_code: customerCode,
+          customer_id: String(contract.customer_id || contract.customerId || ""),
+          customer_name: String(contract.customer_name || contract.customerName || ""),
+          customer_phone: String(contract.customer_phone || contract.customerPhone || ""),
+          pay_type: payType,
+          contract_amount: amount,
+          advance_paid: advancePaid,
+          advance_month: String(contract.advance_month || contract.advanceMonth || ""),
+          cycle_day: cycleDay,
+          is_active: true,
+          updated_at: new Date().toISOString()
+        };
+        const headers = monthlyServiceHeaders(env, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" });
+        if (!headers) return json({ error: "SUPABASE_SERVICE_ROLE_KEY غير مضبوط في Worker" }, 500);
+        const response = await supabaseRequest("/rest/v1/" + MONTHLY_CONTRACTS_TABLE + "?on_conflict=contract_id", {
+          method: "POST", headers: headers, body: JSON.stringify(row)
+        });
+        const saved = await response.json().catch(function () { return null; });
+        if (!response.ok) return json({ error: saved && (saved.message || saved.details || saved.hint || saved.error) || "تعذر حفظ العقد في Supabase. تحقق من وجود عقد نشط آخر للعميل." }, response.status === 409 ? 409 : 502);
+        await broadcastOrdersChanged(env, "monthly-contract-upsert");
+        return json({ success: true, contract: Array.isArray(saved) ? saved[0] : saved });
+      }
+
+      if (path === "/api/master/monthly-contracts/link" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(function () { return {}; });
+        const contractId = String(body.contract_id || "").trim();
+        const invoiceKey = String(body.invoice_key || "").trim();
+        const match = invoiceKey.match(/^master\|([^|]{1,80})\|([A-Za-z0-9_-]{1,70})\|(\d{4}-\d{2}-\d{2})$/);
+        if (!contractId || !match) return json({ error: "بيانات ربط الفاتورة غير صحيحة" }, 400);
+        const invoiceNumber = match[1].toUpperCase();
+        const customerCode = match[2];
+        const invoiceDate = match[3];
+        const contractResult = await monthlyTableRead(MONTHLY_CONTRACTS_TABLE,
+          "?contract_id=eq." + encodeURIComponent(contractId) + "&is_active=eq.true&pay_type=eq.deferred&select=contract_id,customer_code,customer_id&limit=1", env);
+        if (!contractResult.ok) return json({ error: contractResult.error }, 503);
+        const contract = contractResult.rows[0];
+        if (!contract) return json({ error: "العقد غير موجود أو غير نشط أو ليس عقدًا آجلًا" }, 404);
+        if (String(contract.customer_code || "") !== customerCode) return json({ error: "كود الفاتورة لا يطابق كود العميل في العقد" }, 409);
+        const query = "?order_number=eq." + encodeURIComponent(invoiceNumber) + "&select=*";
+        const [activeRows, archivedRows] = await Promise.all([
+          monthlyTableRead("orders", query, env),
+          monthlyTableRead("master_orders_archive", query, env)
+        ]);
+        if (!activeRows.ok || !archivedRows.ok) return json({ error: "تعذر التحقق من الفاتورة في الماستر النشط والأرشيف", details: [activeRows.error, archivedRows.error].filter(Boolean) }, 502);
+        const copies = activeRows.rows.concat(archivedRows.rows).filter(function (row) { return monthlyInvoiceKey(row) === invoiceKey; });
+        if (!copies.length) return json({ error: "الفاتورة غير موجودة بنفس رقمها وتاريخها وكود عميلها في الماستر؛ لم يتم الربط" }, 404);
+        if (copies.some(function (row) { return String(row.customer_code || "") !== customerCode; })) return json({ error: "تعارض في هوية العميل للفاتورة" }, 409);
+        if (contract.customer_id && copies.some(function (row) { return row.customer_id && String(row.customer_id) !== String(contract.customer_id); })) return json({ error: "معرف العميل في الفاتورة لا يطابق العقد" }, 409);
+        const total = Number(copies[0].total);
+        const paymentRaw = String(copies[0].payment_method || "");
+        const payment = normalizePayment(paymentRaw) || paymentRaw;
+        if (!Number.isFinite(total) || copies.some(function (row) {
+          const rowRaw = String(row.payment_method || "");
+          return Math.abs(Number(row.total) - total) > 0.009 || (normalizePayment(rowRaw) || rowRaw) !== payment;
+        })) {
+          return json({ error: "توجد نسخ مختلفة القيمة أو طريقة الدفع لهذه الفاتورة؛ لم يتم الربط" }, 409);
+        }
+        const bankReceived = copies.some(function (row) { return row.bank_transfer_received === true || row.bank_transfer_received === 1 || String(row.bank_transfer_received).toLowerCase() === "true"; });
+        const masterIds = copies.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
+        const linkBody = {
+          invoice_key: invoiceKey,
+          contract_id: contractId,
+          customer_code: customerCode,
+          customer_id: String(copies[0].customer_id || copies[0].client_id || contract.customer_id || ""),
+          invoice_number: invoiceNumber,
+          invoice_date: invoiceDate,
+          invoice_total: total,
+          payment_method: payment,
+          bank_transfer_received: bankReceived,
+          is_paid: payment === "cash" || bankReceived,
+          master_order_ids: masterIds
+        };
+        const headers = monthlyServiceHeaders(env, { "Content-Type": "application/json", Prefer: "return=representation" });
+        if (!headers) return json({ error: "SUPABASE_SERVICE_ROLE_KEY غير مضبوط في Worker" }, 500);
+        const response = await supabaseRequest("/rest/v1/" + MONTHLY_CONTRACT_LINKS_TABLE, { method: "POST", headers: headers, body: JSON.stringify(linkBody) });
+        const saved = await response.json().catch(function () { return null; });
+        if (!response.ok) {
+          if (response.status === 409 || saved && String(saved.code || "") === "23505") {
+            const existing = await monthlyTableRead(MONTHLY_CONTRACT_LINKS_TABLE,
+              "?invoice_key=eq." + encodeURIComponent(invoiceKey) + "&select=invoice_key,contract_id&limit=1", env);
+            if (existing.ok && existing.rows[0] && String(existing.rows[0].contract_id) === contractId) return json({ success: true, already_linked: true, invoice_key: invoiceKey });
+            return json({ error: "هذه الفاتورة مرتبطة بعقد آخر بالفعل؛ لم يتم تغيير أي رابط" }, 409);
+          }
+          return json({ error: saved && (saved.message || saved.details || saved.hint || saved.error) || "تعذر حفظ رابط الفاتورة في Supabase" }, 502);
+        }
+        await broadcastOrdersChanged(env, "monthly-contract-invoice-linked");
+        return json({ success: true, linked: true, invoice_key: invoiceKey, original_invoice_unchanged: true });
+      }
+
+      if (path === "/api/master/monthly-contracts/deactivate" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(function () { return {}; });
+        const contractId = String(body.contract_id || "").trim();
+        if (!contractId) return json({ error: "معرف العقد غير صالح" }, 400);
+        const headers = monthlyServiceHeaders(env, { "Content-Type": "application/json", Prefer: "return=representation" });
+        if (!headers) return json({ error: "SUPABASE_SERVICE_ROLE_KEY غير مضبوط في Worker" }, 500);
+        const response = await supabaseRequest("/rest/v1/" + MONTHLY_CONTRACTS_TABLE + "?contract_id=eq." + encodeURIComponent(contractId), {
+          method: "PATCH", headers: headers, body: JSON.stringify({ is_active: false, updated_at: new Date().toISOString() })
+        });
+        const result = await response.json().catch(function () { return null; });
+        if (!response.ok) return json({ error: result && (result.message || result.hint || result.error) || "تعذر إيقاف العقد" }, 502);
+        await broadcastOrdersChanged(env, "monthly-contract-deactivate");
+        return json({ success: true, deactivated: true, links_preserved: true });
+      }
+
       if (
         path === "/api/orders" &&
         request.method === "GET"
@@ -982,6 +1337,22 @@ export default {
           if (canCall) return cleaned;
           return Object.assign({}, cleaned, { phone: "" });
         });
+        if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
+          const monthlyLinks = await monthlyLinkMapForOrders(safeOrders, env);
+          if (monthlyLinks.ok) {
+            safeOrders.forEach(function (row) {
+              const key = monthlyInvoiceKey(row);
+              const contractId = monthlyLinks.map.get(key);
+              if (contractId) {
+                row.monthly_contract_deferred = true;
+                row.monthly_contract_id = contractId;
+              }
+            });
+          } else {
+            // لا نوقف عرض الطلبات إذا لم تُطبّق ترحيلة العقود بعد؛ لا نضع شارة غير مثبتة.
+            console.warn("Monthly contract relation unavailable:", monthlyLinks.error);
+          }
+        }
         if (safeOrders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
           const ids = safeOrders.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
           if (ids.length) {
@@ -1137,6 +1508,21 @@ export default {
           return Object.assign({}, row, { _master_source: "master_orders_archive" });
         });
         const combinedOrders = activeRows.concat(archivedRows);
+        if (serviceKey && combinedOrders.length) {
+          const monthlyLinks = await monthlyLinkMapForOrders(combinedOrders, env);
+          if (monthlyLinks.ok) {
+            combinedOrders.forEach(function (row) {
+              const key = monthlyInvoiceKey(row);
+              const contractId = monthlyLinks.map.get(key);
+              if (contractId) {
+                row.monthly_contract_deferred = true;
+                row.monthly_contract_id = contractId;
+              }
+            });
+          } else {
+            console.warn("Monthly contract relation unavailable in master orders:", monthlyLinks.error);
+          }
+        }
 
         return json({
           orders: combinedOrders,
@@ -1267,7 +1653,7 @@ export default {
         const sourceResponse = await supabaseRequest(
           "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) +
           "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) +
-          "&select=id,order_number,customer_name,sheet_name,paid_in_advance,delivery_status,delivery_date,payment_method&limit=1",
+          "&select=id,order_number,customer_code,customer_name,sheet_name,paid_in_advance,delivery_status,delivery_date,payment_method&limit=1",
           { headers: paymentHeaders }
         );
         const sourceRows = await sourceResponse.json().catch(function () { return null; });
@@ -1280,7 +1666,9 @@ export default {
 
         const sourceOrder = sourceRows[0];
         const sourcePaymentMarker = String(sourceOrder.payment_method || "").trim().toLowerCase();
-        if (sourcePaymentMarker === "monthly_contract_deferred" || sourcePaymentMarker === "تعاقد شهري آجل") {
+        const activeMonthlyLink = await invoiceHasActiveMonthlyContractLink(sourceOrder, env);
+        if (!activeMonthlyLink.ok) return json({ error: "تعذر التحقق من ارتباط العقد الشهري؛ لم يتم تغيير طريقة الدفع", detail: activeMonthlyLink.error }, 503);
+        if (activeMonthlyLink.linked || sourcePaymentMarker === "monthly_contract_deferred" || sourcePaymentMarker === "تعاقد شهري آجل") {
           return json({ error: "هذه الفاتورة مرتبطة بتعاقد شهري آجل؛ لا يمكن اختيار الكاش أو التحويل من كارت المندوب." }, 403);
         }
         if (isFutureDeliveryDate(sourceOrder.delivery_date)) {
@@ -2272,6 +2660,14 @@ export default {
           return json({ error: "مفتاح SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار Worker؛ لم تتم مزامنة أي فاتورة." }, 500);
         }
 
+        // حقلا monthly_contract_* بيانات توجيه للـWorker فقط، وليسا عمودين في orders.
+        // نحذفهما قبل استدعاء RPC حتى لا نطلب أي تغيير في مخطط جدول الفواتير.
+        const rpcOrders = orders.map(function (order) {
+          const copy = Object.assign({}, order);
+          delete copy.monthly_contract_deferred;
+          delete copy.monthly_contract_id;
+          return copy;
+        });
         const rpcResponse =
           await supabaseRequest(
             "/rest/v1/rpc/sync_orders_from_excel",
@@ -2282,7 +2678,7 @@ export default {
                 Authorization: "Bearer " + syncServiceKey,
                 "Content-Type": "application/json"
               },
-              body: JSON.stringify({ p_orders: orders })
+              body: JSON.stringify({ p_orders: rpcOrders })
             }
           );
 
@@ -2305,6 +2701,17 @@ export default {
             },
             500
           );
+        }
+
+        const monthlyAttach = await attachMonthlyContractInvoices(orders, env);
+        if (!monthlyAttach.ok) {
+          // حفظ الفاتورة قد تم في RPC، لكن لا نعلن اكتمال المزامنة حتى يثبت رابط العقد.
+          // إعادة المحاولة آمنة لأن invoice_key فريد والربط idempotent.
+          return json({
+            error: "تم حفظ الفاتورة، لكن تعذر تثبيت ارتباطها بالعقد الشهري. أعد المزامنة بعد معالجة السبب.",
+            monthly_contract_error: monthlyAttach.error,
+            success: false
+          }, 502);
         }
 
         let skippedOldRevision = null;
@@ -2359,7 +2766,9 @@ export default {
           data: rpcData,
           gate_photos_cleared: 0,
           gate_photo_files_deleted: {},
-          gate_photo_file_deletion_skipped: clearInvoices.length > 0 || photosDeletionSkipped || !syncSucceeded,
+          gate_photo_file_deletion_skipped: photosDeletionSkipped || !syncSucceeded,
+          monthly_contract_links_created: monthlyAttach.linked,
+          monthly_contract_links_already_present: monthlyAttach.already,
           skipped_old_revision: skippedCount
         });
       }
