@@ -139,6 +139,11 @@
       String(value ?? '').trim() === '1';
   };
 
+  const isMonthlyContractDeferred = (order) => {
+    const value = String(order?.payment_method ?? order?.paymentMethod ?? '').trim().toLowerCase();
+    return value === 'monthly_contract_deferred' || value === 'تعاقد شهري آجل';
+  };
+
   const paymentLabel = (value) => {
     const payment = normalizePayment(value);
 
@@ -1449,6 +1454,17 @@
       );
 
       const prepaid = isPaidInAdvance(order);
+      const monthlyContractDeferred = isMonthlyContractDeferred(order);
+      const oldContractBadge = node.querySelector('.monthly-contract-deferred-badge');
+      if (oldContractBadge) oldContractBadge.remove();
+      if (monthlyContractDeferred) {
+        const badge = document.createElement('span');
+        badge.className = 'monthly-contract-deferred-badge';
+        badge.textContent = 'تعاقد شهري آجل';
+        badge.setAttribute('aria-label', 'فاتورة مرتبطة بعقد شهري آجل');
+        badge.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;background:linear-gradient(135deg,#fff3bf,#facc15)!important;color:#713f12!important;border:2px solid #eab308!important;border-radius:14px!important;padding:10px 16px!important;font-size:18px!important;line-height:1.35!important;font-weight:900!important;width:fit-content!important;max-width:100%!important;margin:4px 0 10px auto!important;box-shadow:0 4px 12px rgba(202,138,4,.16)!important;';
+        node.insertBefore(badge, node.firstChild);
+      }
       const oldPaidBadge = node.querySelector('.paid-advance-badge');
       if (oldPaidBadge) oldPaidBadge.remove();
       if (prepaid) {
@@ -2025,8 +2041,10 @@
       const paymentSection =
         node.querySelector('.payment-section');
 
-      if (paymentSection && paidInAdvance) {
+      if (paymentSection && (paidInAdvance || monthlyContractDeferred)) {
         paymentSection.style.display = 'none';
+      } else if (paymentSection) {
+        paymentSection.style.display = '';
       }
 
       const paymentCurrent =
@@ -2034,7 +2052,7 @@
           '.payment-current'
         );
 
-      if (paymentCurrent && !paidInAdvance) {
+      if (paymentCurrent && !paidInAdvance && !monthlyContractDeferred) {
         paymentCurrent.textContent =
           payment
             ? `طريقة الدفع الحالية: ${paymentLabel(payment)}`
@@ -2042,7 +2060,7 @@
       }
 
       /* إعادة الاختيار: الكمبيوتر حدد كاش/تحويل → السيرفر يمسح اختيار المندوب فيُطلب منه الاختيار من جديد */
-      if (paymentSection && !paidInAdvance && !delivered && !payment) {
+      if (paymentSection && !paidInAdvance && !monthlyContractDeferred && !delivered && !payment) {
         paymentSection.style.cssText += 'border:2px solid #d97706!important;background:#fffbeb!important;border-radius:12px;';
       }
 
