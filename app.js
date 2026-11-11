@@ -2042,17 +2042,21 @@
         contractBanner.className = 'monthly-contract-driver-banner';
         contractBanner.textContent = '📄 تعاقد شهري — لا يتم التحصيل عند التسليم';
         contractBanner.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;box-sizing:border-box;margin:5px 0 8px;padding:11px 12px;border:1px solid #f59e0b;border-radius:12px;background:linear-gradient(90deg,#ffedbd,#f59e0b);color:#75420b;font-size:14px;font-weight:900;text-align:center;';
-        if (paymentSection && paymentSection.parentNode) {
-          paymentSection.parentNode.insertBefore(contractBanner, paymentSection);
+        /* ضع شارة التعاقد أعلى الفاتورة كما كانت سابقًا: بعد رأس تفاصيل الفاتورة
+           وبعد تنبيه قفل تاريخ التوصيل إن وجد، وقبل بيانات العميل والمنتجات. */
+        const invoiceHead = node.querySelector('.invoice-fullscreen-head');
+        const futureLockBanner = node.querySelector('.future-delivery-lock-banner');
+        const topAnchor = futureLockBanner || invoiceHead;
+        if (topAnchor && topAnchor.parentNode) {
+          topAnchor.parentNode.insertBefore(contractBanner, topAnchor.nextSibling);
         } else {
-          const anchor = node.querySelector('.order-total') || node.querySelector('.order-details');
-          if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(contractBanner, anchor.nextSibling);
-          else node.appendChild(contractBanner);
+          node.insertBefore(contractBanner, node.firstChild);
         }
       }
 
       if (paymentSection && (paidInAdvance || monthlyContract)) {
-        paymentSection.style.display = 'none';
+        /* إخفاء قسم الدفع نفسه فقط؛ شارة التعاقد مستقلة وتظل ظاهرة أعلى الفاتورة. */
+        paymentSection.style.setProperty('display', 'none', 'important');
         paymentSection.setAttribute('aria-hidden', 'true');
       }
 
