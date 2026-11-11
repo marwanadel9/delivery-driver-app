@@ -530,66 +530,6 @@ async function clearGatePhotosForInvoice(invoiceNumber, env) {
   return paths.length;
 }
 
-// Monthly deferred contract lookup for driver invoices. Uses the dedicated link tables;
-// never assumes orders.customer_code exists and never changes stored payment_method.
-async function attachDriverMonthlyContractFlags(rows, env) {
-  const list = Array.isArray(rows) ? rows : [];
-  if (!list.length) return { ok: true, rows: list };
-  const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (!serviceKey) return { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY غير مضبوط', rows: list };
-  const headers = { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey };
-  const numbers = Array.from(new Set(list.map(r => String(r.order_number || r.invoice_number || '').trim()).filter(Boolean)));
-  if (!numbers.length) return { ok: true, rows: list };
-  const inFilter = 'in.(' + numbers.map(v => '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"').join(',') + ')';
-  const linkUrl = '/rest/v1/froog_monthly_contract_invoice_links?invoice_number=' + encodeURIComponent(inFilter) + '&select=invoice_number,invoice_date,contract_id,customer_code,customer_id';
-  const linkResponse = await supabaseRequest(linkUrl, { headers });
-  const links = await linkResponse.json().catch(() => null);
-  if (!linkResponse.ok || !Array.isArray(links)) return { ok: false, error: 'تعذر قراءة روابط التعاقد الشهري', rows: list };
-  if (!links.length) return { ok: true, rows: list };
-  const contractIds = Array.from(new Set(links.map(r => String(r.contract_id || '').trim()).filter(Boolean)));
-  const contractFilter = 'in.(' + contractIds.map(v => '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"').join(',') + ')';
-  const contractUrl = '/rest/v1/froog_monthly_contracts?contract_id=' + encodeURIComponent(contractFilter) + '&is_active=eq.true&pay_type=eq.deferred&select=contract_id,customer_code,customer_id,customer_name,customer_phone';
-  const contractResponse = await supabaseRequest(contractUrl, { headers });
-  const contracts = await contractResponse.json().catch(() => null);
-  if (!contractResponse.ok || !Array.isArray(contracts)) return { ok: false, error: 'تعذر قراءة بيانات العقود الشهرية', rows: list };
-  const contractMap = new Map(contracts.map(c => [String(c.contract_id), c]));
-  const norm = v => String(v || '').trim().toLowerCase().replace(/[\sـ]+/g, ' ').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي');
-  const digits = v => { let d = String(v || '').replace(/\D/g, ''); if (d.length === 10 && d[0] === '0') d = '971' + d.slice(1); return d; };
-  const dateOf = row => {
-    const direct = String(row.delivery_date || row.date || '').trim();
-    if (/^\d{4}-\d{2}-\d{2}/.test(direct)) return direct.slice(0, 10);
-    if (row.created_at) { const d = new Date(row.created_at); if (!Number.isNaN(d.getTime())) return dubaiDateKey(d); }
-    return '';
-  };
-  list.forEach(row => {
-    row.monthly_contract_deferred = false;
-    delete row.monthly_contract_id;
-    const number = String(row.order_number || row.invoice_number || '').trim().toUpperCase();
-    const date = dateOf(row);
-    if (!number || !date) return;
-    const candidates = links.filter(link => String(link.invoice_number || '').trim().toUpperCase() === number && String(link.invoice_date || '').slice(0,10) === date);
-    const matches = candidates.filter(link => {
-      const contract = contractMap.get(String(link.contract_id || ''));
-      if (!contract || String(link.customer_code || '') !== String(contract.customer_code || '')) return false;
-      const rowId = String(row.customer_id || row.customerId || '').trim();
-      const contractId = String(link.customer_id || contract.customer_id || '').trim();
-      if (rowId && contractId) return rowId === contractId;
-      const rowPhone = digits(row.phone || row.customer_phone || row.customerPhone);
-      const contractPhone = digits(contract.customer_phone);
-      if (rowPhone && contractPhone) return rowPhone === contractPhone;
-      const rowName = norm(row.customer_name || row.customerName || row.name);
-      const contractName = norm(contract.customer_name);
-      return !!rowName && !!contractName && rowName === contractName;
-    });
-    // Fail closed if identity is ambiguous; never mark another customer's invoice.
-    if (matches.length === 1) {
-      row.monthly_contract_deferred = true;
-      row.monthly_contract_id = String(matches[0].contract_id);
-    }
-  });
-  return { ok: true, rows: list };
-}
-
 export default {
   async fetch(request, env) {
     const missingSecret = checkSecrets(env);
@@ -1102,12 +1042,6 @@ export default {
             },
             500
           );
-        }
-
-        // أرفق علامة العقد الشهري من جداول الربط المستقلة قبل إخفاء الهاتف عن المندوب غير المصرح له.
-        if (Array.isArray(orders) && orders.length && env.SUPABASE_SERVICE_ROLE_KEY) {
-          const monthlyResult = await attachDriverMonthlyContractFlags(orders, env);
-          if (!monthlyResult.ok) console.warn('Monthly contract flags unavailable:', monthlyResult.error);
         }
 
         // إظهار أرقام الهاتف للمندوب المصرح له فقط؛ لا نغيّر البيانات المخزنة في قاعدة البيانات.
