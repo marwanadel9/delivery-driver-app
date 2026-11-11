@@ -139,19 +139,6 @@
       String(value ?? '').trim() === '1';
   };
 
-  const isMonthlyContractDeferred = (order) => {
-    const flag = order?.monthly_contract_deferred;
-    const flagged = flag === true || flag === 1 ||
-      String(flag ?? '').trim().toLowerCase() === 'true' ||
-      String(flag ?? '').trim() === '1';
-    if (flagged) return true;
-
-    const value = String(order?.payment_method ?? order?.paymentMethod ?? '').trim().toLowerCase();
-    return value === 'monthly_contract_deferred' ||
-      value === 'monthly contract deferred' ||
-      value === 'تعاقد شهري آجل';
-  };
-
   const paymentLabel = (value) => {
     const payment = normalizePayment(value);
 
@@ -1462,17 +1449,6 @@
       );
 
       const prepaid = isPaidInAdvance(order);
-      const monthlyContractDeferred = isMonthlyContractDeferred(order);
-      const oldContractBadge = node.querySelector('.monthly-contract-deferred-badge');
-      if (oldContractBadge) oldContractBadge.remove();
-      if (monthlyContractDeferred) {
-        const badge = document.createElement('span');
-        badge.className = 'monthly-contract-deferred-badge';
-        badge.textContent = 'تعاقد شهري';
-        badge.setAttribute('aria-label', 'فاتورة مرتبطة بعقد شهري آجل');
-        badge.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;background:linear-gradient(135deg,#fff3bf,#facc15)!important;color:#713f12!important;border:2px solid #eab308!important;border-radius:14px!important;padding:10px 16px!important;font-size:18px!important;line-height:1.35!important;font-weight:900!important;width:fit-content!important;max-width:100%!important;margin:4px 0 10px auto!important;box-shadow:0 4px 12px rgba(202,138,4,.16)!important;';
-        node.insertBefore(badge, node.firstChild);
-      }
       const oldPaidBadge = node.querySelector('.paid-advance-badge');
       if (oldPaidBadge) oldPaidBadge.remove();
       if (prepaid) {
@@ -2049,14 +2025,8 @@
       const paymentSection =
         node.querySelector('.payment-section');
 
-      node.classList.toggle('is-monthly-contract-deferred', monthlyContractDeferred);
-      if (paymentSection && (paidInAdvance || monthlyContractDeferred)) {
-        // ملف الواجهة يفرض display:flex!important؛ لذلك يجب أن يكون الإخفاء مهمًا أيضًا.
-        paymentSection.style.setProperty('display', 'none', 'important');
-        paymentSection.setAttribute('aria-hidden', 'true');
-      } else if (paymentSection) {
-        paymentSection.style.removeProperty('display');
-        paymentSection.removeAttribute('aria-hidden');
+      if (paymentSection && paidInAdvance) {
+        paymentSection.style.display = 'none';
       }
 
       const paymentCurrent =
@@ -2064,7 +2034,7 @@
           '.payment-current'
         );
 
-      if (paymentCurrent && !paidInAdvance && !monthlyContractDeferred) {
+      if (paymentCurrent && !paidInAdvance) {
         paymentCurrent.textContent =
           payment
             ? `طريقة الدفع الحالية: ${paymentLabel(payment)}`
@@ -2072,7 +2042,7 @@
       }
 
       /* إعادة الاختيار: الكمبيوتر حدد كاش/تحويل → السيرفر يمسح اختيار المندوب فيُطلب منه الاختيار من جديد */
-      if (paymentSection && !paidInAdvance && !monthlyContractDeferred && !delivered && !payment) {
+      if (paymentSection && !paidInAdvance && !delivered && !payment) {
         paymentSection.style.cssText += 'border:2px solid #d97706!important;background:#fffbeb!important;border-radius:12px;';
       }
 
@@ -2207,7 +2177,6 @@
     clickedButton,
     allButtons
   ) {
-    if (isMonthlyContractDeferred(order)) { toast('هذه الفاتورة على تعاقد شهري؛ لا يتم اختيار طريقة الدفع من كارت المندوب.', true); return; }
     if (isFutureDeliveryLocked(order)) { toast('🔒 طريقة الدفع تُفتح مع بداية يوم التوصيل بتوقيت دبي', true); return; }
     if (
       !method ||
@@ -4252,7 +4221,6 @@
     }
 
     body.innerHTML = `
-      ${isMonthlyContractDeferred(order) ? '<div class="monthly-contract-deferred-badge" role="status" style="display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff3bf,#facc15);color:#713f12;border:2px solid #eab308;border-radius:12px;padding:10px 16px;font-size:17px;font-weight:900;margin:0 0 12px auto;width:fit-content;max-width:100%;">📋 تعاقد شهري آجل</div>' : ''}
       <div class="master-detail-grid">
 
         <div class="master-detail">
@@ -4326,7 +4294,7 @@
           <strong style="color:#1d4ed8">${masterEscape(formatTotal(order.total))}</strong>
         </div>` : ''}
 
-        ${(isPaidInAdvance(order) || isMonthlyContractDeferred(order)) ? '' : `
+        ${isPaidInAdvance(order) ? '' : `
         <div class="master-detail">
           <small>طريقة الدفع</small>
           <strong>
@@ -4338,7 +4306,7 @@
         <div class="master-detail">
           <small>حالة الدفع</small>
           <strong>
-            ${masterEscape(isMonthlyContractDeferred(order) ? 'تعاقد شهري آجل' : (isPaidInAdvance(order) ? 'مدفوع' : '—'))}
+            ${masterEscape((isPaidInAdvance(order)) ? 'مدفوع' : '—')}
           </strong>
         </div>
 
