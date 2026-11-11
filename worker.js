@@ -2410,6 +2410,39 @@ export default {
         return json({ success: true, synced: balances.length, data: balanceData });
       }
 
+      /* قراءة أرقام المراجعة الحالية قبل مزامنة الكمبيوتر، حتى لا يرسل نسخة محلية أقدم من قاعدة البيانات. */
+      if (path === "/api/excel-sync-revisions" && request.method === "GET") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
+
+        const numbers = Array.from(new Set(
+          String(url.searchParams.get("numbers") || "").split(",")
+            .map(function (value) { return value.trim(); })
+            .filter(function (value) { return /^[a-zA-Z0-9_-]{1,80}$/.test(value); })
+        ));
+        if (!numbers.length) return json({ success: true, rows: [] });
+        if (numbers.length > 100) return json({ error: "الحد الأقصى 100 رقم فاتورة في الطلب الواحد" }, 400);
+
+        const query = new URLSearchParams();
+        query.set("select", "order_number,sheet_name,sync_revision");
+        query.set("order_number", "in.(" + numbers.join(",") + ")");
+        query.set("limit", "5000");
+        const response = await supabaseRequest("/rest/v1/orders?" + query.toString(), {
+          headers: { apikey: svc, Authorization: "Bearer " + svc }
+        });
+        const rows = await response.json().catch(function () { return null; });
+        if (!response.ok || !Array.isArray(rows)) {
+          return json({
+            error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة أرقام مراجعة الفواتير من قاعدة البيانات"
+          }, 502);
+        }
+        const revisionResponse = json({ success: true, rows: rows });
+        revisionResponse.headers.set("Cache-Control", "no-store, max-age=0");
+        return revisionResponse;
+      }
+
       if (
         path === "/api/excel-sync" &&
         request.method === "POST"
