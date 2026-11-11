@@ -4251,7 +4251,11 @@
         }`;
     }
 
+    const monthlyContractDeferred = isMonthlyContractDeferred(order);
     body.innerHTML = `
+      ${monthlyContractDeferred ? `
+        <div class="monthly-contract-deferred-badge" role="status" style="display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff3bf,#facc15);color:#713f12;border:2px solid #eab308;border-radius:12px;padding:11px 16px;font-size:18px;font-weight:900;margin:0 0 12px auto;width:fit-content;max-width:100%;box-shadow:0 4px 12px rgba(202,138,4,.16)">📋 تعاقد شهري آجل</div>
+      ` : ''}
       <div class="master-detail-grid">
 
         <div class="master-detail">
@@ -4325,7 +4329,7 @@
           <strong style="color:#1d4ed8">${masterEscape(formatTotal(order.total))}</strong>
         </div>` : ''}
 
-        ${isPaidInAdvance(order) ? '' : `
+        ${(isPaidInAdvance(order) || monthlyContractDeferred) ? '' : `
         <div class="master-detail">
           <small>طريقة الدفع</small>
           <strong>
@@ -4334,12 +4338,14 @@
         </div>
         `}
 
+        ${monthlyContractDeferred ? '' : `
         <div class="master-detail">
           <small>حالة الدفع</small>
           <strong>
             ${masterEscape((isPaidInAdvance(order)) ? 'مدفوع' : '—')}
           </strong>
         </div>
+        `}
 
         <div class="master-detail">
           <small>حالة التوصيل</small>
