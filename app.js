@@ -2017,7 +2017,7 @@
       const paidInAdvance =
         isPaidInAdvance(order);
 
-      /* التعاقد الشهري: لا يختار المندوب طريقة دفع ولا يظهر له قسم التحصيل. */
+      /* التعرف على فاتورة التعاقد الشهري مع إبقاء شارة التعاقد ظاهرة. */
       const monthlyContract = Boolean(
         order.monthly_contract_deferred === true ||
         order.monthly_contract_deferred === 1 ||
@@ -2025,7 +2025,7 @@
         order.is_monthly_contract === 1 ||
         String(order.monthly_contract_deferred ?? '').trim().toLowerCase() === 'true' ||
         String(order.is_monthly_contract ?? '').trim().toLowerCase() === 'true' ||
-        /تعاقد\s*شهري|monthly\s*contract/i.test(String(order.payment_method || ''))
+        /تعاقد\\s*شهري|monthly\\s*contract/i.test(String(order.payment_method || ''))
       );
 
       const payment =
@@ -2035,6 +2035,21 @@
 
       const paymentSection =
         node.querySelector('.payment-section');
+
+      /* الشارة مستقلة عن قسم الدفع ولا يتم حذفها عند إخفاء أزرار التحصيل. */
+      if (monthlyContract && !node.querySelector('.monthly-contract-driver-banner')) {
+        const contractBanner = document.createElement('div');
+        contractBanner.className = 'monthly-contract-driver-banner';
+        contractBanner.textContent = '📄 تعاقد شهري — لا يتم التحصيل عند التسليم';
+        contractBanner.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;box-sizing:border-box;margin:5px 0 8px;padding:11px 12px;border:1px solid #f59e0b;border-radius:12px;background:linear-gradient(90deg,#ffedbd,#f59e0b);color:#75420b;font-size:14px;font-weight:900;text-align:center;';
+        if (paymentSection && paymentSection.parentNode) {
+          paymentSection.parentNode.insertBefore(contractBanner, paymentSection);
+        } else {
+          const anchor = node.querySelector('.order-total') || node.querySelector('.order-details');
+          if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(contractBanner, anchor.nextSibling);
+          else node.appendChild(contractBanner);
+        }
+      }
 
       if (paymentSection && (paidInAdvance || monthlyContract)) {
         paymentSection.style.display = 'none';
@@ -2196,7 +2211,7 @@
       order.monthly_contract_deferred === 1 ||
       order.is_monthly_contract === true ||
       order.is_monthly_contract === 1 ||
-      /تعاقد\s*شهري|monthly\s*contract/i.test(String(order.payment_method || '')) ||
+      /تعاقد\\s*شهري|monthly\\s*contract/i.test(String(order.payment_method || '')) ||
       isDelivered(order.delivery_status)
     ) {
       return;
