@@ -2017,6 +2017,41 @@
       const paidInAdvance =
         isPaidInAdvance(order);
 
+      // التعاقد الشهري: لا يختار المندوب كاش أو تحويل، وتظهر شارة برتقالية أعلى الكارت.
+      const monthlyContractText = String(
+        order.payment_method ?? order.payment_type ?? order.pay_method ?? ''
+      ).trim().toLowerCase();
+      const monthlyContract =
+        order.monthly_contract_deferred === true ||
+        order.monthly_contract_deferred === 1 ||
+        String(order.monthly_contract_deferred ?? '').trim().toLowerCase() === 'true' ||
+        String(order.monthly_contract_deferred ?? '').trim() === '1' ||
+        order.is_monthly_contract === true ||
+        order.is_monthly_contract === 1 ||
+        Boolean(order.monthly_contract_code || order.monthlyContractCode) ||
+        monthlyContractText.includes('تعاقد شهري') ||
+        monthlyContractText.includes('monthly contract');
+
+      if (monthlyContract) {
+        node.classList.add('is-monthly-contract');
+        const monthlyBadge = document.createElement('div');
+        monthlyBadge.className = 'fa-monthly-contract-badge';
+        monthlyBadge.textContent = '📄 تعاقد شهري — لا يتم التحصيل عند التسليم';
+        monthlyBadge.setAttribute('role', 'status');
+        monthlyBadge.style.cssText = [
+          'display:flex','align-items:center','justify-content:center','gap:8px',
+          'width:100%','box-sizing:border-box','margin:0 0 12px','padding:12px 14px',
+          'border:2px solid #f59e0b','border-radius:13px',
+          'background:linear-gradient(135deg,#fff1c2 0%,#f59e0b 100%)',
+          'color:#713f12','font-size:15px','font-weight:1000',
+          'line-height:1.5','text-align:center',
+          'box-shadow:0 4px 12px rgba(217,119,6,.20)'
+        ].join(';');
+        const cardHead = node.querySelector('.order-card-head');
+        if (cardHead) node.insertBefore(monthlyBadge, cardHead);
+        else node.prepend(monthlyBadge);
+      }
+
       const payment =
         normalizePayment(
           order.payment_method
@@ -2025,7 +2060,7 @@
       const paymentSection =
         node.querySelector('.payment-section');
 
-      if (paymentSection && paidInAdvance) {
+      if (paymentSection && (paidInAdvance || monthlyContract)) {
         paymentSection.style.display = 'none';
       }
 
@@ -2070,7 +2105,7 @@
           );
 
           button.disabled =
-            futureLocked || delivered || paidInAdvance;
+            futureLocked || delivered || paidInAdvance || monthlyContract;
           if (futureLocked) button.title = 'طريقة الدفع تُفتح مع بداية يوم التوصيل بتوقيت دبي';
 
           button.addEventListener(
