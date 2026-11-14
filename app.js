@@ -1752,11 +1752,35 @@
         }
       }
 
+      const rawDriverNote = String(firstValue(order, ['note', 'notes', 'remarks']) || '');
+      const customerTypeMatch = rawDriverNote.match(/\u2063FA_CTYPE:(new|reg)\u2063/);
+      const customerTypeLabel = customerTypeMatch
+        ? (customerTypeMatch[1] === 'new' ? 'عميل جديد' : 'متابعة')
+        : '';
+      const visibleDriverNote = rawDriverNote.replace(/\u2063FA_CTYPE:(?:new|reg)\u2063/g, '').trim();
       setText(
         node,
         'note',
-        cleanOrderNote(firstValue(order, ['note', 'notes', 'remarks']))
+        cleanOrderNote(visibleDriverNote)
       );
+      const oldCustomerTypeBadge = node.querySelector('.fa-customer-type-badge');
+      if (oldCustomerTypeBadge) oldCustomerTypeBadge.remove();
+      if (customerTypeLabel) {
+        const customerTypeBadge = document.createElement('div');
+        customerTypeBadge.className = 'fa-customer-type-badge';
+        customerTypeBadge.style.cssText = 'display:inline-flex!important;align-items:center;justify-content:center;box-sizing:border-box;margin:2px 0 4px;padding:5px 11px;border-radius:9px;background:' +
+          (customerTypeLabel === 'عميل جديد' ? '#dcfce7' : '#e8f1fd') +
+          ';border:1.5px solid ' + (customerTypeLabel === 'عميل جديد' ? '#86d7af' : '#bfd8f5') +
+          ';color:' + (customerTypeLabel === 'عميل جديد' ? '#11613c' : '#174a91') +
+          ';font-size:13px;font-weight:900;line-height:1.4;white-space:nowrap;';
+        customerTypeBadge.textContent = customerTypeLabel;
+        const cardHead = node.querySelector('.order-card-head');
+        if (cardHead && cardHead.parentNode === node) {
+          cardHead.insertAdjacentElement('afterend', customerTypeBadge);
+        } else {
+          node.insertBefore(customerTypeBadge, node.firstChild);
+        }
+      }
 
       // Make the driver's note easy to read on a phone.
       const driverNoteElement = node.querySelector('[data-f="note"]');
