@@ -1774,11 +1774,16 @@
           ';color:' + (customerTypeLabel === 'عميل جديد' ? '#11613c' : '#174a91') +
           ';font-size:13px;font-weight:900;line-height:1.4;white-space:nowrap;';
         customerTypeBadge.textContent = customerTypeLabel;
-        const cardHead = node.querySelector('.order-card-head');
-        if (cardHead && cardHead.parentNode === node) {
-          cardHead.insertAdjacentElement('afterend', customerTypeBadge);
+        /* ضع التصنيف داخل مساحة بيانات المنطقة والعنوان، في الجهة اليسرى من الكارت */
+        const customerInfoGrid = node.querySelector('.customer-location-grid');
+        if (customerInfoGrid) {
+          customerInfoGrid.style.setProperty('position', 'relative', 'important');
+          customerTypeBadge.style.cssText += 'position:absolute!important;left:8px!important;top:6px!important;z-index:2!important;margin:0!important;max-width:42%!important;';
+          customerInfoGrid.insertBefore(customerTypeBadge, customerInfoGrid.firstChild);
         } else {
-          node.insertBefore(customerTypeBadge, node.firstChild);
+          const customerRow = node.querySelector('.customer-row');
+          if (customerRow) customerRow.insertAdjacentElement('afterend', customerTypeBadge);
+          else node.insertBefore(customerTypeBadge, node.firstChild);
         }
       }
 
