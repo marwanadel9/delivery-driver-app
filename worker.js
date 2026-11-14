@@ -2132,7 +2132,14 @@ export default {
           } catch (_) {
             return;
           }
-          if (decodedPath.startsWith("invoices/") && !decodedPath.includes("..")) {
+          // صور العملاء مشتركة بين فواتير العميل؛ لا يجوز حذفها عند حذف فاتورة.
+          // نحمي المسار الجديد customers/ وأسماء العملاء القديمة CUSTOMER-... داخل invoices/.
+          const legacyCustomerPhoto = /^invoices\/CUSTOMER-[A-Za-z0-9_-]+(?:-photo-\d+)?\.(?:jpg|png|webp)$/i.test(decodedPath);
+          if (
+            decodedPath.startsWith("invoices/") &&
+            !decodedPath.includes("..") &&
+            !legacyCustomerPhoto
+          ) {
             if (!prefixes.includes(decodedPath)) prefixes.push(decodedPath);
           }
         };
@@ -2243,6 +2250,26 @@ export default {
           return json({ error: "رقم الفاتورة غير صحيح" }, 400);
         }
 
+        // فصل صور العملاء عن صور الفواتير لمنع استبدال صورة عميل بصورة عميل آخر.
+        const photoScope = String(form.get("photo_scope") || "invoice").trim().toLowerCase();
+        const customerCode = String(form.get("customer_code") || "").trim();
+        const sheetName = String(form.get("sheet_name") || "").trim();
+        const deliveryDate = String(form.get("delivery_date") || "").trim().slice(0, 10);
+
+        if (photoScope !== "invoice" && photoScope !== "customer") {
+          return json({ error: "نوع الصورة غير صحيح" }, 400);
+        }
+        if (photoScope === "customer") {
+          if (!/^[A-Za-z0-9_-]{1,40}$/.test(customerCode)) {
+            return json({ error: "كود العميل غير صحيح لرفع صورته" }, 400);
+          }
+          if (invoiceNumber !== "CUSTOMER-" + customerCode) {
+            return json({ error: "رقم مرجع صورة العميل لا يطابق كود العميل" }, 400);
+          }
+        } else if (customerCode && !/^[A-Za-z0-9_-]{1,40}$/.test(customerCode)) {
+          return json({ error: "كود العميل غير صحيح" }, 400);
+        }
+
         // يدعم الملف القديم (file) وكذلك عدة ملفات تحت file أو files أو photo.
         const submittedFiles = [];
         for (const fieldName of ["file", "files", "photo", "photos"]) {
@@ -2287,16 +2314,55 @@ export default {
           }
 
           let objectName;
-          if (files.length > 1) {
-            objectName = invoiceNumber + "-photo-" + (i + 1) + "." + allowedTypes[mimeType];
-          } else if (requestedIndex && /^\d{1,3}$/.test(requestedIndex)) {
-            objectName = invoiceNumber + "-photo-" + requestedIndex + "." + allowedTypes[mimeType];
+          let objectPath;
+
+          if (photoScope === "customer") {
+            // صورة العميل لها مجلد ومفتاح مستقلان عن أرقام الفواتير.
+            objectName = "CUSTOMER-" + customerCode + "." + allowedTypes[mimeType];
+            objectPath = "customers/" + objectName;
           } else {
-            // الحفاظ على مسار الصور القديمة عند استخدام واجهة الرفع القديمة.
-            objectName = invoiceNumber + "." + allowedTypes[mimeType];
+            const hasCompleteInvoiceIdentity =
+              Boolean(customerCode) &&
+              Boolean(sheetName) &&
+              /^\d{4}-\d{2}-\d{2}$/.test(deliveryDate);
+
+            if (hasCompleteInvoiceIdentity) {
+              // بصمة ثابتة تشمل رقم الفاتورة والعميل والمندوب وتاريخ التوصيل.
+              const identityText = [
+                "invoice",
+                invoiceNumber,
+                customerCode,
+                sheetName,
+                deliveryDate
+              ].join("|");
+              const digest = await crypto.subtle.digest(
+                "SHA-256",
+                new TextEncoder().encode(identityText)
+              );
+              const identityHash = Array.from(new Uint8Array(digest))
+                .map(function (byte) { return byte.toString(16).padStart(2, "0"); })
+                .join("")
+                .slice(0, 24);
+
+              const suffix = files.length > 1
+                ? "-photo-" + (i + 1)
+                : (requestedIndex && /^\d{1,3}$/.test(requestedIndex)
+                    ? "-photo-" + requestedIndex
+                    : "");
+              objectName = "INV-" + invoiceNumber + "-" + identityHash + suffix + "." + allowedTypes[mimeType];
+            } else {
+              // توافق خلفي مع الواجهات القديمة التي لا ترسل بيانات هوية الفاتورة كاملة.
+              if (files.length > 1) {
+                objectName = invoiceNumber + "-photo-" + (i + 1) + "." + allowedTypes[mimeType];
+              } else if (requestedIndex && /^\d{1,3}$/.test(requestedIndex)) {
+                objectName = invoiceNumber + "-photo-" + requestedIndex + "." + allowedTypes[mimeType];
+              } else {
+                objectName = invoiceNumber + "." + allowedTypes[mimeType];
+              }
+            }
+            objectPath = "invoices/" + objectName;
           }
 
-          const objectPath = "invoices/" + objectName;
           const storagePath = "/storage/v1/object/" + encodeURIComponent(bucketName) + "/" + objectPath.split("/").map(encodeURIComponent).join("/");
           const uploadResponse = await supabaseRequest(storagePath, {
             method: "POST",
