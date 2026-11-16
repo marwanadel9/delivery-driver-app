@@ -550,6 +550,45 @@ export default {
         return json({ success: true, users: syncedUsers, deleted_names: syncedDeletedNames });
       }
 
+      /* نقل أولي آمن لبيانات برنامج سطح المكتب بين الكمبيوتر الرئيسي واللابتوب. */
+      if (path === "/api/desktop-state" && (request.method === "GET" || request.method === "POST")) {
+        const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح التخزين المركزي غير مضبوط في أسرار Worker" }, 500);
+        const headers = { apikey: serviceKey, "Content-Type": "application/json" };
+        if (!serviceKey.startsWith("sb_secret_")) headers.Authorization = "Bearer " + serviceKey;
+        if (request.method === "GET") {
+          const response = await supabaseRequest("/rest/v1/faruj_desktop_shared_state?id=eq.1&select=payload,updated_at,source_device", { headers });
+          const rows = await response.json().catch(function () { return null; });
+          if (!response.ok || !Array.isArray(rows)) return json({ error: "تعذرت قراءة النسخة المشتركة", detail: rows, supabase_status: response.status }, 502);
+          if (!rows.length) return json({ success: true, payload: null, updated_at: null, source_device: null });
+          return json({ success: true, payload: rows[0].payload, updated_at: rows[0].updated_at, source_device: rows[0].source_device });
+        }
+        const declaredLength = Number(request.headers.get("Content-Length") || 0);
+        if (declaredLength > 20 * 1024 * 1024) return json({ error: "حجم النسخة أكبر من الحد المسموح (20 ميجابايت)" }, 413);
+        const body = await request.json().catch(function () { return null; });
+        if (!body || !body.payload || typeof body.payload !== "object" || Array.isArray(body.payload)) return json({ error: "محتوى النسخة غير صالح" }, 400);
+        const keys = Object.keys(body.payload);
+        if (!keys.length || keys.length > 100) return json({ error: "عدد مفاتيح النسخة غير صالح" }, 400);
+        for (const key of keys) {
+          if (!/^fa_[a-zA-Z0-9_]+$/.test(key) || ["fa_set","fa_users","fa_users_deleted","fa_users_pending_delete","fa_users_restore","fa_theme","fa_owner_pass_2010_migrated"].includes(key)) {
+            return json({ error: "النسخة تحتوي على مفتاح محظور: " + key }, 400);
+          }
+        }
+        const payloadText = JSON.stringify(body.payload);
+        if (payloadText.length > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
+        const response = await supabaseRequest("/rest/v1/faruj_desktop_shared_state?on_conflict=id", {
+          method: "POST",
+          headers: Object.assign({}, headers, { Prefer: "resolution=ignore-duplicates,return=representation" }),
+          body: JSON.stringify({ id: 1, payload: body.payload, source_device: String(body.source_device || "desktop-primary").slice(0, 80), updated_at: new Date().toISOString() })
+        });
+        const rows = await response.json().catch(function () { return null; });
+        if (!response.ok) return json({ error: "تعذر حفظ النسخة المشتركة", detail: rows, supabase_status: response.status }, 502);
+        if (!Array.isArray(rows) || !rows.length) return json({ error: "توجد نسخة مشتركة بالفعل؛ لم نستبدلها حمايةً لبياناتك. استخدم تحميل البيانات على الجهاز الآخر." }, 409);
+        return json({ success: true, saved_keys: keys.length, updated_at: rows[0].updated_at || new Date().toISOString(), message: "تم حفظ النسخة الأولية دون استبدال نسخة سابقة" });
+      }
+
       if (
         path === "/api/login" &&
         request.method === "POST"
