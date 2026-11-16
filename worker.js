@@ -538,7 +538,9 @@ export default {
         if (!response.ok) {
           return json({ error: "تعذر دمج المستخدمين في التخزين المركزي", detail: result }, 502);
         }
-        return json({ success: true, users: Array.isArray(result) ? result : body.users });
+        const syncedUsers = result && Array.isArray(result.users) ? result.users : body.users;
+        const syncedDeletedNames = result && Array.isArray(result.deleted_names) ? result.deleted_names : deletedNames;
+        return json({ success: true, users: syncedUsers, deleted_names: syncedDeletedNames });
       }
 
       if (
