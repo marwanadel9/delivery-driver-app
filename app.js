@@ -3411,6 +3411,55 @@
     body.innerHTML = rows.map((row, index) => `<tr><td>${(index + 1).toLocaleString('ar-EG-u-nu-latn')}</td><td><strong>${masterEscape(row.customer_code || '—')}</strong></td><td>${masterEscape(row.customer_name || '—')}</td><td dir="ltr">${masterEscape(row.phone || '—')}</td><td>${masterEscape(row.emirate || '—')}</td><td>${masterEscape(row.area || '—')}</td><td>${masterMoney(row.amount_added || 0)} درهم</td><td>${masterMoney(row.amount_paid || 0)} درهم</td><td style="font-weight:900;color:${Number(row.current_balance) > 0 ? '#c62828' : '#168052'}">${masterMoney(row.current_balance || 0)} درهم</td><td>${masterEscape(row.notes || '—')}</td></tr>`).join('');
   }
 
+  // تحميل فواتير الماستر على دفعات صغيرة حتى لا يتجاوز Cloudflare Worker حد CPU.
+  // نحافظ على نفس شكل البيانات النهائي الذي تعتمد عليه بقية وظائف الواجهة.
+  async function fetchAllMasterOrders() {
+    const allOrders = [];
+    let activeAfter = 0;
+    let archiveAfter = 0;
+    let hasMoreActive = true;
+    let hasMoreArchive = true;
+    let pages = 0;
+
+    while (hasMoreActive || hasMoreArchive) {
+      if (++pages > 2000) {
+        throw new Error('تم إيقاف تحميل الفواتير لحماية البرنامج: عدد الدفعات تجاوز الحد الآمن.');
+      }
+      const query = new URLSearchParams({
+        active_after: String(activeAfter),
+        archive_after: String(archiveAfter)
+      });
+      const data = await masterFetch('/api/master/orders?' + query.toString());
+      if (!data || !Array.isArray(data.orders)) {
+        throw new Error('استجابة تحميل فواتير الماستر غير مكتملة.');
+      }
+      allOrders.push(...data.orders);
+
+      const nextActive = Number(data.next_active_after);
+      const nextArchive = Number(data.next_archive_after);
+      if (!Number.isSafeInteger(nextActive) || !Number.isSafeInteger(nextArchive) ||
+          nextActive < activeAfter || nextArchive < archiveAfter) {
+        throw new Error('مؤشر متابعة تحميل الفواتير غير صالح.');
+      }
+      if (data.has_more_active && nextActive === activeAfter) {
+        throw new Error('توقف تحميل الطلبات النشطة عند نفس المؤشر؛ أعد المحاولة.');
+      }
+      if (data.has_more_archive && nextArchive === archiveAfter) {
+        throw new Error('توقف تحميل الأرشيف عند نفس المؤشر؛ أعد المحاولة.');
+      }
+      activeAfter = nextActive;
+      archiveAfter = nextArchive;
+      hasMoreActive = data.has_more_active === true;
+      hasMoreArchive = data.has_more_archive === true;
+    }
+
+    return {
+      orders: allOrders,
+      active_count: allOrders.filter(row => row?._master_source === 'orders').length,
+      archived_count: allOrders.filter(row => row?._master_source === 'master_orders_archive').length
+    };
+  }
+
   async function loadMasterOrders(options = {}) {
     const quiet = options?.quiet === true;
     const body = $('master-orders-body');
@@ -3420,13 +3469,8 @@
     }
 
     try {
-      const data = await masterFetch('/api/master/orders');
-
-      state.masterOrders = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.orders)
-          ? data.orders
-          : [];
+      const data = await fetchAllMasterOrders();
+      state.masterOrders = data.orders;
 
       renderMasterOrders();
     } catch (error) {
@@ -4922,7 +4966,7 @@
          أو حذف SQL)، المودال لسه ماسك IDs قديمة والتحديث بيفشل على «0 من 1» —
          نسحب الأرشيف حي من السيرفر ونرجع نطابق الفاتورة بأحدث نسخة بالرقم والشيت */
       try {
-        const freshResp = await masterFetch('/api/master/orders');
+        const freshResp = await fetchAllMasterOrders();
         if (freshResp && Array.isArray(freshResp.orders)) state.masterOrders = freshResp.orders;
         const freshList = Array.isArray(state.masterOrders) ? state.masterOrders : [];
         const freshById = freshList.find((item) => String(item?.id ?? '') === String(order?.id ?? ''));
