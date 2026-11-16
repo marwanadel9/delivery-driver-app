@@ -501,7 +501,7 @@ export default {
         };
         if (request.method === "GET") {
           const response = await supabaseRequest(
-            "/rest/v1/faruj_desktop_shared_users?id=eq.1&select=users,updated_at",
+            "/rest/v1/faruj_desktop_shared_users?id=eq.1&select=users,deleted_names,updated_at",
             { headers: serviceHeaders }
           );
           const rows = await response.json().catch(function () { return null; });
@@ -510,6 +510,7 @@ export default {
           }
           return json({
             users: rows.length && Array.isArray(rows[0].users) ? rows[0].users : [],
+            deleted_names: rows.length && Array.isArray(rows[0].deleted_names) ? rows[0].deleted_names : [],
             updated_at: rows.length ? rows[0].updated_at : null
           });
         }
@@ -517,15 +518,21 @@ export default {
         if (!body || !Array.isArray(body.users) || body.users.length > 200) {
           return json({ error: "قائمة المستخدمين غير صالحة" }, 400);
         }
+        const deletedNames = Array.isArray(body.deleted_names)
+          ? body.deleted_names.filter(function (name) { return typeof name === "string" && name.trim(); }).slice(0, 200)
+          : [];
+        const restoreNames = Array.isArray(body.restore_names)
+          ? body.restore_names.filter(function (name) { return typeof name === "string" && name.trim(); }).slice(0, 200)
+          : [];
         const valid = body.users.every(function (u) {
           return u && typeof u.name === "string" && u.name.trim() &&
             typeof u.pass === "string" && typeof u.role === "string";
         });
         if (!valid) return json({ error: "يوجد مستخدم ببيانات غير مكتملة" }, 400);
-        const response = await supabaseRequest("/rest/v1/rpc/faruj_merge_desktop_users", {
+        const response = await supabaseRequest("/rest/v1/rpc/faruj_sync_desktop_users", {
           method: "POST",
           headers: serviceHeaders,
-          body: JSON.stringify({ p_users: body.users })
+          body: JSON.stringify({ p_users: body.users, p_deleted_names: deletedNames, p_restore_names: restoreNames })
         });
         const result = await response.json().catch(function () { return null; });
         if (!response.ok) {
