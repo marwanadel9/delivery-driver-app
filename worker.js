@@ -2296,6 +2296,61 @@ export default {
         return json({ success: true, synced: balances.length, data: balanceData });
       }
 
+      // قراءة أرقام مراجعة الفواتير قبل المزامنة؛ قراءة فقط ولا تعدّل أي سجل.
+      if (path === "/api/excel-sync-revisions" && request.method === "GET") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (secret !== env.EXCEL_SYNC_SECRET) {
+          return json({ success: false, error: "غير مصرح" }, 401);
+        }
+
+        const rawNumbers = String(url.searchParams.get("numbers") || "");
+        const numbers = Array.from(new Set(rawNumbers.split(",")
+          .map(function (value) { return value.trim().toUpperCase(); })
+          .filter(function (value) { return /^[A-Z0-9_-]{1,80}$/.test(value); })));
+
+        if (!numbers.length) return json({ success: true, rows: [] });
+        if (numbers.length > 80) {
+          return json({ success: false, error: "الحد الأقصى 80 رقم فاتورة في الطلب" }, 400);
+        }
+
+        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) {
+          return json({ success: false, error: "مفتاح خدمة قاعدة البيانات غير مضبوط في Worker" }, 500);
+        }
+
+        const headers = { apikey: serviceKey, Authorization: "Bearer " + serviceKey };
+        const inFilter = "(" + numbers.join(",") + ")";
+        const tables = ["orders", "master_orders_archive"];
+        const revisions = new Map();
+
+        for (const table of tables) {
+          const response = await supabaseRequest(
+            "/rest/v1/" + table + "?select=order_number,sync_revision&order_number=in." + encodeURIComponent(inFilter),
+            { headers: headers }
+          );
+          const rows = await response.json().catch(function () { return null; });
+          if (!response.ok || !Array.isArray(rows)) {
+            return json({
+              success: false,
+              error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة أرقام المراجعة من " + table
+            }, 502);
+          }
+          rows.forEach(function (row) {
+            const key = String(row && row.order_number || "").trim().toUpperCase();
+            if (!key) return;
+            const revision = Math.max(0, Number(row.sync_revision) || 0);
+            revisions.set(key, Math.max(revisions.get(key) || 0, revision));
+          });
+        }
+
+        return json({
+          success: true,
+          rows: Array.from(revisions.entries()).map(function (entry) {
+            return { order_number: entry[0], sync_revision: entry[1] };
+          })
+        });
+      }
+
       if (
         path === "/api/excel-sync" &&
         request.method === "POST"
