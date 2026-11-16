@@ -486,6 +486,54 @@ export default {
         });
       }
 
+      /* مزامنة مستخدمي نسخة سطح المكتب بين الأجهزة — جدول مستقل عن orders والماستر */
+      if (path === "/api/desktop-users" && (request.method === "GET" || request.method === "POST")) {
+        const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) {
+          return json({ error: "غير مصرح" }, 401);
+        }
+        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح التخزين المركزي غير مضبوط" }, 500);
+        const serviceHeaders = {
+          apikey: serviceKey,
+          Authorization: "Bearer " + serviceKey,
+          "Content-Type": "application/json"
+        };
+        if (request.method === "GET") {
+          const response = await supabaseRequest(
+            "/rest/v1/faruj_desktop_shared_users?id=eq.1&select=users,updated_at",
+            { headers: serviceHeaders }
+          );
+          const rows = await response.json().catch(function () { return null; });
+          if (!response.ok || !Array.isArray(rows)) {
+            return json({ error: "تعذر قراءة المستخدمين من التخزين المركزي" }, 502);
+          }
+          return json({
+            users: rows.length && Array.isArray(rows[0].users) ? rows[0].users : [],
+            updated_at: rows.length ? rows[0].updated_at : null
+          });
+        }
+        const body = await request.json().catch(function () { return null; });
+        if (!body || !Array.isArray(body.users) || body.users.length > 200) {
+          return json({ error: "قائمة المستخدمين غير صالحة" }, 400);
+        }
+        const valid = body.users.every(function (u) {
+          return u && typeof u.name === "string" && u.name.trim() &&
+            typeof u.pass === "string" && typeof u.role === "string";
+        });
+        if (!valid) return json({ error: "يوجد مستخدم ببيانات غير مكتملة" }, 400);
+        const response = await supabaseRequest("/rest/v1/rpc/faruj_merge_desktop_users", {
+          method: "POST",
+          headers: serviceHeaders,
+          body: JSON.stringify({ p_users: body.users })
+        });
+        const result = await response.json().catch(function () { return null; });
+        if (!response.ok) {
+          return json({ error: "تعذر دمج المستخدمين في التخزين المركزي", detail: result }, 502);
+        }
+        return json({ success: true, users: Array.isArray(result) ? result : body.users });
+      }
+
       if (
         path === "/api/login" &&
         request.method === "POST"
