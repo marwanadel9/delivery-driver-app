@@ -1005,12 +1005,22 @@ export default {
         // إظهار أرقام الهاتف للمندوب المصرح له فقط؛ لا نغيّر البيانات المخزنة في قاعدة البيانات.
         const canCall = auth.user.email === DRIVER_EMAILS.zain2;
         const safeOrders = (Array.isArray(orders) ? orders : []).map(function (row) {
+          // علامة التعاقد الشهري كما في الملف الأصلي المرسل: لا نغيّر بيانات الفاتورة.
+          const paymentText = String(row.payment_method || "").trim().toLowerCase();
+          const monthlyContractDeferred =
+            paymentText === "تعاقد شهري" ||
+            paymentText === "monthly contract" ||
+            row.monthly_contract_deferred === true ||
+            row.monthly_contract_deferred === 1 ||
+            row.is_monthly_contract === true ||
+            row.is_monthly_contract === 1;
           const cleaned = Object.assign({}, row, {
             plate_names: stripEmojiText(row.plate_names),
             plate_qtys: stripEmojiText(row.plate_qtys),
             chicken_weights: stripEmojiText(row.chicken_weights),
             chicken_qtys: stripEmojiText(row.chicken_qtys),
-            customer_name: stripEmojiText(row.customer_name)
+            customer_name: stripEmojiText(row.customer_name),
+            monthly_contract_deferred: monthlyContractDeferred
           });
           if (canCall) return cleaned;
           return Object.assign({}, cleaned, { phone: "" });
