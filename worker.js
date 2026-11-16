@@ -492,13 +492,12 @@ export default {
         if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) {
           return json({ error: "غير مصرح" }, 401);
         }
-        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!serviceKey) return json({ error: "مفتاح التخزين المركزي غير مضبوط" }, 500);
-        const serviceHeaders = {
-          apikey: serviceKey,
-          Authorization: "Bearer " + serviceKey,
-          "Content-Type": "application/json"
-        };
+        // يقبل مفتاح Supabase الجديد sb_secret_ أو مفتاح service_role القديم.
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح التخزين المركزي غير مضبوط: أضف SUPABASE_SECRET_KEY أو SUPABASE_SERVICE_ROLE_KEY إلى أسرار Worker" }, 500);
+        const serviceHeaders = { apikey: serviceKey, "Content-Type": "application/json" };
+        // مفاتيح sb_secret_ ليست JWT ولا يصح وضعها في Authorization Bearer.
+        if (!serviceKey.startsWith("sb_secret_")) serviceHeaders.Authorization = "Bearer " + serviceKey;
         if (request.method === "GET") {
           const response = await supabaseRequest(
             "/rest/v1/faruj_desktop_shared_users?id=eq.1&select=users,deleted_names,updated_at",
@@ -506,7 +505,11 @@ export default {
           );
           const rows = await response.json().catch(function () { return null; });
           if (!response.ok || !Array.isArray(rows)) {
-            return json({ error: "تعذر قراءة المستخدمين من التخزين المركزي" }, 502);
+            return json({
+              error: "تعذر قراءة المستخدمين من التخزين المركزي",
+              detail: rows,
+              supabase_status: response.status
+            }, 502);
           }
           return json({
             users: rows.length && Array.isArray(rows[0].users) ? rows[0].users : [],
@@ -536,7 +539,11 @@ export default {
         });
         const result = await response.json().catch(function () { return null; });
         if (!response.ok) {
-          return json({ error: "تعذر دمج المستخدمين في التخزين المركزي", detail: result }, 502);
+          return json({
+            error: "تعذر دمج المستخدمين في التخزين المركزي",
+            detail: result,
+            supabase_status: response.status
+          }, 502);
         }
         const syncedUsers = result && Array.isArray(result.users) ? result.users : body.users;
         const syncedDeletedNames = result && Array.isArray(result.deleted_names) ? result.deleted_names : deletedNames;
