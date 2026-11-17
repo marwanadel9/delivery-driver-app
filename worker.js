@@ -622,12 +622,12 @@ export default {
         const keys = Object.keys(body.payload);
         if (!keys.length || keys.length > 100) return json({ error: "عدد مفاتيح النسخة غير صالح" }, 400);
         for (const key of keys) {
-          if (!/^fa_[a-zA-Z0-9_]+$/.test(key) || ["fa_set","fa_users","fa_users_deleted","fa_users_pending_delete","fa_users_restore","fa_theme","fa_owner_pass_2010_migrated"].includes(key)) {
+          if (!/^fa_[a-zA-Z0-9_-]+$/.test(key) || ["fa_set","fa_users","fa_users_deleted","fa_users_pending_delete","fa_users_restore","fa_theme","fa_owner_pass_2010_migrated"].includes(key)) {
             return json({ error: "النسخة تحتوي على مفتاح محظور: " + key }, 400);
           }
         }
         const payloadText = JSON.stringify(body.payload);
-        if (payloadText.length > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
+        if (new TextEncoder().encode(payloadText).byteLength > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
         const response = await supabaseRequest("/rest/v1/faruj_desktop_shared_state?on_conflict=id", {
           method: "POST",
           headers: Object.assign({}, headers, { Prefer: "resolution=ignore-duplicates,return=representation" }),
