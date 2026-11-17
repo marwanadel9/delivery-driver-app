@@ -639,6 +639,105 @@ export default {
         return json({ success: true, saved_keys: keys.length, updated_at: rows[0].updated_at || new Date().toISOString(), message: "تم حفظ النسخة الأولية دون استبدال نسخة سابقة" });
       }
 
+      /* مزامنة حالة سطح المكتب ثنائية الاتجاه مع تحكم بالتعارض عبر updated_at CAS. */
+      if (path === "/api/desktop-state/sync" && (request.method === "GET" || request.method === "POST")) {
+        const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح التخزين المركزي غير مضبوط في أسرار Worker" }, 500);
+        const headers = { apikey: serviceKey, "Content-Type": "application/json" };
+        if (!serviceKey.startsWith("sb_secret_")) headers.Authorization = "Bearer " + serviceKey;
+
+        if (request.method === "GET") {
+          const metadataOnly = url.searchParams.get("meta") === "1";
+          const select = metadataOnly ? "id,updated_at,source_device" : "id,payload,updated_at,source_device";
+          const response = await supabaseRequest(
+            "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=" + select,
+            { headers }
+          );
+          const rows = await response.json().catch(function () { return null; });
+          if (!response.ok || !Array.isArray(rows)) {
+            return json({ error: "تعذر قراءة حالة التخزين المشترك", detail: rows, supabase_status: response.status }, 502);
+          }
+          if (!rows.length) return json({ success: true, exists: false, payload: null, updated_at: null, source_device: null });
+          if (metadataOnly) {
+            return json({ success: true, exists: true, updated_at: rows[0].updated_at, source_device: rows[0].source_device });
+          }
+          return json({ success: true, exists: true, payload: rows[0].payload, updated_at: rows[0].updated_at, source_device: rows[0].source_device });
+        }
+
+        const body = await request.json().catch(function () { return null; });
+        if (!body || typeof body.expected_updated_at !== "string" || !body.expected_updated_at.trim()) {
+          return json({ error: "رقم مراجعة النسخة المشتركة غير موجود" }, 400);
+        }
+        if (!body.payload || typeof body.payload !== "object" || Array.isArray(body.payload)) {
+          return json({ error: "محتوى النسخة غير صالح" }, 400);
+        }
+        const keys = Object.keys(body.payload);
+        if (!keys.length || keys.length > 100) return json({ error: "عدد مفاتيح النسخة غير صالح" }, 400);
+        const forbidden = ["fa_set", "fa_users", "fa_users_deleted", "fa_users_pending_delete", "fa_users_restore", "fa_theme", "fa_owner_pass_2010_migrated"];
+        for (const key of keys) {
+          // تسمح الشرطة بتاريخ مفاتيح التنبيهات مثل fa_wa_2026-10-31.
+          if (!/^fa_[a-zA-Z0-9_-]+$/.test(key) || forbidden.includes(key)) {
+            return json({ error: "النسخة تحتوي على مفتاح محظور: " + key }, 400);
+          }
+        }
+
+        const payloadText = JSON.stringify(body.payload);
+        const payloadBytes = new TextEncoder().encode(payloadText).byteLength;
+        if (payloadBytes > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
+
+        // التحديث مشروط بتاريخ النسخة الذي قرأه الجهاز؛ جهاز واحد فقط ينجح في كل مراجعة.
+        const expectedMillis = Date.parse(body.expected_updated_at.trim());
+        if (!Number.isFinite(expectedMillis)) return json({ error: "رقم مراجعة النسخة المشتركة غير صالح" }, 400);
+        const expected = encodeURIComponent(body.expected_updated_at.trim());
+        // نضمن أن رقم المراجعة الجديد أكبر من السابق حتى لو وصلت عمليتا حفظ في نفس المللي ثانية.
+        const nextUpdatedAt = new Date(Math.max(Date.now(), expectedMillis + 1)).toISOString();
+        const patch = {
+          payload: body.payload,
+          source_device: String(body.source_device || "desktop-device").slice(0, 80),
+          updated_at: nextUpdatedAt
+        };
+        const response = await supabaseRequest(
+          "/rest/v1/faruj_desktop_shared_state?id=eq.1&updated_at=eq." + expected,
+          {
+            method: "PATCH",
+            headers: Object.assign({}, headers, { Prefer: "return=representation" }),
+            body: JSON.stringify(patch)
+          }
+        );
+        const rows = await response.json().catch(function () { return null; });
+        if (!response.ok || !Array.isArray(rows)) {
+          return json({ error: "تعذر حفظ تحديث التخزين المشترك", detail: rows, supabase_status: response.status }, 502);
+        }
+        if (!rows.length) {
+          const latestResponse = await supabaseRequest(
+            "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=id,updated_at,source_device",
+            { headers }
+          );
+          const latestRows = await latestResponse.json().catch(function () { return null; });
+          if (!latestResponse.ok || !Array.isArray(latestRows)) {
+            return json({ error: "تغيرت النسخة المشتركة، وتعذر قراءة رقم المراجعة الجديدة", supabase_status: latestResponse.status }, 502);
+          }
+          return json({
+            success: false,
+            conflict: true,
+            code: "STATE_REVISION_CONFLICT",
+            error: "تغيرت النسخة المشتركة على جهاز آخر؛ أعد قراءة التحديث ودمجه قبل الحفظ",
+            updated_at: latestRows.length ? latestRows[0].updated_at : null,
+            source_device: latestRows.length ? latestRows[0].source_device : null
+          }, 409);
+        }
+        return json({
+          success: true,
+          updated_at: rows[0].updated_at,
+          source_device: rows[0].source_device,
+          saved_keys: keys.length,
+          payload_bytes: payloadBytes
+        });
+      }
+
       if (
         path === "/api/login" &&
         request.method === "POST"
