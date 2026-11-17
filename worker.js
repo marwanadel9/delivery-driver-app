@@ -3338,13 +3338,13 @@ export default {
           return json({ error: "غير مصرح: مفتاح مزامنة Excel غير مطابق" }, 401);
         }
 
-        // دعم مفتاح Supabase الحديث sb_secret_ والقديم service_role.
-        const svc = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        // استخدم مفتاح الخدمة المستخدم بالفعل في بقية مسارات Worker، مع دعم المفتاح الحديث كبديل.
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
         if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
 
-        const body = await request.json().catch(function () { return {}; });
-        const orderNumber = String(body.order_number || "").trim();
-        const received = body.received !== false;
+        const body = await request.json().catch(function () { return null; });
+        const orderNumber = String(body && body.order_number || "").trim();
+        const received = !(body && body.received === false);
         if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber)) {
           return json({ error: "رقم الفاتورة غير صحيح" }, 400);
         }
@@ -3352,24 +3352,26 @@ export default {
         const H = {
           apikey: svc,
           "Content-Type": "application/json",
-          Prefer: "return=minimal"
+          Prefer: "return=representation"
         };
-        // sb_secret_ ليس JWT؛ لا يُرسل في Authorization Bearer.
+        // مفاتيح sb_secret_ ليست JWT؛ لا تُرسل في Authorization Bearer.
         if (!svc.startsWith("sb_secret_")) H.Authorization = "Bearer " + svc;
 
-        const patch = { bank_transfer_received: received, updated_at: new Date().toISOString() };
+        // نغيّر عمود تأكيد الاستلام فقط، دون لمس أي بيانات أو أعمدة أخرى.
+        const patch = { bank_transfer_received: received };
         const encoded = encodeURIComponent(orderNumber);
 
         const r1 = await supabaseRequest(
           "/rest/v1/orders?order_number=eq." + encoded,
           { method: "PATCH", headers: H, body: JSON.stringify(patch) }
         );
+        const d1 = await r1.json().catch(function () { return null; });
         if (!r1.ok) {
-          const e1 = await r1.json().catch(function () { return null; });
           return json({
-            error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ المناديب",
+            error: (d1 && (d1.message || d1.hint || d1.error)) || "تعذر تحديث نسخ المناديب",
+            failed_table: "orders",
             supabase_status: r1.status,
-            detail: e1
+            detail: d1
           }, 502);
         }
 
@@ -3377,19 +3379,31 @@ export default {
           "/rest/v1/master_orders_archive?order_number=eq." + encoded,
           { method: "PATCH", headers: H, body: JSON.stringify(patch) }
         );
+        const d2 = await r2.json().catch(function () { return null; });
         if (!r2.ok) {
-          const e2 = await r2.json().catch(function () { return null; });
           return json({
-            error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث المناديب وتعذر تحديث أرشيف الماستر",
+            error: (d2 && (d2.message || d2.hint || d2.error)) || "تم تحديث المناديب وتعذر تحديث أرشيف الماستر",
+            failed_table: "master_orders_archive",
             supabase_status: r2.status,
-            detail: e2
+            detail: d2
           }, 502);
         }
+
+        const driversUpdated = Array.isArray(d1) ? d1.length : 0;
+        const archiveUpdated = Array.isArray(d2) ? d2.length : 0;
+        if (driversUpdated === 0 && archiveUpdated === 0) {
+          return json({ error: "لم يتم العثور على الفاتورة في الطلبات أو أرشيف الماستر", order_number: orderNumber }, 404);
+        }
+
+        // إشعار لحظي للماستر والمناديب بعد نجاح التحديثين.
+        await broadcastOrdersChanged(env, "excel-transfer-received");
 
         return json({
           success: true,
           order_number: orderNumber,
-          bank_transfer_received: received
+          bank_transfer_received: received,
+          drivers_updated: driversUpdated,
+          archive_updated: archiveUpdated
         });
       }
 
