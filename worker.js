@@ -3331,22 +3331,66 @@ export default {
 
       /* 2) تأكيد استلام التحويل من الكمبيوتر (مطابقة/استلام يدوي/تحصيل مجدول) → الماستر + المناديب */
       if (path === "/api/excel-transfer-received" && request.method === "POST") {
-        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
-        if (secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
-        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط" }, 500);
+        // توافق مع نسختي الهيدر المستخدمتين في برنامج الكمبيوتر.
+        const supplied = request.headers.get("X-Excel-Sync-Secret") ||
+          request.headers.get("X-Excel-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) {
+          return json({ error: "غير مصرح: مفتاح مزامنة Excel غير مطابق" }, 401);
+        }
+
+        // دعم مفتاح Supabase الحديث sb_secret_ والقديم service_role.
+        const svc = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
+
         const body = await request.json().catch(function () { return {}; });
         const orderNumber = String(body.order_number || "").trim();
         const received = body.received !== false;
-        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber)) return json({ error: "رقم الفاتورة غير صحيح" }, 400);
-        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
-        const patch = { bank_transfer_received: received };
-        patch.updated_at = new Date().toISOString();
-        const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(patch) });
-        if (!r1.ok) { const e1 = await r1.json().catch(function () { return null; }); return json({ error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ المناديب" }, 502); }
-        const r2 = await supabaseRequest("/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(patch) });
-        if (!r2.ok) { const e2 = await r2.json().catch(function () { return null; }); return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث المناديب وتعذر تحديث أرشيف الماستر" }, 502); }
-        return json({ success: true, order_number: orderNumber, bank_transfer_received: received });
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber)) {
+          return json({ error: "رقم الفاتورة غير صحيح" }, 400);
+        }
+
+        const H = {
+          apikey: svc,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal"
+        };
+        // sb_secret_ ليس JWT؛ لا يُرسل في Authorization Bearer.
+        if (!svc.startsWith("sb_secret_")) H.Authorization = "Bearer " + svc;
+
+        const patch = { bank_transfer_received: received, updated_at: new Date().toISOString() };
+        const encoded = encodeURIComponent(orderNumber);
+
+        const r1 = await supabaseRequest(
+          "/rest/v1/orders?order_number=eq." + encoded,
+          { method: "PATCH", headers: H, body: JSON.stringify(patch) }
+        );
+        if (!r1.ok) {
+          const e1 = await r1.json().catch(function () { return null; });
+          return json({
+            error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ المناديب",
+            supabase_status: r1.status,
+            detail: e1
+          }, 502);
+        }
+
+        const r2 = await supabaseRequest(
+          "/rest/v1/master_orders_archive?order_number=eq." + encoded,
+          { method: "PATCH", headers: H, body: JSON.stringify(patch) }
+        );
+        if (!r2.ok) {
+          const e2 = await r2.json().catch(function () { return null; });
+          return json({
+            error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث المناديب وتعذر تحديث أرشيف الماستر",
+            supabase_status: r2.status,
+            detail: e2
+          }, 502);
+        }
+
+        return json({
+          success: true,
+          order_number: orderNumber,
+          bank_transfer_received: received
+        });
       }
 
       /* 3) مزامنة قسم «تحصيل مجدول» كامل من الكمبيوتر → جدول scheduled_collections */
