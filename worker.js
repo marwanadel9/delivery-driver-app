@@ -688,51 +688,49 @@ export default {
         const payloadBytes = new TextEncoder().encode(payloadText).byteLength;
         if (payloadBytes > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
 
-        // التحديث مشروط بتاريخ النسخة الذي قرأه الجهاز؛ جهاز واحد فقط ينجح في كل مراجعة.
+        // التحديث يتم عبر RPC ذرّي بقفل الصف والتحقق من updated_at داخل PostgreSQL.
+        // هذا يمنع الكتابة فوق تعديل جهاز آخر، ويمنح عملية JSONB الكبيرة مهلة 60 ثانية
+        // داخل الدالة فقط، بدل إرجاع حمولة 6+ MB من PostgREST بعد كل PATCH.
         const expectedMillis = Date.parse(body.expected_updated_at.trim());
         if (!Number.isFinite(expectedMillis)) return json({ error: "رقم مراجعة النسخة المشتركة غير صالح" }, 400);
-        const expected = encodeURIComponent(body.expected_updated_at.trim());
-        // نضمن أن رقم المراجعة الجديد أكبر من السابق حتى لو وصلت عمليتا حفظ في نفس المللي ثانية.
-        const nextUpdatedAt = new Date(Math.max(Date.now(), expectedMillis + 1)).toISOString();
-        const patch = {
-          payload: body.payload,
-          source_device: String(body.source_device || "desktop-device").slice(0, 80),
-          updated_at: nextUpdatedAt
-        };
         const response = await supabaseRequest(
-          "/rest/v1/faruj_desktop_shared_state?id=eq.1&updated_at=eq." + expected,
+          "/rest/v1/rpc/faruj_desktop_shared_state_cas_update",
           {
-            method: "PATCH",
-            headers: Object.assign({}, headers, { Prefer: "return=representation" }),
-            body: JSON.stringify(patch)
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              p_expected_updated_at: body.expected_updated_at.trim(),
+              p_payload: body.payload,
+              p_source_device: String(body.source_device || "desktop-device").slice(0, 80)
+            })
           }
         );
         const rows = await response.json().catch(function () { return null; });
-        if (!response.ok || !Array.isArray(rows)) {
-          return json({ error: "تعذر حفظ تحديث التخزين المشترك", detail: rows, supabase_status: response.status }, 502);
+        if (!response.ok || !Array.isArray(rows) || !rows.length) {
+          return json({
+            error: "تعذر حفظ تحديث التخزين المشترك",
+            detail: rows,
+            supabase_status: response.status,
+            hint: rows && rows.code === "57014"
+              ? "انتهت مهلة PostgreSQL حتى بعد استخدام مسار الحفظ الموسع؛ لم نؤكد نجاح الحفظ"
+              : undefined
+          }, 502);
         }
-        if (!rows.length) {
-          const latestResponse = await supabaseRequest(
-            "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=id,updated_at,source_device",
-            { headers }
-          );
-          const latestRows = await latestResponse.json().catch(function () { return null; });
-          if (!latestResponse.ok || !Array.isArray(latestRows)) {
-            return json({ error: "تغيرت النسخة المشتركة، وتعذر قراءة رقم المراجعة الجديدة", supabase_status: latestResponse.status }, 502);
-          }
+        const saved = rows[0];
+        if (saved.success !== true || saved.conflict === true) {
           return json({
             success: false,
             conflict: true,
             code: "STATE_REVISION_CONFLICT",
             error: "تغيرت النسخة المشتركة على جهاز آخر؛ أعد قراءة التحديث ودمجه قبل الحفظ",
-            updated_at: latestRows.length ? latestRows[0].updated_at : null,
-            source_device: latestRows.length ? latestRows[0].source_device : null
+            updated_at: saved.updated_at || null,
+            source_device: saved.source_device || null
           }, 409);
         }
         return json({
           success: true,
-          updated_at: rows[0].updated_at,
-          source_device: rows[0].source_device,
+          updated_at: saved.updated_at,
+          source_device: saved.source_device,
           saved_keys: keys.length,
           payload_bytes: payloadBytes
         });
