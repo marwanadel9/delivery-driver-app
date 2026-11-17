@@ -80,6 +80,41 @@ async function supabaseRequest(path, options) {
   });
 }
 
+// إشعار لحظي بعد نجاح تعديل الفاتورة فقط، دون إرسال بيانات العميل أو الفاتورة.
+// نفس القناة التي يستمع لها تطبيق الماستر وتطبيقات المناديب: fa-orders-live.
+async function broadcastOrdersChanged(env, source) {
+  const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (!serviceKey) return false;
+  try {
+    const response = await supabaseRequest("/realtime/v1/api/broadcast", {
+      method: "POST",
+      headers: {
+        apikey: serviceKey,
+        Authorization: "Bearer " + serviceKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messages: [{
+          topic: "fa-orders-live",
+          event: "orders-changed",
+          payload: {
+            source: String(source || "system"),
+            emitted_at: new Date().toISOString()
+          }
+        }]
+      })
+    });
+    if (!response.ok) {
+      try { console.error("Realtime broadcast failed:", response.status, await response.text()); } catch (_) {}
+      return false;
+    }
+    return true;
+  } catch (error) {
+    try { console.error("Realtime broadcast exception:", error && error.message || error); } catch (_) {}
+    return false;
+  }
+}
+
 async function getUser(token, anonKey) {
   if (!token || !anonKey) {
     return null;
@@ -2842,9 +2877,10 @@ export default {
             .filter(Boolean)
         ));
         const requestedSheet = String(order.sheet_name || '').trim();
-        if (currentSheets.length > 1 && requestedSheet && currentSheets.indexOf(requestedSheet) === -1) {
-          return json({ error: "الفاتورة موجودة عند أكثر من مندوب. تم رفض تغيير المندوب حتى لا تنتقل كل النسخ إلى مندوب واحد؛ تم الحفاظ على نسخ جميع المناديب دون تعديل.", driver_sheets: currentSheets }, 409);
-        }
+        const hasMultipleDriverCopies = currentSheets.length > 1;
+        // عند وجود أكثر من نسخة لدى المناديب، لا نرفض تعديل بيانات الفاتورة.
+        // نحدّث كل النسخ المطابقة ونحافظ على sheet_name الخاص بكل نسخة كما هو.
+        // يظل تغيير المندوب متاحًا كما كان سابقًا إذا كانت هناك نسخة واحدة فقط.
 
         const allowed = [
           "customer_name", "phone", "emirate", "area", "order_details",
@@ -2913,7 +2949,20 @@ export default {
         } else if (foundOrders.rows.length) {
           archiveManagedByOrderTrigger = true;
         }
-        return json({ success: true, order_number: orderNumber, updated_orders: updatedOrders.length, updated_archive: updatedArchive.length, archive_managed_by_orders_trigger: archiveManagedByOrderTrigger, updated_sheets: currentSheets, delivery_date: deliveryDate, created_at_unchanged: true });
+        // لا نرسل الإشعار إلا بعد تأكيد تحديث كل الصفوف المطابقة بنجاح.
+        const liveNotified = await broadcastOrdersChanged(env, "desktop_invoice_update");
+        return json({
+          success: true,
+          order_number: orderNumber,
+          updated_orders: updatedOrders.length,
+          updated_archive: updatedArchive.length,
+          archive_managed_by_orders_trigger: archiveManagedByOrderTrigger,
+          updated_sheets: currentSheets,
+          driver_assignment_preserved: hasMultipleDriverCopies,
+          delivery_date: deliveryDate,
+          live_notified: liveNotified,
+          created_at_unchanged: true
+        });
       }
 
       if (path === "/api/master/order/update-by-number" && request.method === "POST") {
