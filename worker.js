@@ -494,6 +494,55 @@ async function clearGatePhotosForInvoice(invoiceNumber, env) {
   return paths.length;
 }
 
+// Google Maps URL resolution is intentionally restricted to Google-owned map hosts.
+const FA_MAP_HOSTS = new Set([
+  "maps.app.goo.gl", "goo.gl", "google.com", "www.google.com",
+  "maps.google.com", "google.ae", "www.google.ae", "maps.google.ae",
+  "maps.googleusercontent.com"
+]);
+function faAllowedMapUrl(value) {
+  let u;
+  try { u = new URL(value); } catch (_) { return null; }
+  if (u.protocol !== "https:" || !FA_MAP_HOSTS.has(u.hostname.toLowerCase()) || u.username || u.password) return null;
+  return u;
+}
+function faExtractMapCoords(value) {
+  const s = String(value || "");
+  const patterns = [
+    /@(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/,
+    /!3d(-?\d{1,2}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/,
+    /[?&](?:q|query|destination|center)=(-?\d{1,2}(?:\.\d+)?)(?:%2C|,)\s*(-?\d{1,3}(?:\.\d+)?)/i
+  ];
+  for (const re of patterns) {
+    const m = s.match(re);
+    if (!m) continue;
+    const lat = Number(m[1]), lng = Number(m[2]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return [lat, lng];
+  }
+  return null;
+}
+async function faResolveGoogleMap(input) {
+  if (typeof input !== "string" || input.length < 8 || input.length > 2048) throw new Error("رابط الموقع غير صالح أو أطول من الحد المسموح");
+  let current = faAllowedMapUrl(input.trim());
+  if (!current) throw new Error("يُقبل فقط رابط Google Maps آمن يبدأ بـ HTTPS");
+  for (let hop = 0; hop <= 8; hop++) {
+    const coords = faExtractMapCoords(current.toString());
+    if (coords) return { url: current.toString(), coords };
+    if (hop === 8) break;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6500);
+    let response;
+    try {
+      response = await fetch(current.toString(), { method: "GET", redirect: "manual", signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (compatible; FroogAlzain/1.0)" } });
+    } finally { clearTimeout(timer); }
+    const location = response.headers.get("location");
+    if (!location) break;
+    current = faAllowedMapUrl(new URL(location, current).toString());
+    if (!current) throw new Error("تم رفض تحويل رابط الخرائط إلى نطاق غير موثوق");
+  }
+  throw new Error("تعذر استخراج إحداثيات الموقع من رابط Google Maps؛ لم يتم الحفظ");
+}
+
 export default {
   async fetch(request, env) {
     const missingSecret = checkSecrets(env);
@@ -2900,27 +2949,59 @@ export default {
         return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
       }
 
+      if (path === "/api/customer-location/release" && request.method === "POST") {
+        const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const body = await request.json().catch(() => null);
+        const customerCode = String(body && body.customer_code || "").trim();
+        if (!/^[A-Za-z0-9_-]{1,80}$/.test(customerCode)) return json({ error: "كود العميل غير صالح" }, 400);
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح التخزين المركزي غير مضبوط في أسرار Worker" }, 500);
+        const headers = { apikey: serviceKey, "Content-Type": "application/json" };
+        if (!serviceKey.startsWith("sb_secret_")) headers.Authorization = "Bearer " + serviceKey;
+        const rpc = await supabaseRequest("/rest/v1/rpc/faruj_release_customer_location", { method: "POST", headers, body: JSON.stringify({ p_customer_code: customerCode }) });
+        const result = await rpc.json().catch(() => null);
+        if (!rpc.ok) return json({ error: "تعذر تحرير موقع العميل", detail: result }, 502);
+        return json({ ok: true, released: true });
+      }
+
+      if (path === "/api/customer-location/claim" && request.method === "POST") {
+        const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const body = await request.json().catch(() => null);
+        const customerCode = String(body && body.customer_code || "").trim();
+        if (!/^[A-Za-z0-9_-]{1,80}$/.test(customerCode)) return json({ error: "كود العميل غير صالح" }, 400);
+        let resolved;
+        try { resolved = await faResolveGoogleMap(String(body && body.url || "")); }
+        catch (e) { return json({ ok: false, error: e && e.message || "تعذر التحقق من الموقع" }, 422); }
+        // Six decimal places identify the resolved pin, while preserving original URL separately.
+        const lat = Number(resolved.coords[0].toFixed(6));
+        const lng = Number(resolved.coords[1].toFixed(6));
+        const locationKey = lat.toFixed(6) + "," + lng.toFixed(6);
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح التخزين المركزي غير مضبوط في أسرار Worker" }, 500);
+        const headers = { apikey: serviceKey, "Content-Type": "application/json" };
+        if (!serviceKey.startsWith("sb_secret_")) headers.Authorization = "Bearer " + serviceKey;
+        const rpc = await supabaseRequest("/rest/v1/rpc/faruj_claim_customer_location", {
+          method: "POST", headers,
+          body: JSON.stringify({ p_customer_code: customerCode, p_location_key: locationKey, p_latitude: lat, p_longitude: lng, p_original_url: String(body.url).slice(0, 2048) })
+        });
+        const result = await rpc.json().catch(() => null);
+        if (!rpc.ok || !Array.isArray(result) || !result.length) return json({ error: "تعذر تسجيل الموقع في قاعدة البيانات", detail: result }, 502);
+        const row = result[0];
+        if (!row.success) return json({ ok: false, code: "CUSTOMER_LOCATION_DUPLICATE", error: "هذا الموقع مسجل بالفعل لعميل آخر", other_customer_code: row.other_customer_code || null }, 409);
+        return json({ ok: true, customer_code: customerCode, coords: [lat, lng], resolved_url: resolved.url });
+      }
+
       if (path === "/api/resolve-map" && method === "POST") {
+        const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) return json({ ok: false, error: "غير مصرح" }, 401);
         try {
-          const body = await request.json();
-          let finalUrl = String(body.url || "").trim();
-          if (!/^https?:\/\//i.test(finalUrl)) {
-            return json({ ok: false, error: "رابط غير صالح" }, 400);
-          }
-          let coords = null;
-          for (let hop = 0; hop < 6; hop++) {
-            const m = finalUrl.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/) ||
-                      finalUrl.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/) ||
-                      finalUrl.match(/[?&](?:q|query|destination)=(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/);
-            if (m) { coords = [parseFloat(m[1]), parseFloat(m[2])]; break; }
-            const resp = await fetch(finalUrl, { method: "GET", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0" } });
-            const loc = resp.headers.get("location");
-            if (!loc) break;
-            finalUrl = new URL(loc, finalUrl).toString();
-          }
-          return json({ ok: true, url: finalUrl, coords: coords });
+          const body = await request.json().catch(() => null);
+          const resolved = await faResolveGoogleMap(String(body && body.url || ""));
+          return json({ ok: true, url: resolved.url, coords: resolved.coords });
         } catch (e) {
-          return json({ ok: false, error: String(e && e.message || e) }, 500);
+          return json({ ok: false, error: String(e && e.message || e) }, 422);
         }
       }
 
