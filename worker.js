@@ -80,105 +80,6 @@ async function supabaseRequest(path, options) {
   });
 }
 
-// ---- Exact normalized Google Maps coordinates (v4) ----
-const FARUJ_MAP_HOSTS = new Set(["maps.app.goo.gl","goo.gl","google.com","www.google.com","maps.google.com","maps.google.ae","www.google.ae"]);
-function farujCanonicalCoord(n) { const v=Math.round(Number(n)*1e6)/1e6; return Object.is(v,-0)?0:v; }
-function farujCoordKey(lat,lng) { return farujCanonicalCoord(lat).toFixed(6)+","+farujCanonicalCoord(lng).toFixed(6); }
-function farujDmsToDecimal(deg,min,sec,hem) { let v=Math.abs(Number(deg))+Number(min)/60+Number(sec)/3600; if(/[SW]/i.test(hem))v=-v; return farujCanonicalCoord(v); }
-function farujExtractCoords(text) {
- const s=String(text||""); let m;
- m=s.match(/@(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/);
- if(!m)m=s.match(/!3d(-?\d{1,2}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/);
- if(!m)m=s.match(/[?&](?:q|query|destination|ll|center)=(-?\d{1,2}(?:\.\d+)?)(?:%2C|,|%252C)(-?\d{1,3}(?:\.\d+)?)/i);
- if(m){const lat=farujCanonicalCoord(m[1]),lng=farujCanonicalCoord(m[2]);if(Math.abs(lat)<=90&&Math.abs(lng)<=180)return {lat,lng};}
- // DMS text: 24°39'46.3"N 54°45'49.3"E (also accepts prime glyphs).
- const dms=/(-?\d{1,2})\s*°\s*(\d{1,2})\s*[′'’]\s*(\d{1,2}(?:\.\d+)?)\s*[″"”]?\s*([NS])[^\d-]{0,20}(-?\d{1,3})\s*°\s*(\d{1,2})\s*[′'’]\s*(\d{1,2}(?:\.\d+)?)\s*[″"”]?\s*([EW])/i;
- m=s.match(dms);
- if(m){const lat=farujDmsToDecimal(m[1],m[2],m[3],m[4]),lng=farujDmsToDecimal(m[5],m[6],m[7],m[8]);if(Math.abs(lat)<=90&&Math.abs(lng)<=180)return {lat,lng};}
- return null;
-}
-async function farujResolveGoogleMap(raw) {
- let u; try { u = new URL(String(raw || "")); } catch (_) { throw new Error("رابط خرائط غير صالح"); }
- if (u.protocol !== "https:" || !FARUJ_MAP_HOSTS.has(u.hostname.toLowerCase())) throw new Error("يسمح فقط بروابط Google Maps الموثوقة عبر HTTPS");
- let current = u.toString();
- for (let hop = 0; hop <= 6; hop++) {
-  const parsed = new URL(current);
-  if (parsed.protocol !== "https:" || !FARUJ_MAP_HOSTS.has(parsed.hostname.toLowerCase())) throw new Error("تم إيقاف تحويل الرابط إلى نطاق غير موثوق");
-  let coords = farujExtractCoords(current);
-  if (coords) return { ...coords, key: farujCoordKey(coords.lat, coords.lng), resolved_url: current };
-  if (hop === 6) break;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6000);
-  let resp;
-  try {
-   resp = await fetch(current, { method: "GET", redirect: "manual", signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0" } });
-  } catch (e) {
-   const err = new Error(e && e.name === "AbortError" ? "انتهت مهلة فك رابط الخريطة" : "تعذر فك رابط الخريطة");
-   err.code = e && e.name === "AbortError" ? "MAP_TIMEOUT" : "MAP_FETCH_FAILED";
-   throw err;
-  } finally { clearTimeout(timer); }
-  if (resp.status === 429) {
-   const rawRetry = String(resp.headers.get("Retry-After") || "").trim();
-   let retryAfterSec = Number(rawRetry);
-   if (!Number.isFinite(retryAfterSec) || retryAfterSec <= 0) {
-    const retryDate = Date.parse(rawRetry);
-    retryAfterSec = Number.isFinite(retryDate) ? Math.max(1, Math.ceil((retryDate - Date.now()) / 1000)) : 60;
-   }
-   retryAfterSec = Math.max(5, Math.min(900, Math.ceil(retryAfterSec)));
-   const err = new Error("Google Maps (HTTP 429): تم تحديد معدل الطلبات؛ انتظر " + retryAfterSec + " ثانية ثم أعد محاولة الحالات المؤقتة فقط");
-   err.code = "MAP_RATE_LIMITED";
-   err.retryAfterSec = retryAfterSec;
-   throw err;
-  }
-  if (!resp.ok && ![301, 302, 303, 307, 308].includes(resp.status)) {
-   const err = new Error("Google Maps (HTTP " + resp.status + ")");
-   err.code = "MAP_HTTP_ERROR";
-   throw err;
-  }
-  const loc = resp.headers.get("location");
-  if (!loc) {
-   const body = await resp.text().catch(() => "");
-   coords = farujExtractCoords(body);
-   if (coords) return { ...coords, key: farujCoordKey(coords.lat, coords.lng), resolved_url: current };
-   break;
-  }
-  current = new URL(loc, current).toString();
- }
- throw new Error("تعذر استخراج إحداثيات مؤكدة من الرابط؛ لم يتم حفظ الموقع");
-}
-
-async function farujServiceHeaders(env){
- const key=String(env.SUPABASE_SECRET_KEY||env.SUPABASE_SERVICE_ROLE_KEY||"").trim();
- if(!key)throw new Error("مفتاح Supabase الخدمي غير مضبوط في Worker");
- const h={apikey:key,"Content-Type":"application/json"};if(!key.startsWith("sb_secret_"))h.Authorization="Bearer "+key;return h;
-}
-async function farujRpc(env,name,args){const h=await farujServiceHeaders(env);const r=await supabaseRequest("/rest/v1/rpc/"+name,{method:"POST",headers:h,body:JSON.stringify(args)});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error(d&&(d.message||d.details||d.hint)||("Supabase RPC failed: "+r.status));return d;}
-async function farujSharedPayload(env){
- const h=await farujServiceHeaders(env);
- const r=await supabaseRequest("/rest/v1/faruj_desktop_shared_state?id=eq.1&select=payload",{headers:h});
- const raw=await r.text().catch(()=>"");let d=null;try{d=raw?JSON.parse(raw):null;}catch(_){}
- if(!r.ok||!Array.isArray(d)||!d.length){
-  const detail=d&&(d.message||d.details||d.hint||d.error);
-  throw new Error("تعذر قراءة التخزين المشترك (HTTP "+r.status+")"+(detail?": "+String(detail).slice(0,220):""));
- }
- if(!d[0].payload||typeof d[0].payload!=="object")throw new Error("سجل التخزين المشترك لا يحتوي على payload صالح");
- return d[0].payload;
-}
-async function farujFingerprint(value){
- const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(value)));
- return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
-}
-async function farujMigrationState(env){const h=await farujServiceHeaders(env);const r=await supabaseRequest("/rest/v1/faruj_customer_location_migration_v4?id=eq.1&select=*",{headers:h});const d=await r.json().catch(()=>null);if(!r.ok||!Array.isArray(d)||!d.length)throw new Error("جدول تهيئة مواقع العملاء غير جاهز؛ شغّل ملف SQL v4 أولًا");return d[0];}
-async function farujWriteMigration(env,patch,expectedOffset){const h=await farujServiceHeaders(env);const q="/rest/v1/faruj_customer_location_migration_v4?id=eq.1"+(expectedOffset===undefined?"":"&next_offset=eq."+encodeURIComponent(expectedOffset));const r=await supabaseRequest(q,{method:"PATCH",headers:Object.assign({},h,{Prefer:"return=representation"}),body:JSON.stringify(Object.assign({},patch,{updated_at:new Date().toISOString()}))});const d=await r.json().catch(()=>null);if(!r.ok||!Array.isArray(d)||!d.length)throw new Error("تغير مؤشر التهيئة من طلب آخر؛ أعد قراءة الحالة قبل المتابعة");return d[0];}
-async function farujWriteMigrationCAS(env,patch,expectedUpdatedAt){
- const h=await farujServiceHeaders(env);
- const q="/rest/v1/faruj_customer_location_migration_v4?id=eq.1&updated_at=eq."+encodeURIComponent(String(expectedUpdatedAt||""));
- const r=await supabaseRequest(q,{method:"PATCH",headers:Object.assign({},h,{Prefer:"return=representation"}),body:JSON.stringify(Object.assign({},patch,{updated_at:new Date().toISOString()}))});
- const d=await r.json().catch(()=>null);
- if(!r.ok||!Array.isArray(d)||!d.length)throw new Error("تغير سجل المراجعة من طلب آخر؛ لم نعتمد نتيجة متعارضة. أعد قراءة الحالة.");
- return d[0];
-}
-
 // إشعار لحظي بعد نجاح تعديل الفاتورة فقط، دون إرسال بيانات العميل أو الفاتورة.
 // نفس القناة التي يستمع لها تطبيق الماستر وتطبيقات المناديب: fa-orders-live.
 async function broadcastOrdersChanged(env, source) {
@@ -624,130 +525,6 @@ export default {
     // أدناه، مع بقاء التحقق من جلسة وصلاحيات حساب الماستر داخل كل مسار.
 
     try {
-      // Customer location protection v4: exact canonical coordinate equality only.
-      if (path.startsWith("/api/customer-location/")) {
-        try {
-        const supplied=request.headers.get("X-Excel-Sync-Secret")||"";
-        if(!env.EXCEL_SYNC_SECRET||supplied!==env.EXCEL_SYNC_SECRET)return json({ok:false,error:"غير مصرح"},401);
-        if(path==="/api/customer-location/check"&&request.method==="POST"){
-          const body=await request.json().catch(()=>null);if(!body)return json({ok:false,error:"بيانات الطلب غير صالحة"},400);
-          const code=String(body.customer_code||"").trim();if(!code)return json({ok:false,error:"كود العميل مطلوب"},400);
-          const migration=await farujMigrationState(env);
-          if(migration.status!=="complete")return json({ok:false,error:"يجب إكمال تهيئة مواقع العملاء القديمة أولًا",code:"MIGRATION_REQUIRED"},409);
-          const legacyIssues=Array.isArray(migration.issues)?migration.issues:[];
-          if(legacyIssues.some(x=>String(x.customer_code||"")!==code))return json({ok:false,error:"توجد مواقع قديمة تحتاج مراجعة. يمكن تصحيح العملاء الظاهرين في تقرير التهيئة أولًا، ولن نسمح بإضافة عميل جديد حتى تنتهي المراجعة.",code:"LEGACY_UNRESOLVED_BLOCK"},409);
-          let resolved;try{resolved=await farujResolveGoogleMap(body.url);}catch(e){return json({ok:false,error:e.message,code:"LOCATION_RESOLVE_FAILED"},422);}
-          const rows=await farujRpc(env,"faruj_check_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng});
-          const row=Array.isArray(rows)?rows[0]:rows;
-          if(!row||row.available!==true)return json({ok:false,code:"CUSTOMER_LOCATION_DUPLICATE",other_customer_code:row&&row.other_customer_code||null,location_key:resolved.key,error:"الإحداثيات متطابقة مع موقع عميل مسجل"},409);
-          return json({ok:true,coords:[resolved.lat,resolved.lng],location_key:resolved.key,precision:6,match_mode:"exact"});
-        }
-        if(path==="/api/customer-location/migration/status"&&request.method==="GET"){
-          const state=await farujMigrationState(env);return json({ok:true,state,issues:Array.isArray(state.issues)?state.issues:[]});
-        }
-        if(path==="/api/customer-location/migration/start"&&request.method==="POST"){
-          // اقرأ الحالة أولًا حتى لا يعتمد الاستكمال على قراءة payload كبير قبل معرفة المؤشر المحفوظ.
-          const state=await farujMigrationState(env);
-          if(state.status==="complete" || state.status==="needs_review" || state.status==="running"){
-            return json({ok:true,status:state.status,total_customers:Number(state.total_customers)||0,customer_fingerprint:state.customer_fingerprint||"",next_offset:Number(state.next_offset)||0,issues_count:Array.isArray(state.issues)?state.issues.length:0});
-          }
-          const payload=await farujSharedPayload(env);
-          const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
-          const fingerprint=await farujFingerprint(customers);
-          const started=await farujWriteMigration(env,{status:customers.length?"running":"complete",customer_fingerprint:fingerprint,total_customers:customers.length,next_offset:0,issues:[]});
-          return json({ok:true,status:started.status,total_customers:customers.length,customer_fingerprint:fingerprint,next_offset:0});
-        }
-        if(path==="/api/customer-location/migration/batch"&&request.method==="POST"){
-          const body=await request.json().catch(()=>null);if(!body)return json({ok:false,error:"بيانات الدفعة غير صالحة"},400);
-          const state=await farujMigrationState(env);if(state.status!=="running")return json({ok:false,error:"لا توجد عملية تهيئة جارية"},409);
-          if(String(body.customer_fingerprint||"")!==String(state.customer_fingerprint||""))return json({ok:false,error:"بصمة سجل العملاء تغيرت؛ أعد بدء التهيئة"},409);
-          const offset=Number(body.offset),limit=Math.max(1,Math.min(4,Number(body.limit)||4));if(!Number.isInteger(offset)||offset!==Number(state.next_offset))return json({ok:false,error:"مؤشر الدفعة غير مطابق للحالة الحالية"},409);
-          const payload=await farujSharedPayload(env);const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
-          const snapshotCount=Number(state.total_customers)||0;
-          if(customers.length<snapshotCount)return json({ok:false,error:"قائمة العملاء الأصلية أصبحت أقصر من نقطة بداية التهيئة؛ أوقفنا الدفعة دون تعديل",code:"CUSTOMER_SNAPSHOT_CHANGED"},409);
-          const migrationCustomers=customers.slice(0,snapshotCount);
-          const fingerprint=await farujFingerprint(migrationCustomers);
-          if(fingerprint!==state.customer_fingerprint)return json({ok:false,error:"تغير سجل العملاء الأصلي أثناء التهيئة؛ لم نعتمد هذه الدفعة",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
-          const issues=Array.isArray(state.issues)?state.issues.slice():[];const batch=migrationCustomers.slice(offset,offset+limit);
-          for(const c of batch){const code=String(c&&c.code||"").trim(),map=String(c&&c.map||"").trim();if(!code){if(map)issues.push({customer_code:"",customer_name:String(c&&c.name||""),issue_type:"missing_code",details:"عميل لديه رابط موقع دون كود عميل"});continue;}if(!map){try{await farujRpc(env,"faruj_release_customer_location_v4",{p_customer_code:code});}catch(e){issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"release_failed",details:String(e.message||e).slice(0,300)});}continue;}
-            try{const p=await farujResolveGoogleMap(map);const claim=await farujRpc(env,"faruj_claim_customer_location_v4",{p_customer_code:code,p_latitude:p.lat,p_longitude:p.lng,p_original_url:map});const row=Array.isArray(claim)?claim[0]:claim;if(!row||row.success!==true)issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"duplicate",details:"إحداثيات مطابقة للعميل "+(row&&row.other_customer_code||"آخر")});}
-            catch(e){issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"unresolved",details:String(e.message||e).slice(0,300)});}
-          }
-          const next=Math.min(migrationCustomers.length,offset+batch.length);const done=next>=migrationCustomers.length;const finalStatus=done?(issues.length?"needs_review":"complete"):"running";const nextState=await farujWriteMigration(env,{next_offset:next,issues,status:finalStatus},offset);
-          return json({ok:true,processed:batch.length,next_offset:next,total_customers:migrationCustomers.length,status:nextState.status,issues_count:issues.length});
-        }
-        if(path==="/api/customer-location/migration/retry-rate-limited"&&request.method==="POST"){
-          const state=await farujMigrationState(env);
-          if(state.status!=="needs_review")return json({ok:false,error:"لا توجد حالات مكتملة تنتظر إعادة محاولة روابط Google المؤقتة",code:"NO_RETRY_REVIEW"},409);
-          const body=await request.json().catch(()=>({}));
-          if(String(body&&body.customer_fingerprint||"")!==String(state.customer_fingerprint||""))return json({ok:false,error:"بصمة سجل العملاء غير مطابقة؛ لم نغيّر أي سجل",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
-          const payload=await farujSharedPayload(env);
-          const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
-          const snapshotCount=Number(state.total_customers)||0;
-          if(customers.length<snapshotCount)return json({ok:false,error:"قائمة العملاء الأصلية أصبحت أقصر من نقطة بداية التهيئة؛ لم نعد المحاولة",code:"CUSTOMER_SNAPSHOT_CHANGED"},409);
-          const migrationCustomers=customers.slice(0,snapshotCount);
-          const fingerprint=await farujFingerprint(migrationCustomers);
-          if(fingerprint!==String(state.customer_fingerprint||""))return json({ok:false,error:"تغير سجل العملاء الأصلي بعد الفحص؛ أوقفنا إعادة المحاولة لحماية الروابط الأصلية",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
-          const issues=Array.isArray(state.issues)?state.issues.slice():[];
-          const retryIndexes=[];
-          let cooldownSeconds=0;
-          const nowMs=Date.now();
-          for(let i=0;i<issues.length;i++){
-            const it=issues[i]||{};
-            if(String(it.issue_type||"")!=="unresolved" || !/HTTP\s*429|rate.?limit|معدل الطلبات/i.test(String(it.details||"")))continue;
-            const lastRetry=Date.parse(String(it.last_retry_at||""));
-            const requiredWait=Math.max(5,Math.min(900,Number(it.retry_after_seconds)||60));
-            if(Number.isFinite(lastRetry) && nowMs<lastRetry+requiredWait*1000){
-              cooldownSeconds=Math.max(cooldownSeconds,Math.ceil((lastRetry+requiredWait*1000-nowMs)/1000));
-              break; // لا نرسل طلبات Google أخرى قبل انتهاء مهلة الحظر السابقة.
-            }
-            retryIndexes.push(i);
-            if(retryIndexes.length>=2)break;
-          }
-          if(cooldownSeconds>0)return json({ok:true,retried:0,rate_limited:true,retry_after_seconds:cooldownSeconds,retryable_remaining:issues.filter(x=>String(x.issue_type||"")==="unresolved"&&/HTTP\s*429|rate.?limit|معدل الطلبات/i.test(String(x.details||""))).length,issues_count:issues.length,status:state.status,message:"يجب احترام مهلة Google قبل المحاولة التالية."});
-          if(!retryIndexes.length)return json({ok:true,retried:0,retryable_remaining:0,issues_count:issues.length,status:state.status,message:"لا توجد أخطاء HTTP 429 قابلة لإعادة المحاولة تلقائيًا؛ باقي الحالات تحتاج مراجعة يدوية."});
-          let retried=0,resolvedCount=0,duplicateCount=0,rateLimited=false,retryAfterSec=0;
-          for(const idx of retryIndexes){
-            const oldIssue=issues[idx]||{};
-            const code=String(oldIssue.customer_code||"").trim();
-            const customer=migrationCustomers.find(c=>String(c&&c.code||"").trim()===code);
-            if(!code||!customer||!String(customer.map||"").trim()){
-              issues[idx]=Object.assign({},oldIssue,{details:"تعذر العثور على العميل أو رابطه الأصلي في السجل الحالي؛ لم يتم تعديل الرابط."});
-              continue;
-            }
-            retried++;
-            try{
-              const resolved=await farujResolveGoogleMap(String(customer.map).trim());
-              const claim=await farujRpc(env,"faruj_claim_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng,p_original_url:String(customer.map).trim()});
-              const row=Array.isArray(claim)?claim[0]:claim;
-              if(row&&row.success===true){issues[idx]=null;resolvedCount++;}
-              else{issues[idx]=Object.assign({},oldIssue,{issue_type:"duplicate",details:"إحداثيات مطابقة للعميل "+String(row&&row.other_customer_code||"آخر")});duplicateCount++;}
-            }catch(e){
-              issues[idx]=Object.assign({},oldIssue,{details:String(e&&e.message||e).slice(0,300),retry_attempts:(Number(oldIssue.retry_attempts)||0)+1,last_retry_at:new Date().toISOString(),retry_after_seconds:e&&e.code==="MAP_RATE_LIMITED"?(Number(e.retryAfterSec)||60):undefined});
-              if(e&&e.code==="MAP_RATE_LIMITED"){
-                rateLimited=true;
-                retryAfterSec=Math.max(retryAfterSec,Number(e.retryAfterSec)||60);
-                break;
-              }
-            }
-          }
-          const finalIssues=issues.filter(Boolean);
-          const stillRetryable=finalIssues.filter(x=>String(x.issue_type||"")==="unresolved"&&/HTTP\s*429|rate.?limit|معدل الطلبات/i.test(String(x.details||""))).length;
-          const saved=await farujWriteMigrationCAS(env,{issues:finalIssues,status:finalIssues.length?"needs_review":"complete"},state.updated_at);
-          return json({ok:true,retried,resolved:resolvedCount,duplicates:duplicateCount,rate_limited:rateLimited,retry_after_seconds:retryAfterSec,retryable_remaining:stillRetryable,issues_count:finalIssues.length,status:saved.status,next_offset:Number(saved.next_offset)||0,total_customers:Number(saved.total_customers)||0});
-        }
-        return json({ok:false,error:"مسار حماية المواقع غير معروف"},404);
-        } catch (locationError) {
-          const diagnostic = String(locationError && locationError.message || locationError || "unknown").slice(0, 350);
-          try { console.error("Faruj customer-location route failed:", path, diagnostic); } catch (_) {}
-          return json({
-            ok: false,
-            code: "CUSTOMER_LOCATION_INTERNAL",
-            error: "تعذر تنفيذ فحص موقع العميل: " + diagnostic
-          }, 500);
-        }
-      }
-
       if (
         path === "/api/health" &&
         request.method === "GET"
@@ -3123,12 +2900,28 @@ export default {
         return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
       }
 
-      if (path === "/api/resolve-map" && request.method === "POST") {
-        const supplied=request.headers.get("X-Excel-Sync-Secret")||"";
-        if(!env.EXCEL_SYNC_SECRET||supplied!==env.EXCEL_SYNC_SECRET)return json({ok:false,error:"غير مصرح"},401);
-        const body=await request.json().catch(()=>null);
-        try{const p=await farujResolveGoogleMap(body&&body.url);return json({ok:true,url:String(body.url||""),coords:[p.lat,p.lng],location_key:p.key});}
-        catch(e){return json({ok:false,error:e.message},422);}
+      if (path === "/api/resolve-map" && method === "POST") {
+        try {
+          const body = await request.json();
+          let finalUrl = String(body.url || "").trim();
+          if (!/^https?:\/\//i.test(finalUrl)) {
+            return json({ ok: false, error: "رابط غير صالح" }, 400);
+          }
+          let coords = null;
+          for (let hop = 0; hop < 6; hop++) {
+            const m = finalUrl.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/) ||
+                      finalUrl.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/) ||
+                      finalUrl.match(/[?&](?:q|query|destination)=(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/);
+            if (m) { coords = [parseFloat(m[1]), parseFloat(m[2])]; break; }
+            const resp = await fetch(finalUrl, { method: "GET", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0" } });
+            const loc = resp.headers.get("location");
+            if (!loc) break;
+            finalUrl = new URL(loc, finalUrl).toString();
+          }
+          return json({ ok: true, url: finalUrl, coords: coords });
+        } catch (e) {
+          return json({ ok: false, error: String(e && e.message || e) }, 500);
+        }
       }
 
       if (path === "/api/master/order/update-by-identity" && request.method === "POST") {
