@@ -596,12 +596,35 @@ export default {
           const state=await farujMigrationState(env);return json({ok:true,state,issues:Array.isArray(state.issues)?state.issues:[]});
         }
         if(path==="/api/customer-location/migration/start"&&request.method==="POST"){
-          const payload=await farujSharedPayload(env);const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
+          const payload=await farujSharedPayload(env);
+          const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
           const fingerprint=await farujFingerprint(customers);
-          let state=await farujMigrationState(env);
-          if(state.status==="complete"&&(!Array.isArray(state.issues)||state.issues.length===0))return json({ok:true,status:"complete",total_customers:state.total_customers,customer_fingerprint:state.customer_fingerprint,next_offset:state.next_offset});
-          state=await farujWriteMigration(env,{status:customers.length?"running":"complete",customer_fingerprint:fingerprint,total_customers:customers.length,next_offset:0,issues:[]});
-          return json({ok:true,status:state.status,total_customers:customers.length,customer_fingerprint:fingerprint,next_offset:0});
+          const state=await farujMigrationState(env);
+
+          // Never restart or erase a saved migration cursor/issues on a normal Start click.
+          // This makes retries resume safely and prevents repeated scans of all legacy customers.
+          if(state.customer_fingerprint && String(state.customer_fingerprint)!==fingerprint){
+            return json({ok:false,error:"تغير سجل العملاء منذ آخر تهيئة. أوقفنا الاستكمال لحماية الروابط القديمة؛ يلزم مراجعة الحالة قبل بدء دورة جديدة.",code:"CUSTOMER_FINGERPRINT_CHANGED",total_customers:state.total_customers,next_offset:state.next_offset},409);
+          }
+          if(state.status==="complete" || state.status==="needs_review" || state.status==="running"){
+            return json({
+              ok:true,
+              status:state.status,
+              total_customers:Number(state.total_customers)||customers.length,
+              customer_fingerprint:state.customer_fingerprint||fingerprint,
+              next_offset:Number(state.next_offset)||0,
+              issues_count:Array.isArray(state.issues)?state.issues.length:0
+            });
+          }
+
+          const started=await farujWriteMigration(env,{
+            status:customers.length?"running":"complete",
+            customer_fingerprint:fingerprint,
+            total_customers:customers.length,
+            next_offset:0,
+            issues:[]
+          });
+          return json({ok:true,status:started.status,total_customers:customers.length,customer_fingerprint:fingerprint,next_offset:0});
         }
         if(path==="/api/customer-location/migration/batch"&&request.method==="POST"){
           const body=await request.json().catch(()=>null);if(!body)return json({ok:false,error:"بيانات الدفعة غير صالحة"},400);
