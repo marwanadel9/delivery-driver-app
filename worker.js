@@ -169,6 +169,13 @@ async function farujFingerprint(value){
  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
 }
 async function farujMigrationState(env){const h=await farujServiceHeaders(env);const r=await supabaseRequest("/rest/v1/faruj_customer_location_migration_v4?id=eq.1&select=*",{headers:h});const d=await r.json().catch(()=>null);if(!r.ok||!Array.isArray(d)||!d.length)throw new Error("جدول تهيئة مواقع العملاء غير جاهز؛ شغّل ملف SQL v4 أولًا");return d[0];}
+async function farujRegisteredLocationCodes(env){
+ const h=await farujServiceHeaders(env);
+ const r=await supabaseRequest("/rest/v1/faruj_customer_location_registry_v4?select=customer_code,original_url",{headers:h});
+ const d=await r.json().catch(()=>null);
+ if(!r.ok||!Array.isArray(d))throw new Error("تعذر قراءة سجل المواقع المحمية؛ أوقفنا الاستكمال دون تغيير الروابط");
+ return new Map(d.map(x=>[String(x.customer_code||"").trim(),String(x.original_url||"").trim()]));
+}
 async function farujWriteMigration(env,patch,expectedOffset){const h=await farujServiceHeaders(env);const q="/rest/v1/faruj_customer_location_migration_v4?id=eq.1"+(expectedOffset===undefined?"":"&next_offset=eq."+encodeURIComponent(expectedOffset));const r=await supabaseRequest(q,{method:"PATCH",headers:Object.assign({},h,{Prefer:"return=representation"}),body:JSON.stringify(Object.assign({},patch,{updated_at:new Date().toISOString()}))});const d=await r.json().catch(()=>null);if(!r.ok||!Array.isArray(d)||!d.length)throw new Error("تغير مؤشر التهيئة من طلب آخر؛ أعد قراءة الحالة قبل المتابعة");return d[0];}
 async function farujWriteMigrationCAS(env,patch,expectedUpdatedAt){
  const h=await farujServiceHeaders(env);
@@ -646,14 +653,22 @@ export default {
           const state=await farujMigrationState(env);return json({ok:true,state,issues:Array.isArray(state.issues)?state.issues:[]});
         }
         if(path==="/api/customer-location/migration/start"&&request.method==="POST"){
-          // اقرأ الحالة أولًا حتى لا يعتمد الاستكمال على قراءة payload كبير قبل معرفة المؤشر المحفوظ.
           const state=await farujMigrationState(env);
-          if(state.status==="complete" || state.status==="needs_review" || state.status==="running"){
-            return json({ok:true,status:state.status,total_customers:Number(state.total_customers)||0,customer_fingerprint:state.customer_fingerprint||"",next_offset:Number(state.next_offset)||0,issues_count:Array.isArray(state.issues)?state.issues.length:0});
-          }
           const payload=await farujSharedPayload(env);
           const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
           const fingerprint=await farujFingerprint(customers);
+          const oldFingerprint=String(state.customer_fingerprint||"");
+          if(oldFingerprint && oldFingerprint!==fingerprint){
+            // قائمة العملاء تغيّرت (مثل حذف عميل مكرر). نعيد تأسيس مؤشر الفحص على القائمة الحالية فقط.
+            // لا نمسح سجل المواقع المحمية؛ نحتفظ بالحالات التي تخص أكوادًا ما زالت موجودة.
+            const activeCodes=new Set(customers.map(c=>String(c&&c.code||"").trim()).filter(Boolean));
+            const keptIssues=(Array.isArray(state.issues)?state.issues:[]).filter(x=>!x.customer_code||activeCodes.has(String(x.customer_code).trim()));
+            const rebased=await farujWriteMigration(env,{status:customers.length?"running":(keptIssues.length?"needs_review":"complete"),customer_fingerprint:fingerprint,total_customers:customers.length,next_offset:0,issues:keptIssues});
+            return json({ok:true,status:rebased.status,total_customers:customers.length,customer_fingerprint:fingerprint,next_offset:0,issues_count:keptIssues.length,rebased:true,message:"تمت مواءمة مؤشر التهيئة مع قائمة العملاء الحالية دون حذف سجل المواقع المحمية"});
+          }
+          if(state.status==="complete" || state.status==="needs_review" || state.status==="running"){
+            return json({ok:true,status:state.status,total_customers:Number(state.total_customers)||customers.length,customer_fingerprint:state.customer_fingerprint||fingerprint,next_offset:Number(state.next_offset)||0,issues_count:Array.isArray(state.issues)?state.issues.length:0});
+          }
           const started=await farujWriteMigration(env,{status:customers.length?"running":"complete",customer_fingerprint:fingerprint,total_customers:customers.length,next_offset:0,issues:[]});
           return json({ok:true,status:started.status,total_customers:customers.length,customer_fingerprint:fingerprint,next_offset:0});
         }
@@ -662,14 +677,15 @@ export default {
           const state=await farujMigrationState(env);if(state.status!=="running")return json({ok:false,error:"لا توجد عملية تهيئة جارية"},409);
           if(String(body.customer_fingerprint||"")!==String(state.customer_fingerprint||""))return json({ok:false,error:"بصمة سجل العملاء تغيرت؛ أعد بدء التهيئة"},409);
           const offset=Number(body.offset),limit=Math.max(1,Math.min(4,Number(body.limit)||4));if(!Number.isInteger(offset)||offset!==Number(state.next_offset))return json({ok:false,error:"مؤشر الدفعة غير مطابق للحالة الحالية"},409);
-          const payload=await farujSharedPayload(env);const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
-          const snapshotCount=Number(state.total_customers)||0;
-          if(customers.length<snapshotCount)return json({ok:false,error:"قائمة العملاء الأصلية أصبحت أقصر من نقطة بداية التهيئة؛ أوقفنا الدفعة دون تعديل",code:"CUSTOMER_SNAPSHOT_CHANGED"},409);
-          const migrationCustomers=customers.slice(0,snapshotCount);
+          const payload=await farujSharedPayload(env);const migrationCustomers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
           const fingerprint=await farujFingerprint(migrationCustomers);
-          if(fingerprint!==state.customer_fingerprint)return json({ok:false,error:"تغير سجل العملاء الأصلي أثناء التهيئة؛ لم نعتمد هذه الدفعة",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
-          const issues=Array.isArray(state.issues)?state.issues.slice():[];const batch=migrationCustomers.slice(offset,offset+limit);
+          if(fingerprint!==state.customer_fingerprint)return json({ok:false,error:"تغير سجل العملاء أثناء التهيئة؛ أوقفنا الدفعة دون تعديل أي رابط. اضغط تهيئة مرة واحدة لمواءمة المؤشر مع القائمة الحالية.",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
+          const issues=Array.isArray(state.issues)?state.issues.slice():[];const issueCodes=new Set(issues.map(x=>String(x&&x.customer_code||"").trim()).filter(Boolean));
+          const registered=await farujRegisteredLocationCodes(env);
+          const batch=migrationCustomers.slice(offset,offset+limit);
           for(const c of batch){const code=String(c&&c.code||"").trim(),map=String(c&&c.map||"").trim();if(!code){if(map)issues.push({customer_code:"",customer_name:String(c&&c.name||""),issue_type:"missing_code",details:"عميل لديه رابط موقع دون كود عميل"});continue;}if(!map){try{await farujRpc(env,"faruj_release_customer_location_v4",{p_customer_code:code});}catch(e){issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"release_failed",details:String(e.message||e).slice(0,300)});}continue;}
+            // لا نعيد فك رابط عميل تم توثيقه بنفس الرابط؛ ولا نعيد الحالات التي تنتظر مراجعة بشرية/إعادة محاولة.
+            if(registered.get(code)===map || issueCodes.has(code))continue;
             try{const p=await farujResolveGoogleMap(map);const claim=await farujRpc(env,"faruj_claim_customer_location_v4",{p_customer_code:code,p_latitude:p.lat,p_longitude:p.lng,p_original_url:map});const row=Array.isArray(claim)?claim[0]:claim;if(!row||row.success!==true)issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"duplicate",details:"إحداثيات مطابقة للعميل "+(row&&row.other_customer_code||"آخر")});}
             catch(e){issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"unresolved",details:String(e.message||e).slice(0,300)});}
           }
@@ -683,9 +699,7 @@ export default {
           if(String(body&&body.customer_fingerprint||"")!==String(state.customer_fingerprint||""))return json({ok:false,error:"بصمة سجل العملاء غير مطابقة؛ لم نغيّر أي سجل",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
           const payload=await farujSharedPayload(env);
           const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
-          const snapshotCount=Number(state.total_customers)||0;
-          if(customers.length<snapshotCount)return json({ok:false,error:"قائمة العملاء الأصلية أصبحت أقصر من نقطة بداية التهيئة؛ لم نعد المحاولة",code:"CUSTOMER_SNAPSHOT_CHANGED"},409);
-          const migrationCustomers=customers.slice(0,snapshotCount);
+          const migrationCustomers=customers;
           const fingerprint=await farujFingerprint(migrationCustomers);
           if(fingerprint!==String(state.customer_fingerprint||""))return json({ok:false,error:"تغير سجل العملاء الأصلي بعد الفحص؛ أوقفنا إعادة المحاولة لحماية الروابط الأصلية",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
           const issues=Array.isArray(state.issues)?state.issues.slice():[];
