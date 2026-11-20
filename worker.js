@@ -616,7 +616,7 @@ export default {
             try{const p=await farujResolveGoogleMap(map);const claim=await farujRpc(env,"faruj_claim_customer_location_v4",{p_customer_code:code,p_latitude:p.lat,p_longitude:p.lng,p_original_url:map});const row=Array.isArray(claim)?claim[0]:claim;if(!row||row.success!==true)issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"duplicate",details:"إحداثيات مطابقة للعميل "+(row&&row.other_customer_code||"آخر")});}
             catch(e){issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"unresolved",details:String(e.message||e).slice(0,300)});}
           }
-          const next=Math.min(customers.length,offset+batch.length);const done=next>=customers.length;const nextState=await farujWriteMigration(env,{next_offset:next,issues,status:done?"complete":"running"},offset);
+          const next=Math.min(customers.length,offset+batch.length);const done=next>=customers.length;const finalStatus=done?(issues.length?"needs_review":"complete"):"running";const nextState=await farujWriteMigration(env,{next_offset:next,issues,status:finalStatus},offset);
           return json({ok:true,processed:batch.length,next_offset:next,total_customers:customers.length,status:nextState.status,issues_count:issues.length});
         }
         return json({ok:false,error:"مسار حماية المواقع غير معروف"},404);
