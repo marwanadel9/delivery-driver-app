@@ -576,6 +576,7 @@ export default {
     try {
       // Customer location protection v4: exact canonical coordinate equality only.
       if (path.startsWith("/api/customer-location/")) {
+        try {
         const supplied=request.headers.get("X-Excel-Sync-Secret")||"";
         if(!env.EXCEL_SYNC_SECRET||supplied!==env.EXCEL_SYNC_SECRET)return json({ok:false,error:"غير مصرح"},401);
         if(path==="/api/customer-location/check"&&request.method==="POST"){
@@ -619,6 +620,15 @@ export default {
           return json({ok:true,processed:batch.length,next_offset:next,total_customers:customers.length,status:nextState.status,issues_count:issues.length});
         }
         return json({ok:false,error:"مسار حماية المواقع غير معروف"},404);
+        } catch (locationError) {
+          const diagnostic = String(locationError && locationError.message || locationError || "unknown").slice(0, 350);
+          try { console.error("Faruj customer-location route failed:", path, diagnostic); } catch (_) {}
+          return json({
+            ok: false,
+            code: "CUSTOMER_LOCATION_INTERNAL",
+            error: "تعذر تنفيذ فحص موقع العميل: " + diagnostic
+          }, 500);
+        }
       }
 
       if (
