@@ -751,8 +751,19 @@ export default {
           const meta=await farujMigrationPage(env,0,0);
           const fingerprint=meta.snapshot_token;
           const oldFingerprint=String(state.customer_fingerprint||"");
-          if((state.status==="running"||state.status==="needs_review"||state.status==="complete") && oldFingerprint===fingerprint){
+          if((state.status==="running"||state.status==="complete") && oldFingerprint===fingerprint){
             return json({ok:true,status:state.status,total_customers:Number(state.total_customers)||meta.total_customers,customer_fingerprint:fingerprint,next_offset:Number(state.next_offset)||0,issues_count:Array.isArray(state.issues)?state.issues.length:0,resumed:state.status==="running"});
+          }
+          // If a previous pass ended in needs_review, start a controlled second pass
+          // from offset zero. Existing duplicate issues are revalidated; transient 429
+          // issues remain held for the dedicated cooldown retry endpoint.
+          if(state.status==="needs_review" && oldFingerprint===fingerprint){
+            const saved=await farujWriteMigrationCAS(env,{
+              status:"running",customer_fingerprint:fingerprint,
+              total_customers:meta.total_customers,next_offset:0,
+              issues:Array.isArray(state.issues)?state.issues:[]
+            },state.updated_at);
+            return json({ok:true,status:saved.status,total_customers:meta.total_customers,customer_fingerprint:fingerprint,next_offset:0,issues_count:Array.isArray(saved.issues)?saved.issues.length:(Array.isArray(state.issues)?state.issues.length:0),recheck:true});
           }
           // A changed customer-list snapshot or an older v4 hash is rebased safely.
           // Keep every existing issue; never discard review history during rebase.
@@ -789,13 +800,30 @@ export default {
           const batch=page.customers;
           if(offset<page.total_customers&&!batch.length)return json({ok:false,error:"تعذر تحميل العميل التالي من صفحة التهيئة؛ لم يتم تحريك المؤشر"},503);
           const issues=Array.isArray(state.issues)?state.issues.slice():[];
-          const issueCodes=new Set(issues.map(x=>String(x&&x.customer_code||"").trim()).filter(Boolean));
           const registered=await farujRegisteredLocationCodes(env,batch.map(c=>c&&c.code));
           for(const c of batch){
             const code=String(c&&c.code||"").trim(),map=String(c&&c.map||"").trim();
-            if(!code){if(map)issues.push({customer_code:"",customer_name:String(c&&c.name||""),issue_type:"missing_code",details:"عميل لديه رابط موقع دون كود عميل"});continue;}
-            if(!map){try{await farujRpc(env,"faruj_release_customer_location_v4",{p_customer_code:code});}catch(e){issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"release_failed",details:String(e.message||e).slice(0,300)});}continue;}
-            if(registered.get(code)===map || issueCodes.has(code))continue;
+            if(!code){if(map&&!issues.some(x=>!String(x&&x.customer_code||"").trim()&&String(x&&x.issue_type||"")==="missing_code"))issues.push({customer_code:"",customer_name:String(c&&c.name||""),issue_type:"missing_code",details:"عميل لديه رابط موقع دون كود عميل"});continue;}
+            const oldIssueIndex=issues.findIndex(x=>String(x&&x.customer_code||"").trim()===code);
+            const oldIssue=oldIssueIndex>=0?issues[oldIssueIndex]:null;
+            if(!map){
+              try{
+                await farujRpc(env,"faruj_release_customer_location_v4",{p_customer_code:code});
+                if(oldIssueIndex>=0)issues.splice(oldIssueIndex,1);
+              }catch(e){
+                const item={customer_code:code,customer_name:String(c.name||""),issue_type:"release_failed",details:String(e.message||e).slice(0,300)};
+                if(oldIssueIndex>=0)issues[oldIssueIndex]=item;else issues.push(item);
+              }
+              continue;
+            }
+            if(registered.get(code)===map){
+              if(oldIssue&&oldIssue.issue_type==="duplicate")issues.splice(oldIssueIndex,1);
+              continue;
+            }
+            // Re-check prior duplicate issues on a controlled second pass. Keep
+            // unresolved 429s and other review items for their dedicated workflows.
+            if(oldIssue && oldIssue.issue_type!=="duplicate")continue;
+            if(oldIssueIndex>=0)issues.splice(oldIssueIndex,1);
             try{
               const resolved=await farujResolveGoogleMap(map);
               const claim=await farujRpc(env,"faruj_claim_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng,p_original_url:map});
@@ -995,6 +1023,18 @@ export default {
           if (saved && saved.success === true && saved.conflict !== true && saved.updated_at) {
             const mapChanged = action === "update" && String(expected && expected.map || "").trim() !== String(proposed && proposed.map || "").trim();
             let migrationIssueCleared = null;
+            let locationRegistryReleased = null;
+            if (action === "delete") {
+              // Release the deleted customer's unique location claim only after the
+              // cloud customer deletion is committed. Never touch another customer's row.
+              try {
+                await farujRpc(env, "faruj_release_customer_location_v4", { p_customer_code: code });
+                locationRegistryReleased = true;
+              } catch (releaseError) {
+                locationRegistryReleased = false;
+                try { console.error("Customer deleted; location registry cleanup deferred:", String(releaseError && releaseError.message || releaseError)); } catch (_) {}
+              }
+            }
             if (action === "delete" || mapChanged) {
               // Bookkeeping is secondary to the committed customer update.
               // A bookkeeping failure must not turn a successful cloud save into a false failure.
@@ -1004,7 +1044,7 @@ export default {
                 migrationIssueCleared = false;
               }
             }
-            return json({ ok: true, action, customer_code: code, already_applied: false, updated_at: saved.updated_at, source_device: saved.source_device || body.source_device || "desktop-customer", migration_issue_cleared: migrationIssueCleared, duplicate_copies_collapsed: duplicateCopiesCollapsed });
+            return json({ ok: true, action, customer_code: code, already_applied: false, updated_at: saved.updated_at, source_device: saved.source_device || body.source_device || "desktop-customer", migration_issue_cleared: migrationIssueCleared, location_registry_released: locationRegistryReleased, duplicate_copies_collapsed: duplicateCopiesCollapsed });
           }
           lastConflict = saved || null;
           if (!(saved && saved.conflict === true) || attempt === 3) break;
