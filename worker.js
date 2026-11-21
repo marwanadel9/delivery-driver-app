@@ -188,6 +188,22 @@ async function farujFingerprint(value){
  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
 }
 async function farujMigrationState(env){const h=await farujServiceHeaders(env);const r=await supabaseRequest("/rest/v1/faruj_customer_location_migration_v4?id=eq.1&select=*",{headers:h});const d=await r.json().catch(()=>null);if(!r.ok||!Array.isArray(d)||!d.length)throw new Error("جدول تهيئة مواقع العملاء غير جاهز؛ شغّل ملف SQL v4 أولًا");return d[0];}
+// Fetch only a tiny server-side page from the customer array. The full shared
+// payload never crosses into the Worker during migration start/batch/retry.
+async function farujMigrationPage(env, offset, limit){
+ const d=await farujRpc(env,"faruj_customer_location_migration_page_v1",{
+  p_offset:Math.max(0,Number(offset)||0),p_limit:Math.max(0,Math.min(1,Number(limit)||0))
+ });
+ if(!d||typeof d!=="object"||!Array.isArray(d.customers)||!d.snapshot_token)
+  throw new Error("تعذر قراءة صفحة العملاء الصغيرة للتهيئة؛ تأكد من تثبيت دالة v47 في Supabase");
+ return {customers:d.customers,total_customers:Number(d.total_customers)||0,snapshot_token:String(d.snapshot_token)};
+}
+async function farujMigrationCustomer(env, customerCode){
+ const d=await farujRpc(env,"faruj_customer_location_migration_customer_v1",{p_customer_code:String(customerCode||"").trim()});
+ if(!d||typeof d!=="object"||!d.snapshot_token)
+  throw new Error("تعذر قراءة العميل المطلوب لإعادة المحاولة؛ تأكد من تثبيت دالة v47 في Supabase");
+ return {customer:d.customer&&typeof d.customer==="object"?d.customer:null,snapshot_token:String(d.snapshot_token)};
+}
 async function farujRegisteredLocationCodes(env, customerCodes){
  // Read only the current batch's customer codes. Fetching the entire registry on
  // every batch needlessly grows memory and response size as the registry expands.
@@ -679,7 +695,7 @@ export default {
     // أدناه، مع بقاء التحقق من جلسة وصلاحيات حساب الماستر داخل كل مسار.
 
     try {
-      // Customer location protection v4.9: exact canonical coordinate equality only.
+      // Customer location protection v4.10: exact canonical coordinate equality only.
       if (path.startsWith("/api/customer-location/")) {
         try {
         const supplied=request.headers.get("X-Excel-Sync-Secret")||"";
@@ -723,102 +739,126 @@ export default {
           const state=await farujMigrationState(env);return json({ok:true,state,issues:Array.isArray(state.issues)?state.issues:[]});
         }
         if(path==="/api/customer-location/migration/start"&&request.method==="POST"){
+          // Idempotent, lightweight start: no full payload download and no Worker-side
+          // SHA-256 over the complete customer array. The database returns only count+token.
           const state=await farujMigrationState(env);
-          const payload=await farujSharedPayload(env);
-          const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
-          const fingerprint=await farujFingerprint(customers);
+          // Once v47 has started, repeated clicks/requests (even every second)
+          // return the saved cursor immediately without re-reading or hashing customers.
+          // Older v4/v46 SHA-256 fingerprints are 64 hex chars and get one-time rebasing.
+          if(state.status==="running" && /^[a-f0-9]{32}$/i.test(String(state.customer_fingerprint||""))){
+            return json({ok:true,status:state.status,total_customers:Number(state.total_customers)||0,customer_fingerprint:String(state.customer_fingerprint),next_offset:Number(state.next_offset)||0,issues_count:Array.isArray(state.issues)?state.issues.length:0,resumed:true,already_running:true});
+          }
+          const meta=await farujMigrationPage(env,0,0);
+          const fingerprint=meta.snapshot_token;
           const oldFingerprint=String(state.customer_fingerprint||"");
-          if(oldFingerprint && oldFingerprint!==fingerprint){
-            // قائمة العملاء تغيّرت (مثل حذف عميل مكرر). نعيد تأسيس مؤشر الفحص على القائمة الحالية فقط.
-            // لا نمسح سجل المواقع المحمية؛ نحتفظ بالحالات التي تخص أكوادًا ما زالت موجودة.
-            const activeCodes=new Set(customers.map(c=>String(c&&c.code||"").trim()).filter(Boolean));
-            const keptIssues=(Array.isArray(state.issues)?state.issues:[]).filter(x=>!x.customer_code||activeCodes.has(String(x.customer_code).trim()));
-            const rebased=await farujWriteMigration(env,{status:customers.length?"running":(keptIssues.length?"needs_review":"complete"),customer_fingerprint:fingerprint,total_customers:customers.length,next_offset:0,issues:keptIssues});
-            return json({ok:true,status:rebased.status,total_customers:customers.length,customer_fingerprint:fingerprint,next_offset:0,issues_count:keptIssues.length,rebased:true,message:"تمت مواءمة مؤشر التهيئة مع قائمة العملاء الحالية دون حذف سجل المواقع المحمية"});
+          if((state.status==="running"||state.status==="needs_review"||state.status==="complete") && oldFingerprint===fingerprint){
+            return json({ok:true,status:state.status,total_customers:Number(state.total_customers)||meta.total_customers,customer_fingerprint:fingerprint,next_offset:Number(state.next_offset)||0,issues_count:Array.isArray(state.issues)?state.issues.length:0,resumed:state.status==="running"});
           }
-          if(state.status==="complete" || state.status==="needs_review" || state.status==="running"){
-            return json({ok:true,status:state.status,total_customers:Number(state.total_customers)||customers.length,customer_fingerprint:state.customer_fingerprint||fingerprint,next_offset:Number(state.next_offset)||0,issues_count:Array.isArray(state.issues)?state.issues.length:0});
+          // A changed customer-list snapshot or an older v4 hash is rebased safely.
+          // Keep every existing issue; never discard review history during rebase.
+          const keptIssues=Array.isArray(state.issues)?state.issues:[];
+          const patch={
+            status:meta.total_customers?"running":(keptIssues.length?"needs_review":"complete"),
+            customer_fingerprint:fingerprint,
+            total_customers:meta.total_customers,
+            next_offset:0,
+            issues:keptIssues
+          };
+          let saved;
+          try{
+            saved=await farujWriteMigrationCAS(env,patch,state.updated_at);
+          }catch(startConflict){
+            // Another tab/device may have started at the same moment. Read and return
+            // the winner's state instead of launching another expensive initialization.
+            const current=await farujMigrationState(env);
+            return json({ok:true,status:current.status,total_customers:Number(current.total_customers)||meta.total_customers,customer_fingerprint:String(current.customer_fingerprint||fingerprint),next_offset:Number(current.next_offset)||0,issues_count:Array.isArray(current.issues)?current.issues.length:0,resumed:true,concurrent_start:true});
           }
-          const started=await farujWriteMigration(env,{status:customers.length?"running":"complete",customer_fingerprint:fingerprint,total_customers:customers.length,next_offset:0,issues:[]});
-          return json({ok:true,status:started.status,total_customers:customers.length,customer_fingerprint:fingerprint,next_offset:0});
+          return json({ok:true,status:saved.status,total_customers:meta.total_customers,customer_fingerprint:fingerprint,next_offset:Number(saved.next_offset)||0,issues_count:keptIssues.length,rebased:!!oldFingerprint});
         }
         if(path==="/api/customer-location/migration/batch"&&request.method==="POST"){
           const body=await request.json().catch(()=>null);if(!body)return json({ok:false,error:"بيانات الدفعة غير صالحة"},400);
           const state=await farujMigrationState(env);if(state.status!=="running")return json({ok:false,error:"لا توجد عملية تهيئة جارية"},409);
-          if(String(body.customer_fingerprint||"")!==String(state.customer_fingerprint||""))return json({ok:false,error:"بصمة سجل العملاء تغيرت؛ أعد بدء التهيئة"},409);
-          // One customer per invocation keeps CPU/memory bounded and avoids
-          // multiple Google Maps redirect chains inside a single Worker request.
-          const offset=Number(body.offset),limit=1;if(!Number.isInteger(offset)||offset!==Number(state.next_offset))return json({ok:false,error:"مؤشر الدفعة غير مطابق للحالة الحالية"},409);
-          const payload=await farujSharedPayload(env);const migrationCustomers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
-          const fingerprint=await farujFingerprint(migrationCustomers);
-          if(fingerprint!==state.customer_fingerprint)return json({ok:false,error:"تغير سجل العملاء أثناء التهيئة؛ أوقفنا الدفعة دون تعديل أي رابط. اضغط تهيئة مرة واحدة لمواءمة المؤشر مع القائمة الحالية.",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
-          const issues=Array.isArray(state.issues)?state.issues.slice():[];const issueCodes=new Set(issues.map(x=>String(x&&x.customer_code||"").trim()).filter(Boolean));
-          const batch=migrationCustomers.slice(offset,offset+limit);
-          const registered=await farujRegisteredLocationCodes(env,batch.map(c=>c&&c.code));
-          for(const c of batch){const code=String(c&&c.code||"").trim(),map=String(c&&c.map||"").trim();if(!code){if(map)issues.push({customer_code:"",customer_name:String(c&&c.name||""),issue_type:"missing_code",details:"عميل لديه رابط موقع دون كود عميل"});continue;}if(!map){try{await farujRpc(env,"faruj_release_customer_location_v4",{p_customer_code:code});}catch(e){issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"release_failed",details:String(e.message||e).slice(0,300)});}continue;}
-            // لا نعيد فك رابط عميل تم توثيقه بنفس الرابط؛ ولا نعيد الحالات التي تنتظر مراجعة بشرية/إعادة محاولة.
-            if(registered.get(code)===map || issueCodes.has(code))continue;
-            try{const p=await farujResolveGoogleMap(map);const claim=await farujRpc(env,"faruj_claim_customer_location_v4",{p_customer_code:code,p_latitude:p.lat,p_longitude:p.lng,p_original_url:map});const row=Array.isArray(claim)?claim[0]:claim;if(!row||row.success!==true)issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"duplicate",details:"إحداثيات مطابقة للعميل "+(row&&row.other_customer_code||"آخر")});}
-            catch(e){issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"unresolved",details:String(e.message||e).slice(0,300)});}
+          if(String(body.customer_fingerprint||"")!==String(state.customer_fingerprint||""))return json({ok:false,error:"بصمة سجل العملاء غير مطابقة؛ لم نغيّر أي سجل",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
+          const offset=Number(body.offset);
+          if(!Number.isInteger(offset)||offset!==Number(state.next_offset))return json({ok:false,error:"مؤشر الدفعة غير مطابق للحالة الحالية"},409);
+          // The database returns exactly one customer and a lightweight snapshot token.
+          const page=await farujMigrationPage(env,offset,1);
+          if(page.snapshot_token!==String(state.customer_fingerprint||"") || page.total_customers!==Number(state.total_customers)){
+            return json({ok:false,error:"تغيرت قائمة العملاء أثناء التهيئة؛ أوقفنا الدفعة دون تعديل أي رابط. ابدأ التهيئة لمواءمة المؤشر.",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
           }
-          const next=Math.min(migrationCustomers.length,offset+batch.length);const done=next>=migrationCustomers.length;const finalStatus=done?(issues.length?"needs_review":"complete"):"running";const nextState=await farujWriteMigration(env,{next_offset:next,issues,status:finalStatus},offset);
-          return json({ok:true,processed:batch.length,next_offset:next,total_customers:migrationCustomers.length,status:nextState.status,issues_count:issues.length});
+          const batch=page.customers;
+          if(offset<page.total_customers&&!batch.length)return json({ok:false,error:"تعذر تحميل العميل التالي من صفحة التهيئة؛ لم يتم تحريك المؤشر"},503);
+          const issues=Array.isArray(state.issues)?state.issues.slice():[];
+          const issueCodes=new Set(issues.map(x=>String(x&&x.customer_code||"").trim()).filter(Boolean));
+          const registered=await farujRegisteredLocationCodes(env,batch.map(c=>c&&c.code));
+          for(const c of batch){
+            const code=String(c&&c.code||"").trim(),map=String(c&&c.map||"").trim();
+            if(!code){if(map)issues.push({customer_code:"",customer_name:String(c&&c.name||""),issue_type:"missing_code",details:"عميل لديه رابط موقع دون كود عميل"});continue;}
+            if(!map){try{await farujRpc(env,"faruj_release_customer_location_v4",{p_customer_code:code});}catch(e){issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"release_failed",details:String(e.message||e).slice(0,300)});}continue;}
+            if(registered.get(code)===map || issueCodes.has(code))continue;
+            try{
+              const resolved=await farujResolveGoogleMap(map);
+              const claim=await farujRpc(env,"faruj_claim_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng,p_original_url:map});
+              const row=Array.isArray(claim)?claim[0]:claim;
+              if(!row||row.success!==true)issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"duplicate",details:"إحداثيات مطابقة للعميل "+(row&&row.other_customer_code||"آخر")});
+            }catch(e){
+              issues.push({customer_code:code,customer_name:String(c.name||""),issue_type:"unresolved",details:String(e.message||e).slice(0,300)});
+            }
+          }
+          const next=Math.min(page.total_customers,offset+batch.length);
+          const done=next>=page.total_customers;
+          const finalStatus=done?(issues.length?"needs_review":"complete"):"running";
+          let nextState;
+          try{
+            nextState=await farujWriteMigrationCAS(env,{next_offset:next,issues,status:finalStatus},state.updated_at);
+          }catch(commitConflict){
+            const latest=await farujMigrationState(env);
+            if(Number(latest.next_offset)>offset){
+              return json({ok:true,processed:0,next_offset:Number(latest.next_offset),total_customers:Number(latest.total_customers)||page.total_customers,status:latest.status,issues_count:Array.isArray(latest.issues)?latest.issues.length:0,duplicate_request:true});
+            }
+            throw commitConflict;
+          }
+          return json({ok:true,processed:batch.length,next_offset:next,total_customers:page.total_customers,status:nextState.status,issues_count:issues.length});
         }
         if(path==="/api/customer-location/migration/retry-rate-limited"&&request.method==="POST"){
           const state=await farujMigrationState(env);
           if(state.status!=="needs_review")return json({ok:false,error:"لا توجد حالات مكتملة تنتظر إعادة محاولة روابط Google المؤقتة",code:"NO_RETRY_REVIEW"},409);
           const body=await request.json().catch(()=>({}));
           if(String(body&&body.customer_fingerprint||"")!==String(state.customer_fingerprint||""))return json({ok:false,error:"بصمة سجل العملاء غير مطابقة؛ لم نغيّر أي سجل",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
-          const payload=await farujSharedPayload(env);
-          const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
-          const migrationCustomers=customers;
-          const fingerprint=await farujFingerprint(migrationCustomers);
-          if(fingerprint!==String(state.customer_fingerprint||""))return json({ok:false,error:"تغير سجل العملاء الأصلي بعد الفحص؛ أوقفنا إعادة المحاولة لحماية الروابط الأصلية",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
           const issues=Array.isArray(state.issues)?state.issues.slice():[];
-          const retryIndexes=[];
-          let cooldownSeconds=0;
-          const nowMs=Date.now();
+          const retryIndexes=[];let cooldownSeconds=0;const nowMs=Date.now();
           for(let i=0;i<issues.length;i++){
             const it=issues[i]||{};
-            if(String(it.issue_type||"")!=="unresolved" || !/HTTP\s*429|rate.?limit|معدل الطلبات/i.test(String(it.details||"")))continue;
+            if(String(it.issue_type||"")!=="unresolved" || !/HTTP\\s*429|rate.?limit|معدل الطلبات/i.test(String(it.details||"")))continue;
             const lastRetry=Date.parse(String(it.last_retry_at||""));
             const requiredWait=Math.max(5,Math.min(900,Number(it.retry_after_seconds)||60));
-            if(Number.isFinite(lastRetry) && nowMs<lastRetry+requiredWait*1000){
-              cooldownSeconds=Math.max(cooldownSeconds,Math.ceil((lastRetry+requiredWait*1000-nowMs)/1000));
-              break; // لا نرسل طلبات Google أخرى قبل انتهاء مهلة الحظر السابقة.
-            }
-            retryIndexes.push(i);
-            if(retryIndexes.length>=2)break;
+            if(Number.isFinite(lastRetry)&&nowMs<lastRetry+requiredWait*1000){cooldownSeconds=Math.max(cooldownSeconds,Math.ceil((lastRetry+requiredWait*1000-nowMs)/1000));break;}
+            retryIndexes.push(i);if(retryIndexes.length>=1)break;
           }
-          if(cooldownSeconds>0)return json({ok:true,retried:0,rate_limited:true,retry_after_seconds:cooldownSeconds,retryable_remaining:issues.filter(x=>String(x.issue_type||"")==="unresolved"&&/HTTP\s*429|rate.?limit|معدل الطلبات/i.test(String(x.details||""))).length,issues_count:issues.length,status:state.status,message:"يجب احترام مهلة Google قبل المحاولة التالية."});
+          const retryableCount=issues.filter(x=>String(x.issue_type||"")==="unresolved"&&/HTTP\\s*429|rate.?limit|معدل الطلبات/i.test(String(x.details||""))).length;
+          if(cooldownSeconds>0)return json({ok:true,retried:0,rate_limited:true,retry_after_seconds:cooldownSeconds,retryable_remaining:retryableCount,issues_count:issues.length,status:state.status,message:"يجب احترام مهلة Google قبل المحاولة التالية."});
           if(!retryIndexes.length)return json({ok:true,retried:0,retryable_remaining:0,issues_count:issues.length,status:state.status,message:"لا توجد أخطاء HTTP 429 قابلة لإعادة المحاولة تلقائيًا؛ باقي الحالات تحتاج مراجعة يدوية."});
           let retried=0,resolvedCount=0,duplicateCount=0,rateLimited=false,retryAfterSec=0;
           for(const idx of retryIndexes){
-            const oldIssue=issues[idx]||{};
-            const code=String(oldIssue.customer_code||"").trim();
-            const customer=migrationCustomers.find(c=>String(c&&c.code||"").trim()===code);
-            if(!code||!customer||!String(customer.map||"").trim()){
-              issues[idx]=Object.assign({},oldIssue,{details:"تعذر العثور على العميل أو رابطه الأصلي في السجل الحالي؛ لم يتم تعديل الرابط."});
-              continue;
-            }
+            const oldIssue=issues[idx]||{};const code=String(oldIssue.customer_code||"").trim();
+            const snapshot=await farujMigrationCustomer(env,code);
+            if(snapshot.snapshot_token!==String(state.customer_fingerprint||""))return json({ok:false,error:"تغير سجل العملاء الأصلي؛ أوقفنا إعادة المحاولة لحماية الروابط",code:"CUSTOMER_FINGERPRINT_CHANGED"},409);
+            const customer=snapshot.customer;
+            if(!code||!customer||!String(customer.map||"").trim()){issues[idx]=Object.assign({},oldIssue,{details:"تعذر العثور على العميل أو رابطه الأصلي في السجل الحالي؛ لم يتم تعديل الرابط."});continue;}
             retried++;
             try{
-              const resolved=await farujResolveGoogleMap(String(customer.map).trim());
-              const claim=await farujRpc(env,"faruj_claim_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng,p_original_url:String(customer.map).trim()});
+              const map=String(customer.map).trim();const resolved=await farujResolveGoogleMap(map);
+              const claim=await farujRpc(env,"faruj_claim_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng,p_original_url:map});
               const row=Array.isArray(claim)?claim[0]:claim;
               if(row&&row.success===true){issues[idx]=null;resolvedCount++;}
               else{issues[idx]=Object.assign({},oldIssue,{issue_type:"duplicate",details:"إحداثيات مطابقة للعميل "+String(row&&row.other_customer_code||"آخر")});duplicateCount++;}
             }catch(e){
               issues[idx]=Object.assign({},oldIssue,{details:String(e&&e.message||e).slice(0,300),retry_attempts:(Number(oldIssue.retry_attempts)||0)+1,last_retry_at:new Date().toISOString(),retry_after_seconds:e&&e.code==="MAP_RATE_LIMITED"?(Number(e.retryAfterSec)||60):undefined});
-              if(e&&e.code==="MAP_RATE_LIMITED"){
-                rateLimited=true;
-                retryAfterSec=Math.max(retryAfterSec,Number(e.retryAfterSec)||60);
-                break;
-              }
+              if(e&&e.code==="MAP_RATE_LIMITED"){rateLimited=true;retryAfterSec=Math.max(retryAfterSec,Number(e.retryAfterSec)||60);break;}
             }
           }
           const finalIssues=issues.filter(Boolean);
-          const stillRetryable=finalIssues.filter(x=>String(x.issue_type||"")==="unresolved"&&/HTTP\s*429|rate.?limit|معدل الطلبات/i.test(String(x.details||""))).length;
+          const stillRetryable=finalIssues.filter(x=>String(x.issue_type||"")==="unresolved"&&/HTTP\\s*429|rate.?limit|معدل الطلبات/i.test(String(x.details||""))).length;
           const saved=await farujWriteMigrationCAS(env,{issues:finalIssues,status:finalIssues.length?"needs_review":"complete"},state.updated_at);
           return json({ok:true,retried,resolved:resolvedCount,duplicates:duplicateCount,rate_limited:rateLimited,retry_after_seconds:retryAfterSec,retryable_remaining:stillRetryable,issues_count:finalIssues.length,status:saved.status,next_offset:Number(saved.next_offset)||0,total_customers:Number(saved.total_customers)||0});
         }
