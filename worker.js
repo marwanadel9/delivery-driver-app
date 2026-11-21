@@ -87,9 +87,12 @@ function farujCoordKey(lat,lng) { return farujCanonicalCoord(lat).toFixed(6)+","
 function farujDmsToDecimal(deg,min,sec,hem) { let v=Math.abs(Number(deg))+Number(min)/60+Number(sec)/3600; if(/[SW]/i.test(hem))v=-v; return farujCanonicalCoord(v); }
 function farujExtractCoords(text) {
  const s=String(text||""); let m;
- m=s.match(/@(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/);
- if(!m)m=s.match(/!3d(-?\d{1,2}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/);
+ // IMPORTANT: Google Maps @lat,lng is often only the map viewport center,
+ // not the selected place/pin. Prefer explicit place coordinates (!3d!4d),
+ // then explicit query coordinates, and use @ only as a last resort.
+ m=s.match(/!3d(-?\d{1,2}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/);
  if(!m)m=s.match(/[?&](?:q|query|destination|ll|center)=(-?\d{1,2}(?:\.\d+)?)(?:%2C|,|%252C)(-?\d{1,3}(?:\.\d+)?)/i);
+ if(!m)m=s.match(/@(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/);
  if(m){const lat=farujCanonicalCoord(m[1]),lng=farujCanonicalCoord(m[2]);if(Math.abs(lat)<=90&&Math.abs(lng)<=180)return {lat,lng};}
  // DMS text: 24°39'46.3"N 54°45'49.3"E (also accepts prime glyphs).
  const dms=/(-?\d{1,2})\s*°\s*(\d{1,2})\s*[′'’]\s*(\d{1,2}(?:\.\d+)?)\s*[″"”]?\s*([NS])[^\d-]{0,20}(-?\d{1,3})\s*°\s*(\d{1,2})\s*[′'’]\s*(\d{1,2}(?:\.\d+)?)\s*[″"”]?\s*([EW])/i;
@@ -667,7 +670,7 @@ export default {
     // أدناه، مع بقاء التحقق من جلسة وصلاحيات حساب الماستر داخل كل مسار.
 
     try {
-      // Customer location protection v4: exact canonical coordinate equality only.
+      // Customer location protection v4.8: exact canonical coordinate equality only.
       if (path.startsWith("/api/customer-location/")) {
         try {
         const supplied=request.headers.get("X-Excel-Sync-Secret")||"";
