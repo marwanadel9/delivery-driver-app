@@ -908,11 +908,20 @@ export default {
             customers.splice(matches[0], 1);
           }
 
-          const seenCodes = new Set();
-          for (const item of customers) {
-            const itemCode = String(item && item.code || "").trim();
-            if (!itemCode || seenCodes.has(itemCode)) return json({ ok: false, code: "CUSTOMER_CODE_DUPLICATE", error: "قائمة العملاء تحتوي على كود فارغ أو مكرر؛ لم نعتمد أي تعديل" }, 409);
-            seenCodes.add(itemCode);
+          // Validate only the customer being changed. Older cloud payloads may
+          // already contain unrelated legacy duplicate/blank codes; blocking every
+          // edit because of those unrelated rows makes a valid C197 update impossible.
+          // Do not rewrite, merge, or delete any unrelated customer record here.
+          const targetCodeCount = customers.reduce((count, item) =>
+            count + (String(item && item.code || "").trim() === code ? 1 : 0), 0);
+          if (action === "delete" ? targetCodeCount !== 0 : targetCodeCount !== 1) {
+            return json({
+              ok: false,
+              code: "CUSTOMER_TARGET_CODE_INVALID",
+              customer_code: code,
+              target_count: targetCodeCount,
+              error: "تعذر اعتماد تعديل العميل " + code + " لأن عدد سجلات هذا الكود بعد التعديل ليس سجلًا واحدًا. لم نغيّر أي سجل."
+            }, 409);
           }
           const payloadBytes = new TextEncoder().encode(JSON.stringify(payload)).byteLength;
           if (payloadBytes > 20 * 1024 * 1024) return json({ ok: false, error: "حجم التخزين المشترك تجاوز الحد المسموح" }, 413);
@@ -932,7 +941,15 @@ export default {
           if (saved && saved.success === true && saved.conflict !== true && saved.updated_at) {
             const mapChanged = action === "update" && String(expected && expected.map || "").trim() !== String(proposed && proposed.map || "").trim();
             let migrationIssueCleared = null;
-            if (action === "delete" || mapChanged) migrationIssueCleared = await farujClearCustomerMigrationIssue(env, code);
+            if (action === "delete" || mapChanged) {
+              // Bookkeeping is secondary to the committed customer update.
+              // A bookkeeping failure must not turn a successful cloud save into a false failure.
+              try { migrationIssueCleared = await farujClearCustomerMigrationIssue(env, code); }
+              catch (migrationError) {
+                try { console.error("Customer saved; migration issue cleanup deferred:", String(migrationError && migrationError.message || migrationError)); } catch (_) {}
+                migrationIssueCleared = false;
+              }
+            }
             return json({ ok: true, action, customer_code: code, already_applied: false, updated_at: saved.updated_at, source_device: saved.source_device || body.source_device || "desktop-customer", migration_issue_cleared: migrationIssueCleared, duplicate_copies_collapsed: duplicateCopiesCollapsed });
           }
           lastConflict = saved || null;
