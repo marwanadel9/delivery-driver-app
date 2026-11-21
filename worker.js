@@ -684,7 +684,20 @@ export default {
             const payload=await farujSharedPayload(env);
             const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
             const matches=customers.filter(c=>String(c&&c.code||"").trim()===code);
-            if(matches.length!==1)return json({ok:false,error:matches.length?"كود العميل مكرر في التخزين السحابي؛ لم نسمح بتعديل موقع ملتبس":"العميل غير موجود في التخزين السحابي؛ لا يمكن استخدام مسار تعديل موقع عميل موجود",code:matches.length?"CUSTOMER_CODE_DUPLICATE":"CUSTOMER_NOT_FOUND"},409);
+            if(!matches.length)return json({ok:false,error:"العميل غير موجود في التخزين السحابي؛ لا يمكن استخدام مسار تعديل موقع عميل موجود",code:"CUSTOMER_NOT_FOUND"},409);
+            if(matches.length>1){
+              // Allow the location pre-check to proceed only when every cloud copy
+              // is byte-for-byte equivalent (stable JSON) to the exact record the
+              // user opened. The commit endpoint repeats this check before collapse.
+              const expected=body.expected_customer;
+              const expectedValid=expected&&typeof expected==="object"&&!Array.isArray(expected)&&String(expected.code||"").trim()===code;
+              const firstJson=farujStableJson(matches[0]);
+              const allExactCopies=matches.every(item=>farujStableJson(item)===firstJson);
+              const matchesOpenedRecord=expectedValid&&firstJson===farujStableJson(expected);
+              if(!allExactCopies||!matchesOpenedRecord){
+                return json({ok:false,error:"يوجد أكثر من سجل للعميل "+code+" في التخزين السحابي، لكن النسخ ليست متطابقة تمامًا أو لا تطابق السجل المفتوح. لم نغيّر أي سجل؛ حدّث قائمة العملاء وراجع السجلات أولًا.",code:"CUSTOMER_CODE_DUPLICATE_CONFLICT",customer_code:code,duplicate_count:matches.length},409);
+              }
+            }
           }
           let resolved;try{resolved=await farujResolveGoogleMap(body.url);}catch(e){return json({ok:false,error:e.message,code:"LOCATION_RESOLVE_FAILED"},422);}
           const rows=await farujRpc(env,"faruj_check_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng});
