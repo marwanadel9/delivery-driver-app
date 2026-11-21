@@ -616,6 +616,26 @@ async function clearGatePhotosForInvoice(invoiceNumber, env) {
   return paths.length;
 }
 
+
+// After an existing customer's map is successfully changed (or the customer is deleted),
+// remove only that customer's obsolete migration issue. Keep every other issue and cursor.
+async function farujClearCustomerMigrationIssue(env, customerCode) {
+  const code = String(customerCode || "").trim();
+  if (!code) return false;
+  try {
+    const state = await farujMigrationState(env);
+    const issues = Array.isArray(state.issues) ? state.issues : [];
+    const kept = issues.filter(x => String(x && x.customer_code || "").trim() !== code);
+    if (kept.length === issues.length) return true;
+    const nextStatus = state.status === "running" ? "running" : (kept.length ? "needs_review" : "complete");
+    await farujWriteMigrationCAS(env, { issues: kept, status: nextStatus }, state.updated_at);
+    return true;
+  } catch (e) {
+    try { console.error("Customer saved but migration issue cleanup was deferred:", code, e && e.message || e); } catch (_) {}
+    return false;
+  }
+}
+
 export default {
   async fetch(request, env) {
     const missingSecret = checkSecrets(env);
@@ -656,14 +676,23 @@ export default {
           const body=await request.json().catch(()=>null);if(!body)return json({ok:false,error:"بيانات الطلب غير صالحة"},400);
           const code=String(body.customer_code||"").trim();if(!code)return json({ok:false,error:"كود العميل مطلوب"},400);
           const migration=await farujMigrationState(env);
-          if(migration.status!=="complete")return json({ok:false,error:"يجب إكمال تهيئة مواقع العملاء القديمة أولًا",code:"MIGRATION_REQUIRED"},409);
           const legacyIssues=Array.isArray(migration.issues)?migration.issues:[];
-          if(legacyIssues.some(x=>String(x.customer_code||"")!==code))return json({ok:false,error:"توجد مواقع قديمة تحتاج مراجعة. يمكن تصحيح العملاء الظاهرين في تقرير التهيئة أولًا، ولن نسمح بإضافة عميل جديد حتى تنتهي المراجعة.",code:"LEGACY_UNRESOLVED_BLOCK"},409);
+          const existingEdit=body.allow_existing_customer_edit===true;
+          if(migration.status==="running")return json({ok:false,error:"هناك دفعة تهيئة تعمل الآن. انتظر انتهاء الدفعة قبل تغيير رابط الموقع حتى لا تتداخل عمليتا الفحص والحجز.",code:"MIGRATION_RUNNING"},409);
+          if(migration.status!=="complete"&&!existingEdit)return json({ok:false,error:"إضافة رابط موقع لعميل جديد تتطلب اكتمال تهيئة المواقع القديمة أولًا. يمكن تعديل رابط عميل موجود من نافذة التعديل.",code:"MIGRATION_REQUIRED"},409);
+          if(existingEdit){
+            const payload=await farujSharedPayload(env);
+            const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
+            const matches=customers.filter(c=>String(c&&c.code||"").trim()===code);
+            if(matches.length!==1)return json({ok:false,error:matches.length?"كود العميل مكرر في التخزين السحابي؛ لم نسمح بتعديل موقع ملتبس":"العميل غير موجود في التخزين السحابي؛ لا يمكن استخدام مسار تعديل موقع عميل موجود",code:matches.length?"CUSTOMER_CODE_DUPLICATE":"CUSTOMER_NOT_FOUND"},409);
+          }
           let resolved;try{resolved=await farujResolveGoogleMap(body.url);}catch(e){return json({ok:false,error:e.message,code:"LOCATION_RESOLVE_FAILED"},422);}
           const rows=await farujRpc(env,"faruj_check_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng});
           const row=Array.isArray(rows)?rows[0]:rows;
           if(!row||row.available!==true)return json({ok:false,code:"CUSTOMER_LOCATION_DUPLICATE",other_customer_code:row&&row.other_customer_code||null,location_key:resolved.key,error:"الإحداثيات متطابقة مع موقع عميل مسجل"},409);
-          return json({ok:true,coords:[resolved.lat,resolved.lng],location_key:resolved.key,precision:6,match_mode:"exact"});
+          const otherIssues=legacyIssues.filter(x=>String(x&&x.customer_code||"").trim()!==code);
+          const unresolvedOther=otherIssues.filter(x=>String(x&&x.issue_type||"")==="unresolved").length;
+          return json({ok:true,coords:[resolved.lat,resolved.lng],location_key:resolved.key,precision:6,match_mode:"exact",migration_pending:migration.status==="running"||otherIssues.length>0,remaining_legacy_issues:otherIssues.length,unverified_legacy_customers:unresolvedOther,checked_against_registered_locations:true});
         }
         if(path==="/api/customer-location/migration/status"&&request.method==="GET"){
           const state=await farujMigrationState(env);return json({ok:true,state,issues:Array.isArray(state.issues)?state.issues:[]});
@@ -861,7 +890,10 @@ export default {
           }
           const saved = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
           if (saved && saved.success === true && saved.conflict !== true && saved.updated_at) {
-            return json({ ok: true, action, customer_code: code, already_applied: false, updated_at: saved.updated_at, source_device: saved.source_device || body.source_device || "desktop-customer" });
+            const mapChanged = action === "update" && String(expected && expected.map || "").trim() !== String(proposed && proposed.map || "").trim();
+            let migrationIssueCleared = null;
+            if (action === "delete" || mapChanged) migrationIssueCleared = await farujClearCustomerMigrationIssue(env, code);
+            return json({ ok: true, action, customer_code: code, already_applied: false, updated_at: saved.updated_at, source_device: saved.source_device || body.source_device || "desktop-customer", migration_issue_cleared: migrationIssueCleared });
           }
           lastConflict = saved || null;
           if (!(saved && saved.conflict === true) || attempt === 3) break;
