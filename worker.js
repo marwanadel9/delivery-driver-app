@@ -164,6 +164,22 @@ async function farujSharedPayload(env){
  if(!d[0].payload||typeof d[0].payload!=="object")throw new Error("سجل التخزين المشترك لا يحتوي على payload صالح");
  return d[0].payload;
 }
+async function farujReadSharedStateVersion(env){
+ const h=await farujServiceHeaders(env);
+ const r=await supabaseRequest('/rest/v1/faruj_desktop_shared_state?id=eq.1&select=payload,updated_at,source_device',{headers:h});
+ const raw=await r.text().catch(()=>'');let d=null;try{d=raw?JSON.parse(raw):null;}catch(_){}
+ if(!r.ok||!Array.isArray(d)||!d.length||!d[0].payload||typeof d[0].payload!=='object'){
+  const detail=d&&(d.message||d.details||d.hint||d.error);
+  throw new Error('تعذر قراءة النسخة المشتركة لإجراء العميل (HTTP '+r.status+')'+(detail?': '+String(detail).slice(0,220):''));
+ }
+ return d[0];
+}
+function farujStableJson(value){
+ if(value===null)return 'null';
+ if(Array.isArray(value))return '['+value.map(farujStableJson).join(',')+']';
+ if(typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+farujStableJson(value[k])).join(',')+'}';
+ return JSON.stringify(value);
+}
 async function farujFingerprint(value){
  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(value)));
  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
@@ -760,6 +776,97 @@ export default {
             error: "تعذر تنفيذ فحص موقع العميل: " + diagnostic
           }, 500);
         }
+      }
+
+      // حفظ سجل عميل واحد مباشرة في التخزين السحابي، بهوية code فقط وCAS ذري.
+      if (path === "/api/desktop-customers/commit" && request.method === "POST") {
+        const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) return json({ ok: false, error: "غير مصرح" }, 401);
+        const declaredLength = Number(request.headers.get("Content-Length") || 0);
+        if (declaredLength > 2 * 1024 * 1024) return json({ ok: false, error: "حجم سجل العميل أكبر من الحد المسموح" }, 413);
+        const body = await request.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return json({ ok: false, error: "بيانات تعديل العميل غير صالحة" }, 400);
+        if (new TextEncoder().encode(JSON.stringify(body)).byteLength > 2 * 1024 * 1024) return json({ ok: false, error: "حجم تعديل العميل أكبر من الحد المسموح (2 ميجابايت)" }, 413);
+        const action = String(body.action || "").trim();
+        const code = String(body.customer_code || "").trim();
+        if (!["create", "update", "delete"].includes(action) || !/^[A-Za-z0-9_-]{1,80}$/.test(code)) {
+          return json({ ok: false, error: "نوع العملية أو كود العميل غير صالح" }, 400);
+        }
+        const proposed = body.customer;
+        const expected = body.expected_customer;
+        if (action === "create" || action === "update") {
+          if (!proposed || typeof proposed !== "object" || Array.isArray(proposed) || String(proposed.code || "").trim() !== code || !String(proposed.name || "").trim()) {
+            return json({ ok: false, error: "سجل العميل الجديد غير صالح أو كوده لا يطابق الطلب" }, 400);
+          }
+        }
+        if (action === "update" || action === "delete") {
+          if (!expected || typeof expected !== "object" || Array.isArray(expected) || String(expected.code || "").trim() !== code) {
+            return json({ ok: false, error: "نسخة العميل الأصلية المطلوبة للتحقق غير موجودة" }, 400);
+          }
+        }
+        let lastConflict = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          let shared;
+          try { shared = await farujReadSharedStateVersion(env); }
+          catch (e) { return json({ ok: false, code: "CUSTOMER_CLOUD_READ_FAILED", error: String(e && e.message || e).slice(0, 350) }, 502); }
+          const payload = JSON.parse(JSON.stringify(shared.payload));
+          if (!Array.isArray(payload.fa_custs)) return json({ ok: false, code: "CUSTOMER_LIST_INVALID", error: "قائمة العملاء في التخزين السحابي ليست قائمة صالحة؛ لم يتم تغييرها" }, 409);
+          const customers = payload.fa_custs;
+          const matches = [];
+          for (let i = 0; i < customers.length; i++) {
+            if (String(customers[i] && customers[i].code || "").trim() === code) matches.push(i);
+          }
+          if (matches.length > 1) return json({ ok: false, code: "CUSTOMER_CODE_DUPLICATE", error: "يوجد أكثر من سجل بنفس كود العميل في التخزين السحابي؛ أوقفنا العملية دون تعديل أي سجل" }, 409);
+          const current = matches.length ? customers[matches[0]] : null;
+          const proposedJson = (action === "create" || action === "update") ? farujStableJson(proposed) : null;
+          const currentJson = current ? farujStableJson(current) : null;
+          const expectedJson = expected ? farujStableJson(expected) : null;
+
+          if (action === "create") {
+            if (current) {
+              if (currentJson === proposedJson) return json({ ok: true, action, customer_code: code, already_applied: true, updated_at: shared.updated_at });
+              return json({ ok: false, code: "CUSTOMER_CODE_DUPLICATE", error: "كود العميل موجود بالفعل في التخزين السحابي بسجل مختلف؛ لم ندمج السجلين" }, 409);
+            }
+            customers.push(proposed);
+          } else if (action === "update") {
+            if (!current) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "لم يعد سجل العميل موجودًا في التخزين السحابي؛ لم نعتمد التعديل" }, 409);
+            if (currentJson === proposedJson) return json({ ok: true, action, customer_code: code, already_applied: true, updated_at: shared.updated_at });
+            if (currentJson !== expectedJson) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "تم تعديل هذا العميل على جهاز آخر منذ فتح السجل؛ لم نستبدل أي بيانات" }, 409);
+            customers[matches[0]] = proposed;
+          } else {
+            if (!current) return json({ ok: true, action, customer_code: code, already_applied: true, updated_at: shared.updated_at });
+            if (currentJson !== expectedJson) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "تغير سجل العميل على جهاز آخر؛ لم ننفذ الحذف حتى لا نفقد تعديلًا أحدث" }, 409);
+            customers.splice(matches[0], 1);
+          }
+
+          const seenCodes = new Set();
+          for (const item of customers) {
+            const itemCode = String(item && item.code || "").trim();
+            if (!itemCode || seenCodes.has(itemCode)) return json({ ok: false, code: "CUSTOMER_CODE_DUPLICATE", error: "قائمة العملاء تحتوي على كود فارغ أو مكرر؛ لم نعتمد أي تعديل" }, 409);
+            seenCodes.add(itemCode);
+          }
+          const payloadBytes = new TextEncoder().encode(JSON.stringify(payload)).byteLength;
+          if (payloadBytes > 20 * 1024 * 1024) return json({ ok: false, error: "حجم التخزين المشترك تجاوز الحد المسموح" }, 413);
+          let rpcResult;
+          try {
+            rpcResult = await farujRpc(env, "faruj_desktop_shared_state_cas_update", {
+              p_expected_updated_at: shared.updated_at,
+              p_payload: payload,
+              p_source_device: String(body.source_device || "desktop-customer").slice(0, 80)
+            });
+          } catch (e) {
+            const message = String(e && e.message || e).slice(0, 350);
+            const duplicate = /CUSTOMER_LOCATION_DUPLICATE|إحداثيات مطابقة/i.test(message);
+            return json({ ok: false, code: duplicate ? "CUSTOMER_LOCATION_DUPLICATE" : "CUSTOMER_CLOUD_COMMIT_FAILED", error: "رفض التخزين السحابي اعتماد سجل العميل: " + message }, duplicate ? 409 : 502);
+          }
+          const saved = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+          if (saved && saved.success === true && saved.conflict !== true && saved.updated_at) {
+            return json({ ok: true, action, customer_code: code, already_applied: false, updated_at: saved.updated_at, source_device: saved.source_device || body.source_device || "desktop-customer" });
+          }
+          lastConflict = saved || null;
+          if (!(saved && saved.conflict === true) || attempt === 3) break;
+        }
+        return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "تغير التخزين المشترك أثناء حفظ العميل ولم يمكن تأكيد العملية بعد 4 محاولات؛ لم نعتمد نجاحًا غير مؤكد", updated_at: lastConflict && lastConflict.updated_at || null }, 409);
       }
 
       if (
