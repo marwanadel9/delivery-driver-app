@@ -841,15 +841,42 @@ export default {
           const payload = JSON.parse(JSON.stringify(shared.payload));
           if (!Array.isArray(payload.fa_custs)) return json({ ok: false, code: "CUSTOMER_LIST_INVALID", error: "قائمة العملاء في التخزين السحابي ليست قائمة صالحة؛ لم يتم تغييرها" }, 409);
           const customers = payload.fa_custs;
-          const matches = [];
+          let matches = [];
           for (let i = 0; i < customers.length; i++) {
             if (String(customers[i] && customers[i].code || "").trim() === code) matches.push(i);
           }
-          if (matches.length > 1) return json({ ok: false, code: "CUSTOMER_CODE_DUPLICATE", error: "يوجد أكثر من سجل بنفس كود العميل في التخزين السحابي؛ أوقفنا العملية دون تعديل أي سجل" }, 409);
-          const current = matches.length ? customers[matches[0]] : null;
           const proposedJson = (action === "create" || action === "update") ? farujStableJson(proposed) : null;
-          const currentJson = current ? farujStableJson(current) : null;
           const expectedJson = expected ? farujStableJson(expected) : null;
+          let current = matches.length ? customers[matches[0]] : null;
+          let currentJson = current ? farujStableJson(current) : null;
+          let duplicateCopiesCollapsed = 0;
+
+          // A cloud list may contain repeated byte-for-byte copies of the same customer
+          // after old sync/import attempts. Collapse only exact copies of the record the
+          // user opened. Never merge or discard a same-code record with different data.
+          if (matches.length > 1) {
+            if (action === "update" || action === "delete") {
+              const matchedJson = matches.map(index => farujStableJson(customers[index]));
+              const allExactCopies = matchedJson.every(value => value === matchedJson[0]);
+              const matchesOpenedRecord = !!expectedJson && matchedJson[0] === expectedJson;
+              if (!allExactCopies || !matchesOpenedRecord) {
+                return json({
+                  ok: false,
+                  code: "CUSTOMER_CODE_DUPLICATE_CONFLICT",
+                  customer_code: code,
+                  duplicate_count: matches.length,
+                  error: "يوجد أكثر من سجل في التخزين السحابي بنفس كود العميل " + code + "، لكن بيانات السجلات ليست نسخًا متطابقة تمامًا أو لا تطابق النسخة المفتوحة. لم نغيّر أو نحذف أي سجل حتى لا نفقد بيانات عميل آخر. يلزم مراجعة سجلات هذا الكود أولًا."
+                }, 409);
+              }
+              for (let i = matches.length - 1; i >= 1; i--) customers.splice(matches[i], 1);
+              duplicateCopiesCollapsed = matches.length - 1;
+              matches = [matches[0]];
+              current = customers[matches[0]];
+              currentJson = farujStableJson(current);
+            } else {
+              return json({ ok: false, code: "CUSTOMER_CODE_DUPLICATE", customer_code: code, duplicate_count: matches.length, error: "كود العميل موجود بالفعل في التخزين السحابي؛ لا يمكن إنشاء عميل جديد بنفس الكود" }, 409);
+            }
+          }
 
           if (action === "create") {
             if (current) {
@@ -859,7 +886,7 @@ export default {
             customers.push(proposed);
           } else if (action === "update") {
             if (!current) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "لم يعد سجل العميل موجودًا في التخزين السحابي؛ لم نعتمد التعديل" }, 409);
-            if (currentJson === proposedJson) return json({ ok: true, action, customer_code: code, already_applied: true, updated_at: shared.updated_at });
+            if (currentJson === proposedJson && duplicateCopiesCollapsed === 0) return json({ ok: true, action, customer_code: code, already_applied: true, updated_at: shared.updated_at });
             if (currentJson !== expectedJson) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "تم تعديل هذا العميل على جهاز آخر منذ فتح السجل؛ لم نستبدل أي بيانات" }, 409);
             customers[matches[0]] = proposed;
           } else {
@@ -893,7 +920,7 @@ export default {
             const mapChanged = action === "update" && String(expected && expected.map || "").trim() !== String(proposed && proposed.map || "").trim();
             let migrationIssueCleared = null;
             if (action === "delete" || mapChanged) migrationIssueCleared = await farujClearCustomerMigrationIssue(env, code);
-            return json({ ok: true, action, customer_code: code, already_applied: false, updated_at: saved.updated_at, source_device: saved.source_device || body.source_device || "desktop-customer", migration_issue_cleared: migrationIssueCleared });
+            return json({ ok: true, action, customer_code: code, already_applied: false, updated_at: saved.updated_at, source_device: saved.source_device || body.source_device || "desktop-customer", migration_issue_cleared: migrationIssueCleared, duplicate_copies_collapsed: duplicateCopiesCollapsed });
           }
           lastConflict = saved || null;
           if (!(saved && saved.conflict === true) || attempt === 3) break;
