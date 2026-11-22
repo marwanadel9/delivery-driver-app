@@ -156,26 +156,47 @@ async function farujServiceHeaders(env){
  const h={apikey:key,"Content-Type":"application/json"};if(!key.startsWith("sb_secret_"))h.Authorization="Bearer "+key;return h;
 }
 async function farujRpc(env,name,args){const h=await farujServiceHeaders(env);const r=await supabaseRequest("/rest/v1/rpc/"+name,{method:"POST",headers:h,body:JSON.stringify(args)});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error(d&&(d.message||d.details||d.hint)||("Supabase RPC failed: "+r.status));return d;}
-async function farujSharedPayload(env){
- const h=await farujServiceHeaders(env);
- const r=await supabaseRequest("/rest/v1/faruj_desktop_shared_state?id=eq.1&select=payload",{headers:h});
- const raw=await r.text().catch(()=>"");let d=null;try{d=raw?JSON.parse(raw):null;}catch(_){}
- if(!r.ok||!Array.isArray(d)||!d.length){
-  const detail=d&&(d.message||d.details||d.hint||d.error);
-  throw new Error("تعذر قراءة التخزين المشترك (HTTP "+r.status+")"+(detail?": "+String(detail).slice(0,220):""));
+// Read large JSONB payloads in small pieces to avoid PostgREST response-size limits.
+async function farujReadSharedStateChunked(env){
+ const headers=await farujServiceHeaders(env);
+ const chunkSize=500000;
+ let offset=0,totalChars=null,updatedAt=null,sourceDevice=null,fullText="";
+ for(let page=0;page<100;page++){
+  const response=await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_read_chunk",{
+   method:"POST",headers,
+   body:JSON.stringify({p_offset:offset,p_limit:chunkSize})
+  });
+  const result=await response.json().catch(()=>null);
+  if(!response.ok||!result||typeof result!=="object"){
+   const detail=result&&(result.message||result.details||result.hint||result.error);
+   throw new Error("تعذر قراءة جزء من التخزين المشترك (HTTP "+response.status+")"+(detail?": "+String(detail).slice(0,220):""));
+  }
+  if(!result.exists) return null;
+  if(totalChars===null){totalChars=Number(result.total_chars);updatedAt=result.updated_at;sourceDevice=result.source_device||null;}
+  else if(result.updated_at!==updatedAt||Number(result.total_chars)!==totalChars){
+   throw new Error("تغيرت النسخة المشتركة أثناء قراءتها؛ أعد المحاولة بعد ثوانٍ");
+  }
+  const piece=String(result.chunk_text||"");
+  if(!piece&&offset<totalChars)throw new Error("تعذر إكمال قراءة النسخة المشتركة عند الموضع "+offset);
+  fullText+=piece;offset+=piece.length;
+  if(offset>=totalChars)break;
  }
- if(!d[0].payload||typeof d[0].payload!=="object")throw new Error("سجل التخزين المشترك لا يحتوي على payload صالح");
- return d[0].payload;
+ if(totalChars===null) return null;
+ if(fullText.length!==totalChars)throw new Error("قراءة النسخة المشتركة غير مكتملة؛ لم يتم تطبيق أي بيانات");
+ let payload;
+ try{payload=JSON.parse(fullText);}catch(_){throw new Error("تعذر تحليل النسخة المشتركة بعد تجميع أجزائها");}
+ if(!payload||typeof payload!=="object"||Array.isArray(payload))throw new Error("سجل التخزين المشترك لا يحتوي على payload صالح");
+ return {payload,updated_at:updatedAt,source_device:sourceDevice};
+}
+async function farujSharedPayload(env){
+ const row=await farujReadSharedStateChunked(env);
+ if(!row)throw new Error("تعذر قراءة التخزين المشترك: السجل غير موجود");
+ return row.payload;
 }
 async function farujReadSharedStateVersion(env){
- const h=await farujServiceHeaders(env);
- const r=await supabaseRequest('/rest/v1/faruj_desktop_shared_state?id=eq.1&select=payload,updated_at,source_device',{headers:h});
- const raw=await r.text().catch(()=>'');let d=null;try{d=raw?JSON.parse(raw):null;}catch(_){}
- if(!r.ok||!Array.isArray(d)||!d.length||!d[0].payload||typeof d[0].payload!=='object'){
-  const detail=d&&(d.message||d.details||d.hint||d.error);
-  throw new Error('تعذر قراءة النسخة المشتركة لإجراء العميل (HTTP '+r.status+')'+(detail?': '+String(detail).slice(0,220):''));
- }
- return d[0];
+ const row=await farujReadSharedStateChunked(env);
+ if(!row)throw new Error("تعذر قراءة النسخة المشتركة لإجراء العميل: السجل غير موجود");
+ return row;
 }
 function farujStableJson(value){
  if(value===null)return 'null';
@@ -1136,11 +1157,13 @@ export default {
         const headers = { apikey: serviceKey, "Content-Type": "application/json" };
         if (!serviceKey.startsWith("sb_secret_")) headers.Authorization = "Bearer " + serviceKey;
         if (request.method === "GET") {
-          const response = await supabaseRequest("/rest/v1/faruj_desktop_shared_state?id=eq.1&select=payload,updated_at,source_device", { headers });
-          const rows = await response.json().catch(function () { return null; });
-          if (!response.ok || !Array.isArray(rows)) return json({ error: "تعذرت قراءة النسخة المشتركة", detail: rows, supabase_status: response.status }, 502);
-          if (!rows.length) return json({ success: true, payload: null, updated_at: null, source_device: null });
-          return json({ success: true, payload: rows[0].payload, updated_at: rows[0].updated_at, source_device: rows[0].source_device });
+          try {
+            const row = await farujReadSharedStateChunked(env);
+            if (!row) return json({ success: true, payload: null, updated_at: null, source_device: null });
+            return json({ success: true, payload: row.payload, updated_at: row.updated_at, source_device: row.source_device });
+          } catch (error) {
+            return json({ error: "تعذرت قراءة النسخة المشتركة", detail: String(error && error.message || error) }, 502);
+          }
         }
         const declaredLength = Number(request.headers.get("Content-Length") || 0);
         if (declaredLength > 20 * 1024 * 1024) return json({ error: "حجم النسخة أكبر من الحد المسموح (20 ميجابايت)" }, 413);
@@ -1178,20 +1201,23 @@ export default {
 
         if (request.method === "GET") {
           const metadataOnly = url.searchParams.get("meta") === "1";
-          const select = metadataOnly ? "id,updated_at,source_device" : "id,payload,updated_at,source_device";
-          const response = await supabaseRequest(
-            "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=" + select,
-            { headers }
-          );
-          const rows = await response.json().catch(function () { return null; });
-          if (!response.ok || !Array.isArray(rows)) {
-            return json({ error: "تعذر قراءة حالة التخزين المشترك", detail: rows, supabase_status: response.status }, 502);
-          }
-          if (!rows.length) return json({ success: true, exists: false, payload: null, updated_at: null, source_device: null });
           if (metadataOnly) {
+            const response = await supabaseRequest(
+              "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=id,updated_at,source_device",
+              { headers }
+            );
+            const rows = await response.json().catch(function () { return null; });
+            if (!response.ok || !Array.isArray(rows)) return json({ error: "تعذر قراءة بيانات مراجعة التخزين المشترك", detail: rows, supabase_status: response.status }, 502);
+            if (!rows.length) return json({ success: true, exists: false, updated_at: null, source_device: null });
             return json({ success: true, exists: true, updated_at: rows[0].updated_at, source_device: rows[0].source_device });
           }
-          return json({ success: true, exists: true, payload: rows[0].payload, updated_at: rows[0].updated_at, source_device: rows[0].source_device });
+          try {
+            const row = await farujReadSharedStateChunked(env);
+            if (!row) return json({ success: true, exists: false, payload: null, updated_at: null, source_device: null });
+            return json({ success: true, exists: true, payload: row.payload, updated_at: row.updated_at, source_device: row.source_device });
+          } catch (error) {
+            return json({ error: "تعذر قراءة حالة التخزين المشترك", detail: String(error && error.message || error) }, 502);
+          }
         }
 
         const body = await request.json().catch(function () { return null; });
