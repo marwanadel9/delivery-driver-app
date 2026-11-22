@@ -157,6 +157,19 @@ async function farujServiceHeaders(env){
 }
 async function farujRpc(env,name,args){const h=await farujServiceHeaders(env);const r=await supabaseRequest("/rest/v1/rpc/"+name,{method:"POST",headers:h,body:JSON.stringify(args)});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error(d&&(d.message||d.details||d.hint)||("Supabase RPC failed: "+r.status));return d;}
 // Read large JSONB payloads in small pieces to avoid PostgREST response-size limits.
+async function farujReadSharedStateDirect(env, headers){
+ // Read-only fallback when the JSONB chunk RPC hits PostgreSQL statement_timeout.
+ const response=await supabaseRequest("/rest/v1/faruj_desktop_shared_state?id=eq.1&select=payload,updated_at,source_device&limit=1",{headers});
+ const rows=await response.json().catch(()=>null);
+ if(!response.ok||!Array.isArray(rows)){
+  const detail=rows&&(rows.message||rows.details||rows.hint||rows.error);
+  throw new Error("تعذرت القراءة المباشرة الاحتياطية (HTTP "+response.status+")"+(detail?": "+String(detail).slice(0,220):""));
+ }
+ if(!rows.length)return null;
+ const row=rows[0];
+ if(!row.payload||typeof row.payload!=="object"||Array.isArray(row.payload))throw new Error("الصف المشترك لا يحتوي على payload صالح");
+ return {payload:row.payload,updated_at:row.updated_at,source_device:row.source_device||null};
+}
 async function farujReadSharedStateChunked(env){
  const headers=await farujServiceHeaders(env);
  const chunkSize=500000;
@@ -169,6 +182,14 @@ async function farujReadSharedStateChunked(env){
   const result=await response.json().catch(()=>null);
   if(!response.ok||!result||typeof result!=="object"){
    const detail=result&&(result.message||result.details||result.hint||result.error);
+   const message=String(detail||"");
+   // On SQL statement_timeout, fall back to one read-only REST fetch of the same row.
+   if(response.status===500 && /statement timeout|canceling statement|57014/i.test(message)){
+    try{return await farujReadSharedStateDirect(env,headers);}
+    catch(fallbackError){
+     throw new Error("انتهت مهلة القراءة المجزأة وفشلت القراءة الاحتياطية أيضًا: "+String(fallbackError&&fallbackError.message||fallbackError).slice(0,220));
+    }
+   }
    throw new Error("تعذر قراءة جزء من التخزين المشترك (HTTP "+response.status+")"+(detail?": "+String(detail).slice(0,220):""));
   }
   if(!result.exists) return null;
