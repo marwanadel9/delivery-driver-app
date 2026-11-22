@@ -160,36 +160,59 @@ async function farujRpc(env,name,args){const h=await farujServiceHeaders(env);co
 async function farujReadSharedStateChunked(env){
  const headers=await farujServiceHeaders(env);
  const chunkSize=500000;
- let offset=0,totalChars=null,updatedAt=null,sourceDevice=null,fullText="";
- for(let page=0;page<100;page++){
-  const response=await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_read_chunk",{
-   method:"POST",headers,
-   body:JSON.stringify({p_offset:offset,p_limit:chunkSize})
-  });
-  const result=await response.json().catch(()=>null);
-  if(!response.ok||!result||typeof result!=="object"){
-   const detail=result&&(result.message||result.details||result.hint||result.error);
-   throw new Error("تعذر قراءة جزء من التخزين المشترك (HTTP "+response.status+")"+(detail?": "+String(detail).slice(0,220):""));
-  }
-  if(!result.exists) return null;
-  if(totalChars===null){totalChars=Number(result.total_chars);updatedAt=result.updated_at;sourceDevice=result.source_device||null;}
-  else if(result.updated_at!==updatedAt||Number(result.total_chars)!==totalChars){
-   throw new Error("تغيرت النسخة المشتركة أثناء قراءتها؛ أعد المحاولة بعد ثوانٍ");
-  }
-  const piece=String(result.chunk_text||"");
-  if(!piece&&offset<totalChars)throw new Error("تعذر إكمال قراءة النسخة المشتركة عند الموضع "+offset);
-  fullText+=piece;
-  // PostgreSQL substring/char_length count Unicode code points, while
-  // JavaScript String.length counts UTF-16 code units (emoji may count as 2).
-  // Keep offsets and completeness checks in the same character unit as PostgreSQL.
-  offset+=Array.from(piece).length;
-  if(offset>=totalChars)break;
+ const firstResponse=await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_read_chunk",{
+  method:"POST",headers,
+  body:JSON.stringify({p_offset:0,p_limit:chunkSize})
+ });
+ const first=await firstResponse.json().catch(()=>null);
+ if(!firstResponse.ok||!first||typeof first!=="object"){
+  const detail=first&&(first.message||first.details||first.hint||first.error);
+  throw new Error("تعذر قراءة جزء من التخزين المشترك (HTTP "+firstResponse.status+")"+(detail?": "+String(detail).slice(0,220):""));
  }
- if(totalChars===null) return null;
- if(Array.from(fullText).length!==totalChars)throw new Error("قراءة النسخة المشتركة غير مكتملة؛ لم يتم تطبيق أي بيانات");
+ if(!first.exists) return null;
+ const totalChars=Number(first.total_chars);
+ const updatedAt=first.updated_at;
+ const sourceDevice=first.source_device||null;
+ if(!Number.isSafeInteger(totalChars)||totalChars<0||!updatedAt)
+  throw new Error("بيانات إصدار التخزين المشترك غير صالحة");
+ const pieces=[String(first.chunk_text||"")];
+ if(Array.from(pieces[0]).length!==Math.min(chunkSize,totalChars))
+  throw new Error("الجزء الأول من التخزين المشترك غير مكتمل");
+
+ // Fetch subsequent chunks in small parallel batches. The previous sequential
+ // loop made 15 network round-trips for a ~7 MB payload and could exceed the
+ // Cloudflare request wall-time limit even when every SQL call succeeded.
+ const offsets=[];
+ for(let offset=chunkSize;offset<totalChars;offset+=chunkSize) offsets.push(offset);
+ const batchSize=5;
+ for(let i=0;i<offsets.length;i+=batchSize){
+  const batch=offsets.slice(i,i+batchSize);
+  const results=await Promise.all(batch.map(async offset=>{
+   const response=await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_read_chunk",{
+    method:"POST",headers,
+    body:JSON.stringify({p_offset:offset,p_limit:chunkSize})
+   });
+   const result=await response.json().catch(()=>null);
+   if(!response.ok||!result||typeof result!=="object"||!result.exists)
+    throw new Error("تعذر قراءة جزء التخزين المشترك عند الموضع "+offset+" (HTTP "+response.status+")");
+   if(result.updated_at!==updatedAt||Number(result.total_chars)!==totalChars)
+    throw new Error("تغيرت النسخة المشتركة أثناء قراءتها؛ أعد المحاولة بعد ثوانٍ");
+   const piece=String(result.chunk_text||"");
+   const expected=Math.min(chunkSize,totalChars-offset);
+   if(Array.from(piece).length!==expected)
+    throw new Error("الجزء المقروء من التخزين المشترك غير مكتمل عند الموضع "+offset);
+   return {offset,piece};
+  }));
+  results.sort((a,b)=>a.offset-b.offset);
+  for(const item of results) pieces.push(item.piece);
+ }
+ const fullText=pieces.join("");
+ if(Array.from(fullText).length!==totalChars)
+  throw new Error("قراءة النسخة المشتركة غير مكتملة؛ لم يتم تطبيق أي بيانات");
  let payload;
  try{payload=JSON.parse(fullText);}catch(_){throw new Error("تعذر تحليل النسخة المشتركة بعد تجميع أجزائها");}
- if(!payload||typeof payload!=="object"||Array.isArray(payload))throw new Error("سجل التخزين المشترك لا يحتوي على payload صالح");
+ if(!payload||typeof payload!=="object"||Array.isArray(payload))
+  throw new Error("سجل التخزين المشترك لا يحتوي على payload صالح");
  return {payload,updated_at:updatedAt,source_device:sourceDevice};
 }
 async function farujSharedPayload(env){
