@@ -160,52 +160,36 @@ async function farujRpc(env,name,args){const h=await farujServiceHeaders(env);co
 async function farujReadSharedStateChunked(env){
  const headers=await farujServiceHeaders(env);
  const chunkSize=500000;
- const readPart=async(offset,expectedUpdatedAt,expectedTotal)=>{
+ let offset=0,totalChars=null,updatedAt=null,sourceDevice=null,fullText="";
+ for(let page=0;page<100;page++){
   const response=await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_read_chunk",{
    method:"POST",headers,
    body:JSON.stringify({p_offset:offset,p_limit:chunkSize})
   });
   const result=await response.json().catch(()=>null);
-  if(!response.ok||!result||typeof result!=="object")
-   throw new Error("تعذر قراءة جزء من التخزين المشترك (HTTP "+response.status+")");
-  if(!result.exists)throw new Error("سجل التخزين المشترك غير موجود");
-  if(expectedUpdatedAt&&(result.updated_at!==expectedUpdatedAt||Number(result.total_chars)!==expectedTotal))
-   throw new Error("تغيرت النسخة المشتركة أثناء قراءتها؛ أعد المحاولة");
+  if(!response.ok||!result||typeof result!=="object"){
+   const detail=result&&(result.message||result.details||result.hint||result.error);
+   throw new Error("تعذر قراءة جزء من التخزين المشترك (HTTP "+response.status+")"+(detail?": "+String(detail).slice(0,220):""));
+  }
+  if(!result.exists) return null;
+  if(totalChars===null){totalChars=Number(result.total_chars);updatedAt=result.updated_at;sourceDevice=result.source_device||null;}
+  else if(result.updated_at!==updatedAt||Number(result.total_chars)!==totalChars){
+   throw new Error("تغيرت النسخة المشتركة أثناء قراءتها؛ أعد المحاولة بعد ثوانٍ");
+  }
   const piece=String(result.chunk_text||"");
-  const expectedLength=Math.min(chunkSize,expectedTotal-offset);
-  if(Array.from(piece).length!==expectedLength)
-   throw new Error("الجزء المقروء غير مكتمل عند الموضع "+offset);
-  return piece;
- };
- const firstResponse=await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_read_chunk",{
-  method:"POST",headers,body:JSON.stringify({p_offset:0,p_limit:chunkSize})
- });
- const first=await firstResponse.json().catch(()=>null);
- if(!firstResponse.ok||!first||typeof first!=="object")
-  throw new Error("تعذر قراءة التخزين المشترك (HTTP "+firstResponse.status+")");
- if(!first.exists)return null;
- const totalChars=Number(first.total_chars),updatedAt=first.updated_at,sourceDevice=first.source_device||null;
- if(!Number.isSafeInteger(totalChars)||totalChars<0||!updatedAt)
-  throw new Error("بيانات إصدار التخزين المشترك غير صالحة");
- const firstText=String(first.chunk_text||"");
- if(Array.from(firstText).length!==Math.min(chunkSize,totalChars))
-  throw new Error("الجزء الأول من التخزين المشترك غير مكتمل");
- const offsets=[];
- for(let offset=chunkSize;offset<totalChars;offset+=chunkSize)offsets.push(offset);
- const pieces=[firstText];
- // Five concurrent requests per batch: bounded concurrency, far fewer serial round trips.
- for(let i=0;i<offsets.length;i+=5){
-  const batch=offsets.slice(i,i+5);
-  const batchPieces=await Promise.all(batch.map(offset=>readPart(offset,updatedAt,totalChars)));
-  pieces.push(...batchPieces);
+  if(!piece&&offset<totalChars)throw new Error("تعذر إكمال قراءة النسخة المشتركة عند الموضع "+offset);
+  fullText+=piece;
+  // PostgreSQL substring/char_length count Unicode code points, while
+  // JavaScript String.length counts UTF-16 code units (emoji may count as 2).
+  // Keep offsets and completeness checks in the same character unit as PostgreSQL.
+  offset+=Array.from(piece).length;
+  if(offset>=totalChars)break;
  }
- const fullText=pieces.join("");
- if(Array.from(fullText).length!==totalChars)
-  throw new Error("قراءة النسخة المشتركة غير مكتملة؛ لم يتم تطبيق أي بيانات");
+ if(totalChars===null) return null;
+ if(Array.from(fullText).length!==totalChars)throw new Error("قراءة النسخة المشتركة غير مكتملة؛ لم يتم تطبيق أي بيانات");
  let payload;
  try{payload=JSON.parse(fullText);}catch(_){throw new Error("تعذر تحليل النسخة المشتركة بعد تجميع أجزائها");}
- if(!payload||typeof payload!=="object"||Array.isArray(payload))
-  throw new Error("سجل التخزين المشترك لا يحتوي على payload صالح");
+ if(!payload||typeof payload!=="object"||Array.isArray(payload))throw new Error("سجل التخزين المشترك لا يحتوي على payload صالح");
  return {payload,updated_at:updatedAt,source_device:sourceDevice};
 }
 async function farujSharedPayload(env){
