@@ -178,11 +178,15 @@ async function farujReadSharedStateChunked(env){
   }
   const piece=String(result.chunk_text||"");
   if(!piece&&offset<totalChars)throw new Error("تعذر إكمال قراءة النسخة المشتركة عند الموضع "+offset);
-  fullText+=piece;offset+=piece.length;
+  fullText+=piece;
+  // PostgreSQL substring/char_length count Unicode code points, while
+  // JavaScript String.length counts UTF-16 code units (emoji may count as 2).
+  // Keep offsets and completeness checks in the same character unit as PostgreSQL.
+  offset+=Array.from(piece).length;
   if(offset>=totalChars)break;
  }
  if(totalChars===null) return null;
- if(fullText.length!==totalChars)throw new Error("قراءة النسخة المشتركة غير مكتملة؛ لم يتم تطبيق أي بيانات");
+ if(Array.from(fullText).length!==totalChars)throw new Error("قراءة النسخة المشتركة غير مكتملة؛ لم يتم تطبيق أي بيانات");
  let payload;
  try{payload=JSON.parse(fullText);}catch(_){throw new Error("تعذر تحليل النسخة المشتركة بعد تجميع أجزائها");}
  if(!payload||typeof payload!=="object"||Array.isArray(payload))throw new Error("سجل التخزين المشترك لا يحتوي على payload صالح");
