@@ -160,51 +160,44 @@ async function farujRpc(env,name,args){const h=await farujServiceHeaders(env);co
 async function farujReadSharedStateChunked(env){
  const headers=await farujServiceHeaders(env);
  const chunkSize=500000;
+ const readPart=async(offset,expectedUpdatedAt,expectedTotal)=>{
+  const response=await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_read_chunk",{
+   method:"POST",headers,
+   body:JSON.stringify({p_offset:offset,p_limit:chunkSize})
+  });
+  const result=await response.json().catch(()=>null);
+  if(!response.ok||!result||typeof result!=="object")
+   throw new Error("تعذر قراءة جزء من التخزين المشترك (HTTP "+response.status+")");
+  if(!result.exists)throw new Error("سجل التخزين المشترك غير موجود");
+  if(expectedUpdatedAt&&(result.updated_at!==expectedUpdatedAt||Number(result.total_chars)!==expectedTotal))
+   throw new Error("تغيرت النسخة المشتركة أثناء قراءتها؛ أعد المحاولة");
+  const piece=String(result.chunk_text||"");
+  const expectedLength=Math.min(chunkSize,expectedTotal-offset);
+  if(Array.from(piece).length!==expectedLength)
+   throw new Error("الجزء المقروء غير مكتمل عند الموضع "+offset);
+  return piece;
+ };
  const firstResponse=await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_read_chunk",{
-  method:"POST",headers,
-  body:JSON.stringify({p_offset:0,p_limit:chunkSize})
+  method:"POST",headers,body:JSON.stringify({p_offset:0,p_limit:chunkSize})
  });
  const first=await firstResponse.json().catch(()=>null);
- if(!firstResponse.ok||!first||typeof first!=="object"){
-  const detail=first&&(first.message||first.details||first.hint||first.error);
-  throw new Error("تعذر قراءة جزء من التخزين المشترك (HTTP "+firstResponse.status+")"+(detail?": "+String(detail).slice(0,220):""));
- }
- if(!first.exists) return null;
- const totalChars=Number(first.total_chars);
- const updatedAt=first.updated_at;
- const sourceDevice=first.source_device||null;
+ if(!firstResponse.ok||!first||typeof first!=="object")
+  throw new Error("تعذر قراءة التخزين المشترك (HTTP "+firstResponse.status+")");
+ if(!first.exists)return null;
+ const totalChars=Number(first.total_chars),updatedAt=first.updated_at,sourceDevice=first.source_device||null;
  if(!Number.isSafeInteger(totalChars)||totalChars<0||!updatedAt)
   throw new Error("بيانات إصدار التخزين المشترك غير صالحة");
- const pieces=[String(first.chunk_text||"")];
- if(Array.from(pieces[0]).length!==Math.min(chunkSize,totalChars))
+ const firstText=String(first.chunk_text||"");
+ if(Array.from(firstText).length!==Math.min(chunkSize,totalChars))
   throw new Error("الجزء الأول من التخزين المشترك غير مكتمل");
-
- // Fetch subsequent chunks in small parallel batches. The previous sequential
- // loop made 15 network round-trips for a ~7 MB payload and could exceed the
- // Cloudflare request wall-time limit even when every SQL call succeeded.
  const offsets=[];
- for(let offset=chunkSize;offset<totalChars;offset+=chunkSize) offsets.push(offset);
- const batchSize=5;
- for(let i=0;i<offsets.length;i+=batchSize){
-  const batch=offsets.slice(i,i+batchSize);
-  const results=await Promise.all(batch.map(async offset=>{
-   const response=await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_read_chunk",{
-    method:"POST",headers,
-    body:JSON.stringify({p_offset:offset,p_limit:chunkSize})
-   });
-   const result=await response.json().catch(()=>null);
-   if(!response.ok||!result||typeof result!=="object"||!result.exists)
-    throw new Error("تعذر قراءة جزء التخزين المشترك عند الموضع "+offset+" (HTTP "+response.status+")");
-   if(result.updated_at!==updatedAt||Number(result.total_chars)!==totalChars)
-    throw new Error("تغيرت النسخة المشتركة أثناء قراءتها؛ أعد المحاولة بعد ثوانٍ");
-   const piece=String(result.chunk_text||"");
-   const expected=Math.min(chunkSize,totalChars-offset);
-   if(Array.from(piece).length!==expected)
-    throw new Error("الجزء المقروء من التخزين المشترك غير مكتمل عند الموضع "+offset);
-   return {offset,piece};
-  }));
-  results.sort((a,b)=>a.offset-b.offset);
-  for(const item of results) pieces.push(item.piece);
+ for(let offset=chunkSize;offset<totalChars;offset+=chunkSize)offsets.push(offset);
+ const pieces=[firstText];
+ // Five concurrent requests per batch: bounded concurrency, far fewer serial round trips.
+ for(let i=0;i<offsets.length;i+=5){
+  const batch=offsets.slice(i,i+5);
+  const batchPieces=await Promise.all(batch.map(offset=>readPart(offset,updatedAt,totalChars)));
+  pieces.push(...batchPieces);
  }
  const fullText=pieces.join("");
  if(Array.from(fullText).length!==totalChars)
