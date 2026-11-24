@@ -255,32 +255,6 @@ async function farujWriteMigrationCAS(env,patch,expectedUpdatedAt){
  return d[0];
 }
 
-// إلغاء طلبات التسليم التي أُنشئت قبل أن يعيد المكتب الفاتورة إلى قيد التوصيل.
-async function cancelPendingDeliveryRequests(env, orderIds, source) {
-  const ids = Array.from(new Set((Array.isArray(orderIds) ? orderIds : [])
-    .map(function (id) { return Number(id); })
-    .filter(function (id) { return Number.isInteger(id) && id > 0; })));
-  if (!ids.length) return { success: true, cancelled: 0 };
-  const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-  if (!serviceKey) return { success: false, error: "SUPABASE_SERVICE_ROLE_KEY غير مضبوط" };
-  const H = { apikey: serviceKey, Authorization: "Bearer " + serviceKey,
-    "Content-Type": "application/json", Prefer: "return=representation" };
-  let cancelled = 0;
-  for (const status of ["pending", "requested", "waiting"]) {
-    const q = "/rest/v1/driver_delivery_requests?order_id=in.(" + ids.join(",") +
-      ")&status=eq." + encodeURIComponent(status);
-    const r = await supabaseRequest(q, {
-      method: "PATCH", headers: H,
-      body: JSON.stringify({ status: "cancelled", processed_at: new Date().toISOString() })
-    });
-    const rows = await r.json().catch(function () { return null; });
-    if (!r.ok) return { success: false, cancelled: cancelled,
-      error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر إلغاء طلب تسليم قديم (" + status + ")" };
-    if (Array.isArray(rows)) cancelled += rows.length;
-  }
-  return { success: true, cancelled: cancelled, source: String(source || "office_status_change") };
-}
-
 // إشعار لحظي بعد نجاح تعديل الفاتورة فقط، دون إرسال بيانات العميل أو الفاتورة.
 // نفس القناة التي يستمع لها تطبيق الماستر وتطبيقات المناديب: fa-orders-live.
 async function broadcastOrdersChanged(env, source) {
@@ -3460,19 +3434,13 @@ export default {
         const req = rows[0];
 
         const orderRes = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,delivery_date,delivery_status&limit=1",
+          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,delivery_date&limit=1",
           { headers: H }
         );
         const orderRows = await orderRes.json().catch(function () { return null; });
         if (!orderRes.ok || !Array.isArray(orderRows) || !orderRows.length) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة قبل اعتماد التسليم" }, 502);
         const approvalLock = rejectFutureDelivery(orderRows[0], dubaiDateKey(new Date()));
         if (approvalLock) return approvalLock;
-        // الطلب القديم لا يجوز أن يعيد فاتورة غيّرها المكتب إلى حالة أخرى إلى delivered.
-        // لا نعتمد إلا إذا كانت الحالة الحالية ما زالت حالة قابلة للتسليم، والطلب ما زال pending.
-        const currentStatus = String(orderRows[0].delivery_status || "").trim().toLowerCase();
-        if (currentStatus === "delivered" || currentStatus.includes("تم التسليم")) {
-          return json({ error: "الفاتورة تم تسليمها بالفعل", already_delivered: true }, 409);
-        }
 
         const updateRes = await supabaseRequest(
           "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name),
@@ -3619,13 +3587,7 @@ export default {
         } else if (foundOrders.rows.length) {
           archiveManagedByOrderTrigger = true;
         }
-        let cancelledDeliveryRequests = 0;
-        if (!delivered && (statusRaw === "out" || statusRaw === "pending" || statusRaw.includes("قيد التوصيل"))) {
-          const cancelResult = await cancelPendingDeliveryRequests(env, foundOrders.rows.map(function (row) { return row.id; }), "master_identity_update");
-          if (!cancelResult.success) return json({ error: "تم تحديث الفاتورة لكن تعذر إلغاء طلبات التسليم القديمة؛ أعد المحاولة قبل المزامنة.", details: cancelResult.error }, 502);
-          cancelledDeliveryRequests = cancelResult.cancelled;
-        }
-        // لا نرسل الإشعار إلا بعد تأكيد تحديث كل الصفوف المطابقة وإلغاء الطلبات القديمة.
+        // لا نرسل الإشعار إلا بعد تأكيد تحديث كل الصفوف المطابقة بنجاح.
         const liveNotified = await broadcastOrdersChanged(env, "desktop_invoice_update");
         return json({
           success: true,
@@ -3637,7 +3599,6 @@ export default {
           driver_assignment_preserved: hasMultipleDriverCopies,
           delivery_date: deliveryDate,
           live_notified: liveNotified,
-          cancelled_delivery_requests: cancelledDeliveryRequests,
           created_at_unchanged: true
         });
       }
@@ -3668,12 +3629,6 @@ export default {
         const isAdvance = patch.paid_in_advance === true || /مقدم/.test(pmRaw);
         if (isDriverChoice && !isDelivered) driverPatch.payment_method = "";
         if (isAdvance) { driverPatch.paid_in_advance = true; archivePatch.paid_in_advance = true; }
-        const orderIdsResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id", { headers: H });
-        const orderIdRows = await orderIdsResp.json().catch(function () { return null; });
-        if (!orderIdsResp.ok || !Array.isArray(orderIdRows)) return json({ error: "تعذر تحديد نسخ الفاتورة قبل تصحيح الحالة" }, 502);
-        const numberIdsResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id", { headers: H });
-        const numberIdRows = await numberIdsResp.json().catch(function () { return null; });
-        if (!numberIdsResp.ok || !Array.isArray(numberIdRows)) return json({ error: "تعذر تحديد نسخ الفاتورة قبل تعديل الحالة" }, 502);
         const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(driverPatch) });
         if (!r1.ok) {
           const e1 = await r1.json().catch(function () { return null; });
@@ -3684,14 +3639,7 @@ export default {
           const e2 = await r2.json().catch(function () { return null; });
           return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
         }
-        let cancelledRequests = 0;
-        if (!isDelivered && (stRaw === "out" || stRaw === "pending" || stRaw.includes("قيد التوصيل"))) {
-          const cancelResult = await cancelPendingDeliveryRequests(env, numberIdRows.map(function (row) { return row.id; }), "master_update_by_number");
-          if (!cancelResult.success) return json({ error: "تم تحديث الحالة لكن تعذر إلغاء طلب التسليم القديم؛ أعد المحاولة قبل المزامنة.", details: cancelResult.error }, 502);
-          cancelledRequests = cancelResult.cancelled;
-        }
-        const liveNotified = await broadcastOrdersChanged(env, "master_update_by_number");
-        return json({ success: true, updated: orderNumber, cancelled_delivery_requests: cancelledRequests, live_notified: liveNotified });
+        return json({ success: true, updated: orderNumber });
       }
 
       /* تصحيح فوري من برنامج الكمبيوتر (بسر المزامنة): حالة تسليم / طريقة دفع / تأكيد تحويل.
@@ -3725,14 +3673,7 @@ export default {
           const e2 = await r2.json().catch(function () { return null; });
           return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
         }
-        let cancelledRequests = 0;
-        if (!isDelivered && (stRaw === "out" || stRaw === "pending" || stRaw.includes("قيد التوصيل"))) {
-          const cancelResult = await cancelPendingDeliveryRequests(env, orderIdRows.map(function (row) { return row.id; }), "excel_correct");
-          if (!cancelResult.success) return json({ error: "تم تحديث الحالة لكن تعذر إلغاء طلب التسليم القديم؛ أعد المحاولة قبل المزامنة.", details: cancelResult.error }, 502);
-          cancelledRequests = cancelResult.cancelled;
-        }
-        const liveNotified = await broadcastOrdersChanged(env, "excel_correct");
-        return json({ success: true, updated: orderNumber, cancelled_delivery_requests: cancelledRequests, live_notified: liveNotified });
+        return json({ success: true, updated: orderNumber });
       }
 
       if (path === "/api/master/delete-by-date" && request.method === "POST") {
