@@ -2562,34 +2562,9 @@ export default {
           }
         }
 
-        const masterStatusRaw = String(order.delivery_status || "").toLowerCase();
-        const masterReturnedToOut = masterStatusRaw === "out" || masterStatusRaw === "pending" || masterStatusRaw.includes("قيد");
-        let cancelledDeliveryRequests = 0;
-        const masterInvoiceNumber = String((rpcData && (rpcData.order_number || rpcData.invoice_number)) || order.order_number || order.invoice_number || "").trim();
-        if (masterReturnedToOut && masterInvoiceNumber) {
-          const idsResponse = await supabaseRequest(
-            "/rest/v1/orders?order_number=eq." + encodeURIComponent(masterInvoiceNumber) + "&select=id",
-            { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY } }
-          );
-          const idsRows = await idsResponse.json().catch(function () { return null; });
-          if (!idsResponse.ok || !Array.isArray(idsRows)) return json({ error: "تم تعديل الماستر لكن تعذر التحقق من طلبات التسليم القديمة" }, 502);
-          const ids = idsRows.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
-          if (ids.length) {
-            const cancelResponse = await supabaseRequest(
-              "/rest/v1/driver_delivery_requests?order_id=in.(" + ids.join(",") + ")&status=in.(pending,requested,waiting,%D9%82%D9%8A%D8%AF%20%D8%A7%D9%84%D8%A7%D9%86%D8%AA%D8%B8%D8%A7%D8%B1)",
-              { method: "PATCH", headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ status: "cancelled", processed_at: new Date().toISOString() }) }
-            );
-            const cancelledRows = await cancelResponse.json().catch(function () { return null; });
-            if (!cancelResponse.ok) return json({ error: "تم تعديل الماستر لكن تعذر إلغاء طلبات التسليم القديمة" }, 502);
-            cancelledDeliveryRequests = Array.isArray(cancelledRows) ? cancelledRows.length : 0;
-          }
-        }
-        const masterLiveNotified = await broadcastOrdersChanged(env, "master_order_update");
         return json({
           success: true,
-          order: rpcData,
-          cancelled_delivery_requests: cancelledDeliveryRequests,
-          live_notified: masterLiveNotified
+          order: rpcData
         });
       }
 
@@ -3459,23 +3434,13 @@ export default {
         const req = rows[0];
 
         const orderRes = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,delivery_date,delivery_status,updated_at&limit=1",
+          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,delivery_date&limit=1",
           { headers: H }
         );
         const orderRows = await orderRes.json().catch(function () { return null; });
         if (!orderRes.ok || !Array.isArray(orderRows) || !orderRows.length) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة قبل اعتماد التسليم" }, 502);
         const approvalLock = rejectFutureDelivery(orderRows[0], dubaiDateKey(new Date()));
         if (approvalLock) return approvalLock;
-        const currentOrder = orderRows[0];
-        const requestedAtMs = Date.parse(String(req.requested_at || ""));
-        const orderUpdatedAtMs = Date.parse(String(currentOrder.updated_at || ""));
-        if (Number.isFinite(requestedAtMs) && Number.isFinite(orderUpdatedAtMs) && orderUpdatedAtMs > requestedAtMs) {
-          await supabaseRequest(
-            "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending",
-            { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "cancelled", processed_at: new Date().toISOString() }) }
-          );
-          return json({ error: "تم تعديل الفاتورة من الكمبيوتر بعد إرسال طلب المندوب؛ أُلغي طلب التسليم القديم. أعد المندوب إرسال الطلب إذا لزم الأمر." }, 409);
-        }
 
         const updateRes = await supabaseRequest(
           "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name),
@@ -3489,8 +3454,7 @@ export default {
           { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: new Date().toISOString() }) }
         );
         if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة لكن تعذر إغلاق طلب الاعتماد" }, 502);
-        const liveNotified = await broadcastOrdersChanged(env, "excel_approve_delivery");
-        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered", live_notified: liveNotified });
+        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
       }
 
       if (path === "/api/resolve-map" && request.method === "POST") {
@@ -3675,21 +3639,19 @@ export default {
           const e2 = await r2.json().catch(function () { return null; });
           return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
         }
-        let cancelledDeliveryRequests = 0;
-        if (stRaw === "out" || stRaw === "pending" || stRaw.includes("قيد")) {
-          const idsResponse = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id", { headers: H });
-          const idsRows = await idsResponse.json().catch(function () { return null; });
-          if (!idsResponse.ok || !Array.isArray(idsRows)) return json({ error: "تم تحديث الطلب لكن تعذر التحقق من طلبات التسليم القديمة" }, 502);
-          const ids = idsRows.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
-          if (ids.length) {
-            const cancelResponse = await supabaseRequest("/rest/v1/driver_delivery_requests?order_id=in.(" + ids.join(",") + ")&status=in.(pending,requested,waiting,%D9%82%D9%8A%D8%AF%20%D8%A7%D9%84%D8%A7%D9%86%D8%AA%D8%B8%D8%A7%D8%B1)", { method: "PATCH", headers: H, body: JSON.stringify({ status: "cancelled", processed_at: new Date().toISOString() }) });
-            const cancelledRows = await cancelResponse.json().catch(function () { return null; });
-            if (!cancelResponse.ok) return json({ error: "تم تحديث الطلب لكن تعذر إلغاء طلبات التسليم القديمة" }, 502);
-            cancelledDeliveryRequests = Array.isArray(cancelledRows) ? cancelledRows.length : 0;
-          }
-        }
         const liveNotified = await broadcastOrdersChanged(env, "master_order_update_by_number");
-        return json({ success: true, updated: orderNumber, cancelled_delivery_requests: cancelledDeliveryRequests, live_notified: liveNotified });
+        let cancelledRequests = 0;
+        const masterStatus = String(patch.delivery_status || "").toLowerCase();
+        if (masterStatus === "out" || masterStatus === "pending" || masterStatus === "pend") {
+          const cancelRes = await supabaseRequest(
+            "/rest/v1/driver_delivery_requests?invoice_number=eq." + encodeURIComponent(orderNumber) + "&status=in.(pending,requested,waiting)",
+            { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=representation" }), body: JSON.stringify({ status: "cancelled", processed_at: new Date().toISOString() }) }
+          );
+          const cancelled = await cancelRes.json().catch(function () { return null; });
+          if (!cancelRes.ok) return json({ error: "تم تحديث الفاتورة في الطلبات والأرشيف لكن تعذر إلغاء طلبات التسليم القديمة.", updated: orderNumber, live_notified: liveNotified }, 502);
+          cancelledRequests = Array.isArray(cancelled) ? cancelled.length : 0;
+        }
+        return json({ success: true, updated: orderNumber, live_notified: liveNotified, cancelled_delivery_requests: cancelledRequests });
       }
 
       /* تصحيح فوري من برنامج الكمبيوتر (بسر المزامنة): حالة تسليم / طريقة دفع / تأكيد تحويل.
@@ -3703,59 +3665,39 @@ export default {
         const orderNumber = String(body.order_number || "").trim();
         const set = body.set && typeof body.set === "object" ? body.set : null;
         if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !set) return json({ error: "بيانات غير صحيحة" }, 400);
-        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=representation" };
+        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
         const driverPatch = Object.assign({}, set);
         const archivePatch = Object.assign({}, set);
-        const correctionTime = new Date().toISOString();
-        driverPatch.updated_at = correctionTime;
-        archivePatch.updated_at = correctionTime;
+        archivePatch.updated_at = new Date().toISOString();
         const stRaw = String(set.delivery_status || "").toLowerCase();
         const isDelivered = stRaw === "delivered" || stRaw.includes("تم");
-        const isReturnedToOut = stRaw === "out" || stRaw === "pending" || stRaw.includes("قيد");
         const pmRaw = String(set.payment_method || "").trim();
         const isDriverChoice = pmRaw === "cash" || pmRaw === "bank_transfer" || pmRaw === "كاش" || pmRaw === "تحويل بنكي";
         if (isDriverChoice && !isDelivered) driverPatch.payment_method = "";
-
-        // Read the exact active invoice copies first. This lets us invalidate old
-        // approval requests tied to those order IDs when the computer changes status.
-        const idsRes = await supabaseRequest(
-          "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id",
-          { headers: H }
-        );
-        const idRows = await idsRes.json().catch(function () { return null; });
-        if (!idsRes.ok || !Array.isArray(idRows)) {
-          return json({ error: (idRows && (idRows.message || idRows.hint || idRows.error)) || "تعذر تحديد نسخ الفاتورة قبل التصحيح" }, 502);
-        }
-        if (!idRows.length) return json({ error: "لم يتم العثور على الفاتورة في نسخ المناديب" }, 404);
-
-        // Cancel stale driver approval requests before applying the computer's
-        // authoritative status, so an old request cannot restore delivered later.
-        let cancelledRequests = 0;
-        if (isReturnedToOut) {
-          const ids = idRows.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
-          if (ids.length) {
-            const cancelRes = await supabaseRequest(
-              "/rest/v1/driver_delivery_requests?order_id=in.(" + ids.join(",") + ")&status=in.(pending,requested,waiting,%D9%82%D9%8A%D8%AF%20%D8%A7%D9%84%D8%A7%D9%86%D8%AA%D8%B8%D8%A7%D8%B1)",
-              { method: "PATCH", headers: H, body: JSON.stringify({ status: "cancelled", processed_at: correctionTime }) }
-            );
-            const cancelRows = await cancelRes.json().catch(function () { return null; });
-            if (!cancelRes.ok) return json({ error: (cancelRows && (cancelRows.message || cancelRows.hint || cancelRows.error)) || "تعذر إلغاء طلبات التسليم القديمة؛ لم نكمل التصحيح" }, 502);
-            cancelledRequests = Array.isArray(cancelRows) ? cancelRows.length : 0;
-          }
-        }
         if (set.paid_in_advance === true || /مقدم/.test(pmRaw)) { driverPatch.paid_in_advance = true; archivePatch.paid_in_advance = true; }
         const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(driverPatch) });
-        const d1 = await r1.json().catch(function () { return null; });
-        if (!r1.ok || !Array.isArray(d1) || d1.length !== idRows.length) {
-          return json({ error: (d1 && (d1.message || d1.hint || d1.error)) || "تعذر تحديث كل نسخ الطلبات" , updated_orders: Array.isArray(d1) ? d1.length : 0, expected_orders: idRows.length }, 502);
+        if (!r1.ok) {
+          const e1 = await r1.json().catch(function () { return null; });
+          return json({ error: (e1 && (e1.message || e1.hint || e1.error)) || "تعذر تحديث نسخ الطلبات" }, 502);
         }
         const r2 = await supabaseRequest("/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(archivePatch) });
-        const d2 = await r2.json().catch(function () { return null; });
         if (!r2.ok) {
-          return json({ error: (d2 && (d2.message || d2.hint || d2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
+          const e2 = await r2.json().catch(function () { return null; });
+          return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
         }
-        const liveNotified = await broadcastOrdersChanged(env, "excel_correct");
-        return json({ success: true, updated: orderNumber, updated_orders: d1.length, updated_archive: Array.isArray(d2) ? d2.length : 0, cancelled_delivery_requests: cancelledRequests, live_notified: liveNotified });
+        const liveNotified = await broadcastOrdersChanged(env, "desktop_invoice_correct");
+        let cancelledRequests = 0;
+        const targetStatus = String(set.delivery_status || "").toLowerCase();
+        if (targetStatus === "out" || targetStatus === "pending" || targetStatus === "pend") {
+          const cancelRes = await supabaseRequest(
+            "/rest/v1/driver_delivery_requests?invoice_number=eq." + encodeURIComponent(orderNumber) + "&status=in.(pending,requested,waiting)",
+            { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=representation" }), body: JSON.stringify({ status: "cancelled", processed_at: new Date().toISOString() }) }
+          );
+          const cancelled = await cancelRes.json().catch(function () { return null; });
+          if (!cancelRes.ok) return json({ error: "تم تحديث حالة الفاتورة لكن تعذر إلغاء طلبات التسليم القديمة؛ أوقفنا اعتبار العملية مكتملة.", updated: orderNumber, live_notified: liveNotified }, 502);
+          cancelledRequests = Array.isArray(cancelled) ? cancelled.length : 0;
+        }
+        return json({ success: true, updated: orderNumber, live_notified: liveNotified, cancelled_delivery_requests: cancelledRequests });
       }
 
       if (path === "/api/master/delete-by-date" && request.method === "POST") {
