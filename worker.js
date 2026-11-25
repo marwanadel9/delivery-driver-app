@@ -1261,6 +1261,72 @@ export default {
         const payloadBytes = new TextEncoder().encode(payloadText).byteLength;
         if (payloadBytes > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
 
+        // حماية مركزية إضافية: لا نقبل لقطة ناقصة للفواتير ولا نستنتج الحذف من اختفاء سجل.
+        if (!Array.isArray(body.payload.fa_invs)) {
+          return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: "النسخة الواردة لا تحتوي على قائمة فواتير صالحة؛ لم يتم حفظ أي تغيير" }, 400);
+        }
+        let currentShared;
+        try {
+          currentShared = await farujReadSharedStateChunked(env);
+        } catch (error) {
+          return json({ success: false, code: "INVOICE_SNAPSHOT_CHECK_FAILED", error: "تعذر فحص النسخة الحالية قبل الحفظ؛ لم يتم استبدال أي بيانات", detail: String(error && error.message || error) }, 502);
+        }
+        if (currentShared) {
+          if (!currentShared.payload || !Array.isArray(currentShared.payload.fa_invs)) {
+            return json({ success: false, code: "INVOICE_BASE_INVALID", error: "النسخة السحابية الحالية لا تحتوي على قائمة فواتير صالحة؛ تم رفض الاستبدال لحماية البيانات" }, 409);
+          }
+          // إذا تغيرت النسخة منذ قراءتها، اترك CAS يعيد المحاولة من خلال دورة المزامنة بدل فحص لقطة قديمة.
+          if (String(currentShared.updated_at || "") !== body.expected_updated_at.trim()) {
+            return json({ success: false, conflict: true, code: "STATE_REVISION_CONFLICT", error: "تغيرت النسخة المشتركة قبل فحص الفواتير؛ أعد قراءتها وادمجها قبل الحفظ", updated_at: currentShared.updated_at || null }, 409);
+          }
+          // نفس أولوية هوية الفاتورة المستخدمة في دمج سطح المكتب: id ثم uuid ثم uid ثم رقم الفاتورة.
+          const invoiceId = inv => String(inv && (inv.id || inv.uuid || inv.uid || inv.no || inv.invoice_number || inv.order_number || inv._dn) || "").trim().toUpperCase();
+          const buildInvoiceMap = (rows, label) => {
+            const map = new Map();
+            for (const inv of rows) {
+              const id = invoiceId(inv);
+              if (!id || map.has(id)) return { error: label + " تحتوي على رقم فاتورة فارغ أو مكرر: " + (id || "بدون رقم") };
+              map.set(id, inv);
+            }
+            return { map };
+          };
+          const oldInvoices = buildInvoiceMap(currentShared.payload.fa_invs, "النسخة السحابية الحالية");
+          const newInvoices = buildInvoiceMap(body.payload.fa_invs, "النسخة الواردة");
+          if (oldInvoices.error) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: oldInvoices.error }, 409);
+          if (newInvoices.error) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: newInvoices.error }, 409);
+          const explicitTrash = new Set((Array.isArray(body.payload.fa_trash) ? body.payload.fa_trash : [])
+            .map(item => String(item && (item.no || item._dn || item.invoice_number || item.order_number) || "").trim().toUpperCase())
+            .filter(Boolean));
+          const missingInvoices = [];
+          const partialInvoices = [];
+          for (const [id, oldInvoice] of oldInvoices.map) {
+            if (!newInvoices.map.has(id)) {
+              if (!explicitTrash.has(id)) missingInvoices.push(id);
+              continue;
+            }
+            const newInvoice = newInvoices.map.get(id);
+            if (oldInvoice && newInvoice && typeof oldInvoice === "object" && typeof newInvoice === "object") {
+              const missingFields = Object.keys(oldInvoice).filter(key => !Object.prototype.hasOwnProperty.call(newInvoice, key));
+              if (missingFields.length) partialInvoices.push({ invoice: id, fields: missingFields.slice(0, 5) });
+            }
+          }
+          if (missingInvoices.length) {
+            return json({
+              success: false, code: "INVOICE_SNAPSHOT_INCOMPLETE",
+              error: "تم رفض النسخة لأنها ستُسقط فواتير موجودة دون أمر حذف صريح مسجل في سلة المحذوفات",
+              current_invoice_count: oldInvoices.map.size, incoming_invoice_count: newInvoices.map.size,
+              missing_invoices: missingInvoices.slice(0, 30)
+            }, 409);
+          }
+          if (partialInvoices.length) {
+            return json({
+              success: false, code: "INVOICE_RECORD_INCOMPLETE",
+              error: "تم رفض النسخة لأنها تحتوي على فواتير ناقصة الحقول؛ لم يتم استبدال أي بيانات",
+              partial_invoices: partialInvoices.slice(0, 20)
+            }, 409);
+          }
+        }
+
         // التحديث يتم عبر RPC ذرّي بقفل الصف والتحقق من updated_at داخل PostgreSQL.
         // هذا يمنع الكتابة فوق تعديل جهاز آخر، ويمنح عملية JSONB الكبيرة مهلة 60 ثانية
         // داخل الدالة فقط، بدل إرجاع حمولة 6+ MB من PostgREST بعد كل PATCH.
@@ -3237,6 +3303,57 @@ export default {
               ? body.orders
               : [];
 
+        // منع أي مزامنة قديمة من إعادة نشر فاتورة مسحوبة؛ يلزم أمر رفع صريح من الكمبيوتر.
+        const serviceKeyForWithdrawals = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKeyForWithdrawals) return json({ error: "تعذر التحقق من سجل سحب الفواتير؛ أوقفنا الرفع لحماية البيانات" }, 500);
+        const withdrawalHeaders = { apikey: serviceKeyForWithdrawals, Authorization: "Bearer " + serviceKeyForWithdrawals };
+        const incomingReleaseOrders = orders.filter(function (o) {
+          return o && o._fa_explicit_release === true &&
+            /^[a-zA-Z0-9_-]{1,80}$/.test(String(o.order_number || "")) &&
+            /^\d{4}-\d{2}-\d{2}$/.test(String(o.delivery_date || "").slice(0, 10));
+        });
+        const incomingNumbers = Array.from(new Set(orders.map(function (o) {
+          return String(o && o.order_number || "").trim();
+        }).filter(function (n) { return /^[a-zA-Z0-9_-]{1,80}$/.test(n); })));
+        const blockedWithdrawals = [];
+        if (incomingNumbers.length) {
+          const wr = await supabaseRequest(
+            "/rest/v1/faruj_future_invoice_withdrawals?order_number=in.(" +
+              incomingNumbers.map(encodeURIComponent).join(",") +
+              ")&select=order_number,delivery_date,status,release_revision",
+            { headers: withdrawalHeaders }
+          );
+          const withdrawalRows = await wr.json().catch(function () { return null; });
+          if (!wr.ok || !Array.isArray(withdrawalRows)) {
+            return json({ error: "تعذر قراءة سجل السحب؛ لم يتم رفع أي فاتورة", detail: withdrawalRows }, 502);
+          }
+          const explicitMap = new Map(incomingReleaseOrders.map(function (o) {
+            return [String(o.order_number).trim().toUpperCase() + "|" + String(o.delivery_date).slice(0, 10), Number(o._fa_release_revision) || 0];
+          }));
+          for (const row of withdrawalRows) {
+            const key = String(row.order_number || "").trim().toUpperCase() + "|" + String(row.delivery_date || "").slice(0, 10);
+            const requestedRevision = explicitMap.get(key);
+            if (row.status === "withdrawn" || row.status === "release_pending") {
+              if (row.status !== "release_pending" || !requestedRevision || requestedRevision !== Number(row.release_revision)) {
+                blockedWithdrawals.push({ order_number: row.order_number, delivery_date: row.delivery_date, status: row.status });
+              }
+            }
+          }
+        }
+        if (blockedWithdrawals.length) {
+          return json({
+            error: "تم رفض الرفع لأن الفاتورة مسحوبة بأمر صريح. استخدم زر رفع شغل بكرة لإعادة نشرها.",
+            code: "FUTURE_INVOICE_WITHDRAWN",
+            blocked: blockedWithdrawals
+          }, 409);
+        }
+        const rpcOrders = orders.map(function (order) {
+          const copy = Object.assign({}, order);
+          delete copy._fa_explicit_release;
+          delete copy._fa_release_revision;
+          return copy;
+        });
+
         // لا نحذف صور التخزين قبل نجاح حفظ المزامنة؛ حتى لا يؤدي طلب قديم
         // أو فاشل إلى حذف صور فاتورة أحدث.
         const clearInvoices = Array.from(new Set(
@@ -3247,24 +3364,24 @@ export default {
         ));
         const deletedPhotoCounts = {};
 
+        const releaseAuthorizations = Array.from(new Map(incomingReleaseOrders.map(function (o) {
+          const key = String(o.order_number).trim().toUpperCase() + "|" + String(o.delivery_date).slice(0, 10);
+          return [key, {
+            order_number: String(o.order_number).trim(),
+            delivery_date: String(o.delivery_date).slice(0, 10),
+            release_revision: Number(o._fa_release_revision) || 0
+          }];
+        })).values());
         const rpcResponse =
           await supabaseRequest(
-            "/rest/v1/rpc/sync_orders_from_excel",
+            "/rest/v1/rpc/faruj_sync_orders_from_excel_guarded",
             {
               method: "POST",
-              headers: {
-                apikey:
-                  env.SUPABASE_ANON_KEY,
-                Authorization:
-                  "Bearer " +
-                  env.SUPABASE_ANON_KEY,
-                "Content-Type":
-                  "application/json"
-              },
+              headers: Object.assign({}, withdrawalHeaders, { "Content-Type": "application/json" }),
               body:
                 JSON.stringify({
-                  p_orders:
-                    orders
+                  p_orders: rpcOrders,
+                  p_release_authorizations: releaseAuthorizations
                 })
             }
           );
@@ -3297,6 +3414,10 @@ export default {
           if (rawSkipped !== undefined && rawSkipped !== null && Number.isFinite(Number(rawSkipped))) {
             skippedOldRevision = Number(rawSkipped);
           }
+        }
+
+        if (incomingReleaseOrders.length) {
+          await broadcastOrdersChanged(env, "future_invoice_released");
         }
 
         let photosDeletionSkipped = false;
@@ -3761,48 +3882,99 @@ export default {
         return json({ success: true, orders: o, archive: a });
       }
 
-      /* سحب فاتورة مستقبلية من قوائم المناديب مع الاحتفاظ بأرشيف الماستر */
+      /* تسجيل إذن رفع مستقبلي بمراجعة مركزية متزايدة؛ يمنع تساوي عدادات جهازين مختلفين. */
+      if (path === "/api/master/order/release-future" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(function () { return {}; });
+        const orderNumber = String(body.order_number || "").trim();
+        const deliveryDate = String(body.delivery_date || "").slice(0, 10);
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) {
+          return json({ error: "رقم الفاتورة أو تاريخ التوصيل غير صحيح" }, 400);
+        }
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار Worker" }, 500);
+        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json" };
+        const rpc = await supabaseRequest("/rest/v1/rpc/faruj_request_future_invoice_release", {
+          method: "POST",
+          headers: H,
+          body: JSON.stringify({ p_order_number: orderNumber, p_delivery_date: deliveryDate, p_requested_by: "desktop_master" })
+        });
+        const result = await rpc.json().catch(function () { return null; });
+        if (!rpc.ok || !result || result.success !== true || !Number(result.release_revision)) {
+          return json({ error: (result && (result.error || result.message || result.hint)) || "تعذر تسجيل إذن الرفع على السحابة", detail: result }, 502);
+        }
+        return json({ success: true, release_revision: Number(result.release_revision), order_number: orderNumber, delivery_date: deliveryDate });
+      }
+
+      /* سحب شامل لفاتورة مستقبلية: المناديب + الماستر + الأرشيف، مع سجل يمنع إعادة نشرها تلقائيًا. */
       if (path === "/api/master/order/recall-future" && request.method === "POST") {
         const auth = await requireMaster(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
         const body = await request.json().catch(function () { return {}; });
         const orderNumber = String(body.order_number || "").trim();
-        const sheetName = String(body.sheet_name || "").trim();
         const requestedDate = String(body.delivery_date || "").slice(0, 10);
-        const allSheets = sheetName.toUpperCase() === "ALL";
-        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !sheetName || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
-          return json({ error: "بيانات الفاتورة أو تاريخ التوصيل غير صحيحة" }, 400);
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+          return json({ error: "رقم الفاتورة أو تاريخ التوصيل غير صحيح" }, 400);
         }
-        const dubaiToday = new Date(Date.now() + 4 * 3600 * 1000).toISOString().slice(0, 10);
-        if (requestedDate <= dubaiToday) return json({ error: "السحب مسموح للفواتير المستقبلية فقط", requested_date: requestedDate, dubai_today: dubaiToday }, 409);
         const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
         if (!svc) return json({ error: "مفتاح SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار Worker" }, 500);
-        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=representation" };
-        let query = "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id,order_number,sheet_name,delivery_date,created_at";
-        if (!allSheets) query += "&sheet_name=eq." + encodeURIComponent(sheetName);
-        const findResp = await supabaseRequest(query, { headers: H });
-        const found = await findResp.json().catch(function () { return null; });
-        if (!findResp.ok || !Array.isArray(found)) return json({ error: "تعذر البحث عن الفاتورة في جدول orders", details: found }, 502);
-        const futureRows = found.filter(function (row) {
-          const savedDate = String(row.delivery_date || "").slice(0, 10);
-          return savedDate === requestedDate && savedDate > dubaiToday && (allSheets || String(row.sheet_name || "") === sheetName);
+        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json" };
+        // اجمع مفاتيح ترتيب الفاتورة قبل حذف نسخ المناديب؛ هذه بيانات ترتيب تشغيلية فقط.
+        const sortSourceResp = await supabaseRequest(
+          "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) +
+          "&delivery_date=eq." + encodeURIComponent(requestedDate) +
+          "&select=order_number,created_at,customer_name,total,sheet_name",
+          { headers: H }
+        );
+        const sortSourceRows = await sortSourceResp.json().catch(function () { return null; });
+        if (!sortSourceResp.ok || !Array.isArray(sortSourceRows)) {
+          return json({ error: "تعذر قراءة مفاتيح ترتيب الفاتورة قبل السحب؛ لم يتم تنفيذ السحب", detail: sortSourceRows }, 502);
+        }
+        const sortKeys = [];
+        for (const row of sortSourceRows) sortKeys.push(await makeSharedInvoiceKey(row));
+
+        const rpc = await supabaseRequest("/rest/v1/rpc/faruj_withdraw_future_invoice", {
+          method: "POST",
+          headers: H,
+          body: JSON.stringify({
+            p_order_number: orderNumber,
+            p_delivery_date: requestedDate,
+            p_requested_by: "desktop_master"
+          })
         });
-        if (!futureRows.length) {
-          return json({ error: "لم أجد نسخة مستقبلية مطابقة في قائمة المناديب؛ لم يتم حذف أي شيء.", requested: { order_number: orderNumber, sheet_name: sheetName, delivery_date: requestedDate }, database_rows: found }, 404);
+        const result = await rpc.json().catch(function () { return null; });
+        if (!rpc.ok || !result || result.success !== true) {
+          return json({
+            error: (result && (result.error || result.message || result.hint)) || "تعذر تنفيذ السحب الشامل؛ لم نعتبر العملية ناجحة",
+            detail: result,
+            supabase_status: rpc.status
+          }, rpc.status === 409 ? 409 : 502);
         }
-        const ids = futureRows.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
-        if (!ids.length) return json({ error: "تعذر تحديد معرفات النسخ؛ لم يتم حذف أي شيء." }, 409);
-        const departureResp = await supabaseRequest("/rest/v1/driver_departures?order_id=in.(" + ids.join(",") + ")", { method: "DELETE", headers: H });
-        if (!departureResp.ok && departureResp.status !== 404) {
-          const err = await departureResp.json().catch(function () { return {}; });
-          return json({ error: "تعذر إزالة سجل تحرك المندوب؛ لم يتم السحب.", details: err }, 502);
+        let removedSortMetadata = 0;
+        if (sortKeys.length) {
+          const uniqueSortKeys = Array.from(new Set(sortKeys));
+          const sortDelete = await supabaseRequest(
+            "/rest/v1/driver_invoice_order_shared?invoice_key=in.(" + uniqueSortKeys.map(encodeURIComponent).join(",") + ")",
+            { method: "DELETE", headers: Object.assign({}, H, { Prefer: "return=representation" }) }
+          );
+          const sortDeletedRows = await sortDelete.json().catch(function () { return [] });
+          if (sortDelete.ok && Array.isArray(sortDeletedRows)) removedSortMetadata = sortDeletedRows.length;
         }
-        const delResp = await supabaseRequest("/rest/v1/orders?id=in.(" + ids.join(",") + ")", { method: "DELETE", headers: H });
-        const removedRows = await delResp.json().catch(function () { return null; });
-        if (!delResp.ok || !Array.isArray(removedRows) || removedRows.length !== ids.length) {
-          return json({ error: "تعذر سحب كل نسخ الفاتورة من المناديب؛ لم يتم اعتبار العملية ناجحة.", removed: Array.isArray(removedRows) ? removedRows.length : 0, expected: ids.length }, 502);
-        }
-        return json({ success: true, removed: removedRows.length, archive_preserved: true, order_number: orderNumber, sheet_names: Array.from(new Set(futureRows.map(function (row) { return row.sheet_name; }))), delivery_date: requestedDate });
+        await broadcastOrdersChanged(env, "future_invoice_withdrawn");
+        return json({
+          success: true,
+          withdrawn: true,
+          removed_orders: Number(result.removed_orders) || 0,
+          removed_archive: Number(result.removed_archive) || 0,
+          removed_departures: Number(result.removed_departures) || 0,
+          cancelled_requests: Number(result.cancelled_requests) || 0,
+          removed_sort_metadata: removedSortMetadata,
+          release_revision: Number(result.release_revision) || 0,
+          order_number: orderNumber,
+          delivery_date: requestedDate,
+          retained_on_desktop: true
+        });
       }
 
       if (path === "/api/master/order/delete-by-identity" && request.method === "POST") {
