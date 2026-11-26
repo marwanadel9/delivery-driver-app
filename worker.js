@@ -1023,8 +1023,31 @@ export default {
           } else if (action === "update") {
             if (!current) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "لم يعد سجل العميل موجودًا في التخزين السحابي؛ لم نعتمد التعديل" }, 409);
             if (currentJson === proposedJson && duplicateCopiesCollapsed === 0) return json({ ok: true, action, customer_code: code, already_applied: true, updated_at: shared.updated_at });
-            if (currentJson !== expectedJson) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "تم تعديل هذا العميل على جهاز آخر منذ فتح السجل؛ لم نستبدل أي بيانات" }, 409);
-            customers[matches[0]] = proposed;
+
+            // Three-way merge per customer field. Keep cloud-only edits, apply desktop-only edits.
+            // Conflicting changes to the same field are returned for explicit manual resolution.
+            const mergedCustomer = {}, fieldConflicts = [];
+            const fields = new Set([...Object.keys(expected || {}), ...Object.keys(proposed || {}), ...Object.keys(current || {})]);
+            for (const field of fields) {
+              if (field === "_faSyncId") continue;
+              const hb = Object.prototype.hasOwnProperty.call(expected, field);
+              const hp = Object.prototype.hasOwnProperty.call(proposed, field);
+              const hc = Object.prototype.hasOwnProperty.call(current, field);
+              const bv = hb ? farujStableJson(expected[field]) : "__FARUJ_MISSING__";
+              const pv = hp ? farujStableJson(proposed[field]) : "__FARUJ_MISSING__";
+              const cv = hc ? farujStableJson(current[field]) : "__FARUJ_MISSING__";
+              const desktopChanged = pv !== bv, cloudChanged = cv !== bv;
+              if (desktopChanged && cloudChanged && pv !== cv) { fieldConflicts.push(field); continue; }
+              if (desktopChanged) { if (hp) mergedCustomer[field] = proposed[field]; }
+              else if (hc) mergedCustomer[field] = current[field];
+            }
+            const syncId = proposed._faSyncId || current._faSyncId || expected._faSyncId;
+            if (syncId) mergedCustomer._faSyncId = syncId;
+            if (fieldConflicts.length) return json({
+              ok: false, code: "CUSTOMER_RECORD_CONFLICT", customer_code: code, conflict_fields: fieldConflicts,
+              error: "تغيرت نفس الحقول في الكمبيوتر والتخزين السحابي بقيم مختلفة؛ يلزم الحسم اليدوي: " + fieldConflicts.join("، ")
+            }, 409);
+            customers[matches[0]] = mergedCustomer;
           } else {
             if (!current) return json({ ok: true, action, customer_code: code, already_applied: true, updated_at: shared.updated_at });
             if (currentJson !== expectedJson) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "تغير سجل العميل على جهاز آخر؛ لم ننفذ الحذف حتى لا نفقد تعديلًا أحدث" }, 409);
@@ -1257,14 +1280,9 @@ export default {
           }
         }
 
-        // لا نعيد stringify لحمولة 8+ MB داخل Worker؛ ذلك يستهلك CPU إضافيًا
-        // بعد أن قام runtime بالفعل بقراءة JSON. نعتمد Content-Length الذي أرسله
-        // عميل الكمبيوتر للتحقق من الحد الأعلى دون إنشاء نسخة نصية ثانية من JSON.
-        const declaredLength = Number(request.headers.get("content-length") || 0);
-        const payloadBytes = Number.isFinite(declaredLength) && declaredLength > 0 ? declaredLength : null;
-        if (payloadBytes !== null && payloadBytes > 20 * 1024 * 1024) {
-          return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
-        }
+        const payloadText = JSON.stringify(body.payload);
+        const payloadBytes = new TextEncoder().encode(payloadText).byteLength;
+        if (payloadBytes > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
 
         // حماية مركزية إضافية: لا نقبل لقطة ناقصة للفواتير ولا نستنتج الحذف من اختفاء سجل.
         if (!Array.isArray(body.payload.fa_invs)) {
