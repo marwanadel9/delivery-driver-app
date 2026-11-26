@@ -1023,31 +1023,8 @@ export default {
           } else if (action === "update") {
             if (!current) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "لم يعد سجل العميل موجودًا في التخزين السحابي؛ لم نعتمد التعديل" }, 409);
             if (currentJson === proposedJson && duplicateCopiesCollapsed === 0) return json({ ok: true, action, customer_code: code, already_applied: true, updated_at: shared.updated_at });
-
-            // Three-way merge per customer field. Keep cloud-only edits, apply desktop-only edits.
-            // Conflicting changes to the same field are returned for explicit manual resolution.
-            const mergedCustomer = {}, fieldConflicts = [];
-            const fields = new Set([...Object.keys(expected || {}), ...Object.keys(proposed || {}), ...Object.keys(current || {})]);
-            for (const field of fields) {
-              if (field === "_faSyncId") continue;
-              const hb = Object.prototype.hasOwnProperty.call(expected, field);
-              const hp = Object.prototype.hasOwnProperty.call(proposed, field);
-              const hc = Object.prototype.hasOwnProperty.call(current, field);
-              const bv = hb ? farujStableJson(expected[field]) : "__FARUJ_MISSING__";
-              const pv = hp ? farujStableJson(proposed[field]) : "__FARUJ_MISSING__";
-              const cv = hc ? farujStableJson(current[field]) : "__FARUJ_MISSING__";
-              const desktopChanged = pv !== bv, cloudChanged = cv !== bv;
-              if (desktopChanged && cloudChanged && pv !== cv) { fieldConflicts.push(field); continue; }
-              if (desktopChanged) { if (hp) mergedCustomer[field] = proposed[field]; }
-              else if (hc) mergedCustomer[field] = current[field];
-            }
-            const syncId = proposed._faSyncId || current._faSyncId || expected._faSyncId;
-            if (syncId) mergedCustomer._faSyncId = syncId;
-            if (fieldConflicts.length) return json({
-              ok: false, code: "CUSTOMER_RECORD_CONFLICT", customer_code: code, conflict_fields: fieldConflicts,
-              error: "تغيرت نفس الحقول في الكمبيوتر والتخزين السحابي بقيم مختلفة؛ يلزم الحسم اليدوي: " + fieldConflicts.join("، ")
-            }, 409);
-            customers[matches[0]] = mergedCustomer;
+            if (currentJson !== expectedJson) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "تم تعديل هذا العميل على جهاز آخر منذ فتح السجل؛ لم نستبدل أي بيانات" }, 409);
+            customers[matches[0]] = proposed;
           } else {
             if (!current) return json({ ok: true, action, customer_code: code, already_applied: true, updated_at: shared.updated_at });
             if (currentJson !== expectedJson) return json({ ok: false, code: "CUSTOMER_RECORD_CONFLICT", error: "تغير سجل العميل على جهاز آخر؛ لم ننفذ الحذف حتى لا نفقد تعديلًا أحدث" }, 409);
@@ -1280,9 +1257,15 @@ export default {
           }
         }
 
-        const payloadText = JSON.stringify(body.payload);
-        const payloadBytes = new TextEncoder().encode(payloadText).byteLength;
-        if (payloadBytes > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
+        // تجنب إنشاء نسخة نصية إضافية من حمولة الفواتير الكبيرة داخل Worker.
+        // Content-Length هو حجم الطلب الفعلي المرسل؛ إذا لم يرسله العميل نتركه غير معروف
+        // ولا نرفض الطلب بسبب قياس مكلف داخل Worker.
+        const declaredPayloadBytes = Number(request.headers.get("content-length") || 0);
+        const payloadBytes = Number.isFinite(declaredPayloadBytes) && declaredPayloadBytes > 0
+          ? declaredPayloadBytes : null;
+        if (payloadBytes !== null && payloadBytes > 20 * 1024 * 1024) {
+          return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
+        }
 
         // حماية مركزية إضافية: لا نقبل لقطة ناقصة للفواتير ولا نستنتج الحذف من اختفاء سجل.
         if (!Array.isArray(body.payload.fa_invs)) {
@@ -4271,11 +4254,108 @@ export default {
 
         const driversUpdated = Array.isArray(d1) ? d1.length : 0;
         const archiveUpdated = Array.isArray(d2) ? d2.length : 0;
+        let desktopStateUpdated = false;
         if (driversUpdated === 0 && archiveUpdated === 0) {
-          return json({ error: "لم يتم العثور على الفاتورة في الطلبات أو أرشيف الماستر", order_number: orderNumber }, 404);
+          // بعض الفواتير القديمة قد تكون موجودة في نسخة الكمبيوتر المشتركة فقط.
+          // نحدّث علامة استلام التحويل داخل الفاتورة المطابقة فقط، مع CAS لمنع
+          // الكتابة فوق تعديل أحدث من جهاز آخر. لا ننشئ سجل orders ولا نغيّر Master.
+          // إعادة المحاولة عند تزاحم قفل PostgreSQL أو تغير إصدار النسخة المشتركة.
+          // في كل محاولة نقرأ أحدث payload من جديد ثم نغيّر tRec للفاتورة المطلوبة فقط.
+          const maxAttempts = 5;
+          let saved = false;
+          let lastFailure = null;
+          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            const stateResponse = await supabaseRequest(
+              "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=id,payload,updated_at",
+              { headers: H }
+            );
+            const stateRows = await stateResponse.json().catch(function () { return null; });
+            if (!stateResponse.ok || !Array.isArray(stateRows)) {
+              return json({ error: "تعذر فحص نسخة الكمبيوتر المشتركة؛ لم يتم تغيير أي بيانات", detail: stateRows, supabase_status: stateResponse.status }, 502);
+            }
+            if (stateRows.length !== 1 || !stateRows[0].payload || !Array.isArray(stateRows[0].payload.fa_invs)) {
+              return json({ error: "تعذر العثور على نسخة الكمبيوتر المشتركة أو قائمة الفواتير؛ لم يتم تغيير أي بيانات", order_number: orderNumber }, 404);
+            }
+
+            const shared = stateRows[0];
+            const matches = shared.payload.fa_invs.filter(function (inv) {
+              const id = String(inv && (inv.no || inv._dn || inv.invoice_number || inv.order_number) || "").trim().toUpperCase();
+              return id === orderNumber.toUpperCase();
+            });
+            if (matches.length === 0) {
+              return json({ error: "لم يتم العثور على الفاتورة في الطلبات أو أرشيف الماستر أو نسخة الكمبيوتر المشتركة", order_number: orderNumber }, 404);
+            }
+            if (matches.length !== 1) {
+              return json({ error: "رقم الفاتورة مكرر داخل نسخة الكمبيوتر المشتركة؛ أوقفنا التحديث لتجنب تعديل فاتورة خاطئة", order_number: orderNumber, matches: matches.length }, 409);
+            }
+            if (matches[0] && matches[0].tRec === received) {
+              saved = true; // العملية مطبقة بالفعل؛ لا داعي لقفل سجل JSONB الكبير.
+              break;
+            }
+
+            const nextPayload = JSON.parse(JSON.stringify(shared.payload));
+            const target = nextPayload.fa_invs.find(function (inv) {
+              const id = String(inv && (inv.no || inv._dn || inv.invoice_number || inv.order_number) || "").trim().toUpperCase();
+              return id === orderNumber.toUpperCase();
+            });
+            if (!target || typeof target !== "object") {
+              return json({ error: "تعذر تحديد سجل الفاتورة داخل النسخة المشتركة؛ لم يتم تغيير أي بيانات", order_number: orderNumber }, 409);
+            }
+            target.tRec = received;
+
+            const casResponse = await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_cas_update", {
+              method: "POST",
+              headers: H,
+              body: JSON.stringify({
+                p_expected_updated_at: shared.updated_at,
+                p_payload: nextPayload,
+                p_source_device: "excel-transfer-received"
+              })
+            });
+            const casRows = await casResponse.json().catch(function () { return null; });
+            const errorCode = String(casRows && (casRows.code || casRows.sqlstate || casRows.detail && casRows.detail.code) || "");
+            const errorText = String(casRows && (casRows.message || casRows.error || casRows.hint) || "");
+            const lockBusy = errorCode === "55P03" || /lock timeout|could not obtain lock|canceling statement due to lock/i.test(errorText);
+
+            if (casResponse.ok && Array.isArray(casRows) && casRows.length) {
+              const cas = casRows[0];
+              if (cas.success === true && cas.conflict !== true) {
+                saved = true;
+                break;
+              }
+              if (cas.conflict === true) {
+                lastFailure = { kind: "revision_conflict", updated_at: cas.updated_at || null };
+              } else {
+                return json({ error: "تعذر حفظ تأكيد التحويل في نسخة الكمبيوتر المشتركة؛ لم نؤكد نجاح التحديث", detail: cas, supabase_status: casResponse.status }, 502);
+              }
+            } else if (lockBusy) {
+              lastFailure = { kind: "lock_timeout", code: errorCode || "55P03", detail: casRows };
+            } else {
+              return json({ error: "تعذر حفظ تأكيد التحويل في نسخة الكمبيوتر المشتركة؛ لم نؤكد نجاح التحديث", detail: casRows, supabase_status: casResponse.status }, 502);
+            }
+
+            if (attempt < maxAttempts) {
+              // Backoff محدود: 350، 700، 1400، 2000 مللي ثانية.
+              const waitMs = Math.min(350 * Math.pow(2, attempt - 1), 2000);
+              await new Promise(function (resolve) { setTimeout(resolve, waitMs); });
+            }
+          }
+
+          if (!saved) {
+            return json({
+              success: false,
+              retryable: true,
+              code: lastFailure && lastFailure.kind === "lock_timeout" ? "DATABASE_LOCK_TIMEOUT" : "STATE_REVISION_CONFLICT",
+              error: "النسخة المشتركة مشغولة بعملية مزامنة أخرى؛ لم نغيّر بيانات الفاتورة. أعد المحاولة بعد انتهاء المزامنة.",
+              order_number: orderNumber,
+              attempts: maxAttempts,
+              detail: lastFailure
+            }, 503);
+          }
+          desktopStateUpdated = true;
         }
 
-        // إشعار لحظي للماستر والمناديب بعد نجاح التحديثين.
+        // إشعار لحظي بعد نجاح التحديث في أي من مصادر الفاتورة.
         await broadcastOrdersChanged(env, "excel-transfer-received");
 
         return json({
@@ -4283,7 +4363,8 @@ export default {
           order_number: orderNumber,
           bank_transfer_received: received,
           drivers_updated: driversUpdated,
-          archive_updated: archiveUpdated
+          archive_updated: archiveUpdated,
+          desktop_state_updated: desktopStateUpdated
         });
       }
 
