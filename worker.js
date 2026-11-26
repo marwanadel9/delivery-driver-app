@@ -4248,11 +4248,63 @@ export default {
 
         const driversUpdated = Array.isArray(d1) ? d1.length : 0;
         const archiveUpdated = Array.isArray(d2) ? d2.length : 0;
+        let desktopStateUpdated = false;
         if (driversUpdated === 0 && archiveUpdated === 0) {
-          return json({ error: "لم يتم العثور على الفاتورة في الطلبات أو أرشيف الماستر", order_number: orderNumber }, 404);
+          // بعض الفواتير القديمة قد تكون موجودة في نسخة الكمبيوتر المشتركة فقط.
+          // نحدّث علامة استلام التحويل داخل الفاتورة المطابقة فقط، مع CAS لمنع
+          // الكتابة فوق تعديل أحدث من جهاز آخر. لا ننشئ سجل orders ولا نغيّر Master.
+          const stateResponse = await supabaseRequest(
+            "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=id,payload,updated_at",
+            { headers: H }
+          );
+          const stateRows = await stateResponse.json().catch(function () { return null; });
+          if (!stateResponse.ok || !Array.isArray(stateRows)) {
+            return json({ error: "تعذر فحص نسخة الكمبيوتر المشتركة؛ لم يتم تغيير أي بيانات", detail: stateRows, supabase_status: stateResponse.status }, 502);
+          }
+          if (stateRows.length !== 1 || !stateRows[0].payload || !Array.isArray(stateRows[0].payload.fa_invs)) {
+            return json({ error: "تعذر العثور على نسخة الكمبيوتر المشتركة أو قائمة الفواتير؛ لم يتم تغيير أي بيانات", order_number: orderNumber }, 404);
+          }
+          const shared = stateRows[0];
+          const matches = shared.payload.fa_invs.filter(function (inv) {
+            const id = String(inv && (inv.no || inv._dn || inv.invoice_number || inv.order_number) || "").trim().toUpperCase();
+            return id === orderNumber.toUpperCase();
+          });
+          if (matches.length === 0) {
+            return json({ error: "لم يتم العثور على الفاتورة في الطلبات أو أرشيف الماستر أو نسخة الكمبيوتر المشتركة", order_number: orderNumber }, 404);
+          }
+          if (matches.length !== 1) {
+            return json({ error: "رقم الفاتورة مكرر داخل نسخة الكمبيوتر المشتركة؛ أوقفنا التحديث لتجنب تعديل فاتورة خاطئة", order_number: orderNumber, matches: matches.length }, 409);
+          }
+          const nextPayload = JSON.parse(JSON.stringify(shared.payload));
+          const target = nextPayload.fa_invs.find(function (inv) {
+            const id = String(inv && (inv.no || inv._dn || inv.invoice_number || inv.order_number) || "").trim().toUpperCase();
+            return id === orderNumber.toUpperCase();
+          });
+          if (!target || typeof target !== "object") {
+            return json({ error: "تعذر تحديد سجل الفاتورة داخل النسخة المشتركة؛ لم يتم تغيير أي بيانات", order_number: orderNumber }, 409);
+          }
+          target.tRec = received;
+          const casResponse = await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_cas_update", {
+            method: "POST",
+            headers: H,
+            body: JSON.stringify({
+              p_expected_updated_at: shared.updated_at,
+              p_payload: nextPayload,
+              p_source_device: "excel-transfer-received"
+            })
+          });
+          const casRows = await casResponse.json().catch(function () { return null; });
+          if (!casResponse.ok || !Array.isArray(casRows) || !casRows.length) {
+            return json({ error: "تعذر حفظ تأكيد التحويل في نسخة الكمبيوتر المشتركة؛ لم نؤكد نجاح التحديث", detail: casRows, supabase_status: casResponse.status }, 502);
+          }
+          const cas = casRows[0];
+          if (cas.success !== true || cas.conflict === true) {
+            return json({ success: false, conflict: true, code: "STATE_REVISION_CONFLICT", error: "تغيرت نسخة الكمبيوتر أثناء التحديث؛ أعد المحاولة بعد إعادة المزامنة", updated_at: cas.updated_at || null }, 409);
+          }
+          desktopStateUpdated = true;
         }
 
-        // إشعار لحظي للماستر والمناديب بعد نجاح التحديثين.
+        // إشعار لحظي بعد نجاح التحديث في أي من مصادر الفاتورة.
         await broadcastOrdersChanged(env, "excel-transfer-received");
 
         return json({
@@ -4260,7 +4312,8 @@ export default {
           order_number: orderNumber,
           bank_transfer_received: received,
           drivers_updated: driversUpdated,
-          archive_updated: archiveUpdated
+          archive_updated: archiveUpdated,
+          desktop_state_updated: desktopStateUpdated
         });
       }
 
