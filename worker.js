@@ -1257,9 +1257,12 @@ export default {
           }
         }
 
-        const payloadText = JSON.stringify(body.payload);
-        const payloadBytes = new TextEncoder().encode(payloadText).byteLength;
-        if (payloadBytes > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
+        // Avoid serializing and UTF-8 encoding the entire multi-megabyte payload
+        // solely to measure it. Content-Length is supplied by the HTTP runtime for
+        // normal desktop uploads; enforce the same hard ceiling before DB work.
+        const requestBytes = Number(request.headers.get("Content-Length") || 0);
+        if (requestBytes > 21 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
+        const payloadBytes = requestBytes || null;
 
         // حماية مركزية إضافية: لا نقبل لقطة ناقصة للفواتير ولا نستنتج الحذف من اختفاء سجل.
         if (!Array.isArray(body.payload.fa_invs)) {
@@ -1281,32 +1284,39 @@ export default {
           }
           // نفس أولوية هوية الفاتورة المستخدمة في دمج سطح المكتب: id ثم uuid ثم uid ثم رقم الفاتورة.
           const invoiceId = inv => String(inv && (inv.id || inv.uuid || inv.uid || inv.no || inv.invoice_number || inv.order_number || inv._dn) || "").trim().toUpperCase();
-          const buildInvoiceMap = (rows, label) => {
-            const map = new Map();
-            for (const inv of rows) {
-              const id = invoiceId(inv);
-              if (!id || map.has(id)) return { error: label + " تحتوي على رقم فاتورة فارغ أو مكرر: " + (id || "بدون رقم") };
-              map.set(id, inv);
-            }
-            return { map };
-          };
-          const oldInvoices = buildInvoiceMap(currentShared.payload.fa_invs, "النسخة السحابية الحالية");
-          const newInvoices = buildInvoiceMap(body.payload.fa_invs, "النسخة الواردة");
-          if (oldInvoices.error) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: oldInvoices.error }, 409);
-          if (newInvoices.error) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: newInvoices.error }, 409);
-          const explicitTrash = new Set((Array.isArray(body.payload.fa_trash) ? body.payload.fa_trash : [])
-            .map(item => String(item && (item.no || item._dn || item.invoice_number || item.order_number) || "").trim().toUpperCase())
-            .filter(Boolean));
+          // Use Sets instead of two Maps holding every invoice object. This keeps
+          // the safety check but substantially reduces allocations on large snapshots.
+          const oldById = new Map();
+          const newById = new Map();
+          let invalidOld = false, invalidNew = false;
+          for (const inv of currentShared.payload.fa_invs) {
+            const id = invoiceId(inv);
+            if (!id || oldById.has(id)) { invalidOld = true; break; }
+            oldById.set(id, inv);
+          }
+          for (const inv of body.payload.fa_invs) {
+            const id = invoiceId(inv);
+            if (!id || newById.has(id)) { invalidNew = true; break; }
+            newById.set(id, inv);
+          }
+          if (invalidOld) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: "النسخة السحابية الحالية تحتوي على رقم فاتورة فارغ أو مكرر" }, 409);
+          if (invalidNew) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: "النسخة الواردة تحتوي على رقم فاتورة فارغ أو مكرر" }, 409);
+          const explicitTrash = new Set();
+          for (const item of (Array.isArray(body.payload.fa_trash) ? body.payload.fa_trash : [])) {
+            const id = String(item && (item.no || item._dn || item.invoice_number || item.order_number) || "").trim().toUpperCase();
+            if (id) explicitTrash.add(id);
+          }
           const missingInvoices = [];
           const partialInvoices = [];
-          for (const [id, oldInvoice] of oldInvoices.map) {
-            if (!newInvoices.map.has(id)) {
+          for (const [id, oldInvoice] of oldById) {
+            const newInvoice = newById.get(id);
+            if (!newById.has(id)) {
               if (!explicitTrash.has(id)) missingInvoices.push(id);
               continue;
             }
-            const newInvoice = newInvoices.map.get(id);
             if (oldInvoice && newInvoice && typeof oldInvoice === "object" && typeof newInvoice === "object") {
-              const missingFields = Object.keys(oldInvoice).filter(key => !Object.prototype.hasOwnProperty.call(newInvoice, key));
+              const newKeys = new Set(Object.keys(newInvoice));
+              const missingFields = Object.keys(oldInvoice).filter(key => !newKeys.has(key));
               if (missingFields.length) partialInvoices.push({ invoice: id, fields: missingFields.slice(0, 5) });
             }
           }
@@ -1314,7 +1324,7 @@ export default {
             return json({
               success: false, code: "INVOICE_SNAPSHOT_INCOMPLETE",
               error: "تم رفض النسخة لأنها ستُسقط فواتير موجودة دون أمر حذف صريح مسجل في سلة المحذوفات",
-              current_invoice_count: oldInvoices.map.size, incoming_invoice_count: newInvoices.map.size,
+              current_invoice_count: oldById.size, incoming_invoice_count: newById.size,
               missing_invoices: missingInvoices.slice(0, 30)
             }, 409);
           }
@@ -1330,8 +1340,6 @@ export default {
         // التحديث يتم عبر RPC ذرّي بقفل الصف والتحقق من updated_at داخل PostgreSQL.
         // هذا يمنع الكتابة فوق تعديل جهاز آخر، ويمنح عملية JSONB الكبيرة مهلة 60 ثانية
         // داخل الدالة فقط، بدل إرجاع حمولة 6+ MB من PostgREST بعد كل PATCH.
-        const expectedMillis = Date.parse(body.expected_updated_at.trim());
-        if (!Number.isFinite(expectedMillis)) return json({ error: "رقم مراجعة النسخة المشتركة غير صالح" }, 400);
         const response = await supabaseRequest(
           "/rest/v1/rpc/faruj_desktop_shared_state_cas_update",
           {
@@ -1371,7 +1379,7 @@ export default {
           updated_at: saved.updated_at,
           source_device: saved.source_device,
           saved_keys: keys.length,
-          payload_bytes: payloadBytes
+          request_bytes: payloadBytes
         });
       }
 
@@ -4248,108 +4256,11 @@ export default {
 
         const driversUpdated = Array.isArray(d1) ? d1.length : 0;
         const archiveUpdated = Array.isArray(d2) ? d2.length : 0;
-        let desktopStateUpdated = false;
         if (driversUpdated === 0 && archiveUpdated === 0) {
-          // بعض الفواتير القديمة قد تكون موجودة في نسخة الكمبيوتر المشتركة فقط.
-          // نحدّث علامة استلام التحويل داخل الفاتورة المطابقة فقط، مع CAS لمنع
-          // الكتابة فوق تعديل أحدث من جهاز آخر. لا ننشئ سجل orders ولا نغيّر Master.
-          // إعادة المحاولة عند تزاحم قفل PostgreSQL أو تغير إصدار النسخة المشتركة.
-          // في كل محاولة نقرأ أحدث payload من جديد ثم نغيّر tRec للفاتورة المطلوبة فقط.
-          const maxAttempts = 5;
-          let saved = false;
-          let lastFailure = null;
-          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            const stateResponse = await supabaseRequest(
-              "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=id,payload,updated_at",
-              { headers: H }
-            );
-            const stateRows = await stateResponse.json().catch(function () { return null; });
-            if (!stateResponse.ok || !Array.isArray(stateRows)) {
-              return json({ error: "تعذر فحص نسخة الكمبيوتر المشتركة؛ لم يتم تغيير أي بيانات", detail: stateRows, supabase_status: stateResponse.status }, 502);
-            }
-            if (stateRows.length !== 1 || !stateRows[0].payload || !Array.isArray(stateRows[0].payload.fa_invs)) {
-              return json({ error: "تعذر العثور على نسخة الكمبيوتر المشتركة أو قائمة الفواتير؛ لم يتم تغيير أي بيانات", order_number: orderNumber }, 404);
-            }
-
-            const shared = stateRows[0];
-            const matches = shared.payload.fa_invs.filter(function (inv) {
-              const id = String(inv && (inv.no || inv._dn || inv.invoice_number || inv.order_number) || "").trim().toUpperCase();
-              return id === orderNumber.toUpperCase();
-            });
-            if (matches.length === 0) {
-              return json({ error: "لم يتم العثور على الفاتورة في الطلبات أو أرشيف الماستر أو نسخة الكمبيوتر المشتركة", order_number: orderNumber }, 404);
-            }
-            if (matches.length !== 1) {
-              return json({ error: "رقم الفاتورة مكرر داخل نسخة الكمبيوتر المشتركة؛ أوقفنا التحديث لتجنب تعديل فاتورة خاطئة", order_number: orderNumber, matches: matches.length }, 409);
-            }
-            if (matches[0] && matches[0].tRec === received) {
-              saved = true; // العملية مطبقة بالفعل؛ لا داعي لقفل سجل JSONB الكبير.
-              break;
-            }
-
-            const nextPayload = JSON.parse(JSON.stringify(shared.payload));
-            const target = nextPayload.fa_invs.find(function (inv) {
-              const id = String(inv && (inv.no || inv._dn || inv.invoice_number || inv.order_number) || "").trim().toUpperCase();
-              return id === orderNumber.toUpperCase();
-            });
-            if (!target || typeof target !== "object") {
-              return json({ error: "تعذر تحديد سجل الفاتورة داخل النسخة المشتركة؛ لم يتم تغيير أي بيانات", order_number: orderNumber }, 409);
-            }
-            target.tRec = received;
-
-            const casResponse = await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_cas_update", {
-              method: "POST",
-              headers: H,
-              body: JSON.stringify({
-                p_expected_updated_at: shared.updated_at,
-                p_payload: nextPayload,
-                p_source_device: "excel-transfer-received"
-              })
-            });
-            const casRows = await casResponse.json().catch(function () { return null; });
-            const errorCode = String(casRows && (casRows.code || casRows.sqlstate || casRows.detail && casRows.detail.code) || "");
-            const errorText = String(casRows && (casRows.message || casRows.error || casRows.hint) || "");
-            const lockBusy = errorCode === "55P03" || /lock timeout|could not obtain lock|canceling statement due to lock/i.test(errorText);
-
-            if (casResponse.ok && Array.isArray(casRows) && casRows.length) {
-              const cas = casRows[0];
-              if (cas.success === true && cas.conflict !== true) {
-                saved = true;
-                break;
-              }
-              if (cas.conflict === true) {
-                lastFailure = { kind: "revision_conflict", updated_at: cas.updated_at || null };
-              } else {
-                return json({ error: "تعذر حفظ تأكيد التحويل في نسخة الكمبيوتر المشتركة؛ لم نؤكد نجاح التحديث", detail: cas, supabase_status: casResponse.status }, 502);
-              }
-            } else if (lockBusy) {
-              lastFailure = { kind: "lock_timeout", code: errorCode || "55P03", detail: casRows };
-            } else {
-              return json({ error: "تعذر حفظ تأكيد التحويل في نسخة الكمبيوتر المشتركة؛ لم نؤكد نجاح التحديث", detail: casRows, supabase_status: casResponse.status }, 502);
-            }
-
-            if (attempt < maxAttempts) {
-              // Backoff محدود: 350، 700، 1400، 2000 مللي ثانية.
-              const waitMs = Math.min(350 * Math.pow(2, attempt - 1), 2000);
-              await new Promise(function (resolve) { setTimeout(resolve, waitMs); });
-            }
-          }
-
-          if (!saved) {
-            return json({
-              success: false,
-              retryable: true,
-              code: lastFailure && lastFailure.kind === "lock_timeout" ? "DATABASE_LOCK_TIMEOUT" : "STATE_REVISION_CONFLICT",
-              error: "النسخة المشتركة مشغولة بعملية مزامنة أخرى؛ لم نغيّر بيانات الفاتورة. أعد المحاولة بعد انتهاء المزامنة.",
-              order_number: orderNumber,
-              attempts: maxAttempts,
-              detail: lastFailure
-            }, 503);
-          }
-          desktopStateUpdated = true;
+          return json({ error: "لم يتم العثور على الفاتورة في الطلبات أو أرشيف الماستر", order_number: orderNumber }, 404);
         }
 
-        // إشعار لحظي بعد نجاح التحديث في أي من مصادر الفاتورة.
+        // إشعار لحظي للماستر والمناديب بعد نجاح التحديثين.
         await broadcastOrdersChanged(env, "excel-transfer-received");
 
         return json({
@@ -4357,8 +4268,7 @@ export default {
           order_number: orderNumber,
           bank_transfer_received: received,
           drivers_updated: driversUpdated,
-          archive_updated: archiveUpdated,
-          desktop_state_updated: desktopStateUpdated
+          archive_updated: archiveUpdated
         });
       }
 
