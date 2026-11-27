@@ -255,22 +255,6 @@ async function farujWriteMigrationCAS(env,patch,expectedUpdatedAt){
  return d[0];
 }
 
-// إلغاء طلبات التسليم القديمة عند إرجاع الفاتورة إلى قيد التوصيل.
-async function cancelPendingDeliveryRequests(env, orderIds, source) {
- const ids=Array.from(new Set((Array.isArray(orderIds)?orderIds:[]).map(Number).filter(id=>Number.isInteger(id)&&id>0)));
- if(!ids.length)return {success:true,cancelled:0};
- const svc=String(env.SUPABASE_SERVICE_ROLE_KEY||"").trim();
- if(!svc)return {success:false,error:"SUPABASE_SERVICE_ROLE_KEY غير مضبوط"};
- const H={apikey:svc,Authorization:"Bearer "+svc,"Content-Type":"application/json",Prefer:"return=representation"};
- let cancelled=0;
- for(const status of ["pending","requested","waiting"]){
-  const r=await supabaseRequest("/rest/v1/driver_delivery_requests?order_id=in.("+ids.join(",")+")&status=eq."+encodeURIComponent(status),{method:"PATCH",headers:H,body:JSON.stringify({status:"cancelled",processed_at:new Date().toISOString()})});
-  const rows=await r.json().catch(()=>null);
-  if(!r.ok)return {success:false,cancelled,error:(rows&&(rows.message||rows.hint||rows.error))||"تعذر إلغاء طلب تسليم قديم"};
-  if(Array.isArray(rows))cancelled+=rows.length;
- }
- return {success:true,cancelled,source:String(source||"office_status_change")};
-}
 // إشعار لحظي بعد نجاح تعديل الفاتورة فقط، دون إرسال بيانات العميل أو الفاتورة.
 // نفس القناة التي يستمع لها تطبيق الماستر وتطبيقات المناديب: fa-orders-live.
 async function broadcastOrdersChanged(env, source) {
@@ -744,21 +728,15 @@ export default {
         if(path==="/api/customer-location/check"&&request.method==="POST"){
           const body=await request.json().catch(()=>null);if(!body)return json({ok:false,error:"بيانات الطلب غير صالحة"},400);
           const code=String(body.customer_code||"").trim();if(!code)return json({ok:false,error:"كود العميل مطلوب"},400);
-          const migration=await farujMigrationState(env);
-          const legacyIssues=Array.isArray(migration.issues)?migration.issues:[];
-          const existingEdit=body.allow_existing_customer_edit===true;
-          if(migration.status==="running")return json({ok:false,error:"هناك دفعة تهيئة تعمل الآن. انتظر انتهاء الدفعة قبل تغيير رابط الموقع حتى لا تتداخل عمليتا الفحص والحجز.",code:"MIGRATION_RUNNING"},409);
-          if(migration.status!=="complete"&&!existingEdit)return json({ok:false,error:"إضافة رابط موقع لعميل جديد تتطلب اكتمال تهيئة المواقع القديمة أولًا. يمكن تعديل رابط عميل موجود من نافذة التعديل.",code:"MIGRATION_REQUIRED"},409);
-          // Customer records stay local on the desktop. This endpoint only resolves
-          // the map URL and checks canonical coordinates against the independent
-          // location registry; it never reads or writes the shared customer payload.
+          // Customer records are local-only. This endpoint resolves the submitted
+          // Google Maps URL and claims/checks its exact coordinates in the dedicated
+          // location registry; it never reads or writes the shared customer list.
+          // Do not gate customer creation on legacy customer-list migration status.
           let resolved;try{resolved=await farujResolveGoogleMap(body.url);}catch(e){return json({ok:false,error:e.message,code:"LOCATION_RESOLVE_FAILED"},422);}
           const rows=await farujRpc(env,"faruj_check_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng});
           const row=Array.isArray(rows)?rows[0]:rows;
           if(!row||row.available!==true)return json({ok:false,code:"CUSTOMER_LOCATION_DUPLICATE",other_customer_code:row&&row.other_customer_code||null,location_key:resolved.key,error:"الإحداثيات متطابقة مع موقع عميل مسجل"},409);
-          const otherIssues=legacyIssues.filter(x=>String(x&&x.customer_code||"").trim()!==code);
-          const unresolvedOther=otherIssues.filter(x=>String(x&&x.issue_type||"")==="unresolved").length;
-          return json({ok:true,coords:[resolved.lat,resolved.lng],location_key:resolved.key,precision:6,match_mode:"exact",migration_pending:migration.status==="running"||otherIssues.length>0,remaining_legacy_issues:otherIssues.length,unverified_legacy_customers:unresolvedOther,checked_against_registered_locations:true});
+          return json({ok:true,coords:[resolved.lat,resolved.lng],location_key:resolved.key,precision:6,match_mode:"exact",migration_pending:false,remaining_legacy_issues:0,unverified_legacy_customers:0,checked_against_registered_locations:true,customer_storage:"local_only"});
         }
         if(path==="/api/customer-location/migration/status"&&request.method==="GET"){
           const state=await farujMigrationState(env);return json({ok:true,state,issues:Array.isArray(state.issues)?state.issues:[]});
@@ -928,13 +906,8 @@ export default {
       }
 
       // حفظ سجل عميل واحد مباشرة في التخزين السحابي، بهوية code فقط وCAS ذري.
-      // Customer cloud storage is disabled. Only location-coordinate checking remains.
-      if (path === "/api/desktop-customers/commit") {
-        return json({ ok: false, code: "CUSTOMER_CLOUD_STORAGE_DISABLED", error: "حفظ بيانات العملاء السحابي متوقف؛ يتم حفظ العميل محليًا على هذا الكمبيوتر. فحص إحداثيات الموقع ما زال متاحًا." }, 410);
-      }
-
-      // Legacy cloud-commit handler retained below for rollback reference; unreachable.
       if (path === "/api/desktop-customers/commit" && request.method === "POST") {
+        return json({ ok: false, code: "CUSTOMER_CLOUD_STORAGE_DISABLED", error: "حفظ العملاء السحابي متوقف؛ يتم حفظ العملاء محليًا على الكمبيوتر. فحص إحداثيات الموقع متاح عبر المسار المستقل." }, 410);
         const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
         if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) return json({ ok: false, error: "غير مصرح" }, 401);
         const declaredLength = Number(request.headers.get("Content-Length") || 0);
@@ -1247,81 +1220,9 @@ export default {
           }
         }
 
-        // تجنب إنشاء نسخة نصية إضافية من حمولة الفواتير الكبيرة داخل Worker.
-        // Content-Length هو حجم الطلب الفعلي المرسل؛ إذا لم يرسله العميل نتركه غير معروف
-        // ولا نرفض الطلب بسبب قياس مكلف داخل Worker.
-        const declaredPayloadBytes = Number(request.headers.get("content-length") || 0);
-        const payloadBytes = Number.isFinite(declaredPayloadBytes) && declaredPayloadBytes > 0
-          ? declaredPayloadBytes : null;
-        if (payloadBytes !== null && payloadBytes > 20 * 1024 * 1024) {
-          return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
-        }
-
-        // حماية مركزية إضافية: لا نقبل لقطة ناقصة للفواتير ولا نستنتج الحذف من اختفاء سجل.
-        if (!Array.isArray(body.payload.fa_invs)) {
-          return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: "النسخة الواردة لا تحتوي على قائمة فواتير صالحة؛ لم يتم حفظ أي تغيير" }, 400);
-        }
-        let currentShared;
-        try {
-          currentShared = await farujReadSharedStateChunked(env);
-        } catch (error) {
-          return json({ success: false, code: "INVOICE_SNAPSHOT_CHECK_FAILED", error: "تعذر فحص النسخة الحالية قبل الحفظ؛ لم يتم استبدال أي بيانات", detail: String(error && error.message || error) }, 502);
-        }
-        if (currentShared) {
-          if (!currentShared.payload || !Array.isArray(currentShared.payload.fa_invs)) {
-            return json({ success: false, code: "INVOICE_BASE_INVALID", error: "النسخة السحابية الحالية لا تحتوي على قائمة فواتير صالحة؛ تم رفض الاستبدال لحماية البيانات" }, 409);
-          }
-          // إذا تغيرت النسخة منذ قراءتها، اترك CAS يعيد المحاولة من خلال دورة المزامنة بدل فحص لقطة قديمة.
-          if (String(currentShared.updated_at || "") !== body.expected_updated_at.trim()) {
-            return json({ success: false, conflict: true, code: "STATE_REVISION_CONFLICT", error: "تغيرت النسخة المشتركة قبل فحص الفواتير؛ أعد قراءتها وادمجها قبل الحفظ", updated_at: currentShared.updated_at || null }, 409);
-          }
-          // نفس أولوية هوية الفاتورة المستخدمة في دمج سطح المكتب: id ثم uuid ثم uid ثم رقم الفاتورة.
-          const invoiceId = inv => String(inv && (inv.id || inv.uuid || inv.uid || inv.no || inv.invoice_number || inv.order_number || inv._dn) || "").trim().toUpperCase();
-          const buildInvoiceMap = (rows, label) => {
-            const map = new Map();
-            for (const inv of rows) {
-              const id = invoiceId(inv);
-              if (!id || map.has(id)) return { error: label + " تحتوي على رقم فاتورة فارغ أو مكرر: " + (id || "بدون رقم") };
-              map.set(id, inv);
-            }
-            return { map };
-          };
-          const oldInvoices = buildInvoiceMap(currentShared.payload.fa_invs, "النسخة السحابية الحالية");
-          const newInvoices = buildInvoiceMap(body.payload.fa_invs, "النسخة الواردة");
-          if (oldInvoices.error) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: oldInvoices.error }, 409);
-          if (newInvoices.error) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: newInvoices.error }, 409);
-          const explicitTrash = new Set((Array.isArray(body.payload.fa_trash) ? body.payload.fa_trash : [])
-            .map(item => String(item && (item.no || item._dn || item.invoice_number || item.order_number) || "").trim().toUpperCase())
-            .filter(Boolean));
-          const missingInvoices = [];
-          const partialInvoices = [];
-          for (const [id, oldInvoice] of oldInvoices.map) {
-            if (!newInvoices.map.has(id)) {
-              if (!explicitTrash.has(id)) missingInvoices.push(id);
-              continue;
-            }
-            const newInvoice = newInvoices.map.get(id);
-            if (oldInvoice && newInvoice && typeof oldInvoice === "object" && typeof newInvoice === "object") {
-              const missingFields = Object.keys(oldInvoice).filter(key => !Object.prototype.hasOwnProperty.call(newInvoice, key));
-              if (missingFields.length) partialInvoices.push({ invoice: id, fields: missingFields.slice(0, 5) });
-            }
-          }
-          if (missingInvoices.length) {
-            return json({
-              success: false, code: "INVOICE_SNAPSHOT_INCOMPLETE",
-              error: "تم رفض النسخة لأنها ستُسقط فواتير موجودة دون أمر حذف صريح مسجل في سلة المحذوفات",
-              current_invoice_count: oldInvoices.map.size, incoming_invoice_count: newInvoices.map.size,
-              missing_invoices: missingInvoices.slice(0, 30)
-            }, 409);
-          }
-          if (partialInvoices.length) {
-            return json({
-              success: false, code: "INVOICE_RECORD_INCOMPLETE",
-              error: "تم رفض النسخة لأنها تحتوي على فواتير ناقصة الحقول؛ لم يتم استبدال أي بيانات",
-              partial_invoices: partialInvoices.slice(0, 20)
-            }, 409);
-          }
-        }
+        const payloadText = JSON.stringify(body.payload);
+        const payloadBytes = new TextEncoder().encode(payloadText).byteLength;
+        if (payloadBytes > 20 * 1024 * 1024) return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
 
         // التحديث يتم عبر RPC ذرّي بقفل الصف والتحقق من updated_at داخل PostgreSQL.
         // هذا يمنع الكتابة فوق تعديل جهاز آخر، ويمنح عملية JSONB الكبيرة مهلة 60 ثانية
@@ -1772,7 +1673,7 @@ export default {
         }
         const saveResponse = await supabaseRequest(
           "/rest/v1/driver_invoice_order_shared?on_conflict=invoice_key",
-          { method: "POST", headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify(sortRows) }
+          { method: "POST", headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(sortRows) }
         );
         const savedRows = await saveResponse.json().catch(function () { return []; });
         if (!saveResponse.ok) return json({ error: "تعذر حفظ الترتيب المشترك - HTTP " + saveResponse.status, detail: savedRows }, 500);
@@ -2088,7 +1989,7 @@ export default {
         const insertResponse = await supabaseRequest("/rest/v1/driver_departures", {
           method: "POST",
           headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY, "Content-Type": "application/json", Prefer: "return=representation" },
-          body: JSON.stringify({ order_id: order.id, invoice_number: String(order.order_number || order.id), customer_name: String(order.customer_name || ""), phone: String(order.phone || ""), emirate: String(order.emirate || ""), area: String(order.area || ""), total: Number(order.total) || 0, sheet_name: String(auth.driver.sheet_name || ""), driver_name: auth.driver.sheet_name === "Mandoub" ? "حسام أبو حور" : auth.driver.sheet_name === "Mandoub2" ? "أبو زين" : String(auth.driver.mandoub_name || ""), driver_user_id: auth.user.id, departed_at: departedAt })
+          body: JSON.stringify({ order_id: order.id, invoice_number: String(order.order_number || order.id), customer_name: String(order.customer_name || ""), phone: String(order.phone || ""), emirate: String(order.emirate || ""), area: String(order.area || ""), total: Number(order.total) || 0, sheet_name: String(auth.driver.sheet_name || ""), driver_name: String(auth.driver.mandoub_name || ""), driver_user_id: auth.user.id, departed_at: departedAt })
         });
         const insertData = await insertResponse.json().catch(function () { return null; });
         if (!insertResponse.ok) {
@@ -2270,14 +2171,14 @@ export default {
             method: "POST",
             headers: Object.assign({}, serviceHeaders, {
               "Content-Type": "application/json",
-              Prefer: "resolution=ignore-duplicates,return=representation"
+              Prefer: "resolution=merge-duplicates,return=representation"
             }),
             body: JSON.stringify({
               order_id: order.id,
               invoice_number: String(order.order_number || order.id),
               sheet_name: String(auth.driver.sheet_name || ""),
               driver_user_id: auth.user.id,
-              driver_name: auth.driver.sheet_name === "Mandoub" ? "حسام أبو حور" : auth.driver.sheet_name === "Mandoub2" ? "أبو زين" : String(auth.driver.mandoub_name || ""),
+              driver_name: String(auth.driver.mandoub_name || ""),
               status: "pending",
               requested_at: requestedAt
             })
@@ -3299,57 +3200,6 @@ export default {
               ? body.orders
               : [];
 
-        // منع أي مزامنة قديمة من إعادة نشر فاتورة مسحوبة؛ يلزم أمر رفع صريح من الكمبيوتر.
-        const serviceKeyForWithdrawals = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!serviceKeyForWithdrawals) return json({ error: "تعذر التحقق من سجل سحب الفواتير؛ أوقفنا الرفع لحماية البيانات" }, 500);
-        const withdrawalHeaders = { apikey: serviceKeyForWithdrawals, Authorization: "Bearer " + serviceKeyForWithdrawals };
-        const incomingReleaseOrders = orders.filter(function (o) {
-          return o && o._fa_explicit_release === true &&
-            /^[a-zA-Z0-9_-]{1,80}$/.test(String(o.order_number || "")) &&
-            /^\d{4}-\d{2}-\d{2}$/.test(String(o.delivery_date || "").slice(0, 10));
-        });
-        const incomingNumbers = Array.from(new Set(orders.map(function (o) {
-          return String(o && o.order_number || "").trim();
-        }).filter(function (n) { return /^[a-zA-Z0-9_-]{1,80}$/.test(n); })));
-        const blockedWithdrawals = [];
-        if (incomingNumbers.length) {
-          const wr = await supabaseRequest(
-            "/rest/v1/faruj_future_invoice_withdrawals?order_number=in.(" +
-              incomingNumbers.map(encodeURIComponent).join(",") +
-              ")&select=order_number,delivery_date,status,release_revision",
-            { headers: withdrawalHeaders }
-          );
-          const withdrawalRows = await wr.json().catch(function () { return null; });
-          if (!wr.ok || !Array.isArray(withdrawalRows)) {
-            return json({ error: "تعذر قراءة سجل السحب؛ لم يتم رفع أي فاتورة", detail: withdrawalRows }, 502);
-          }
-          const explicitMap = new Map(incomingReleaseOrders.map(function (o) {
-            return [String(o.order_number).trim().toUpperCase() + "|" + String(o.delivery_date).slice(0, 10), Number(o._fa_release_revision) || 0];
-          }));
-          for (const row of withdrawalRows) {
-            const key = String(row.order_number || "").trim().toUpperCase() + "|" + String(row.delivery_date || "").slice(0, 10);
-            const requestedRevision = explicitMap.get(key);
-            if (row.status === "withdrawn" || row.status === "release_pending") {
-              if (row.status !== "release_pending" || !requestedRevision || requestedRevision !== Number(row.release_revision)) {
-                blockedWithdrawals.push({ order_number: row.order_number, delivery_date: row.delivery_date, status: row.status });
-              }
-            }
-          }
-        }
-        if (blockedWithdrawals.length) {
-          return json({
-            error: "تم رفض الرفع لأن الفاتورة مسحوبة بأمر صريح. استخدم زر رفع شغل بكرة لإعادة نشرها.",
-            code: "FUTURE_INVOICE_WITHDRAWN",
-            blocked: blockedWithdrawals
-          }, 409);
-        }
-        const rpcOrders = orders.map(function (order) {
-          const copy = Object.assign({}, order);
-          delete copy._fa_explicit_release;
-          delete copy._fa_release_revision;
-          return copy;
-        });
-
         // لا نحذف صور التخزين قبل نجاح حفظ المزامنة؛ حتى لا يؤدي طلب قديم
         // أو فاشل إلى حذف صور فاتورة أحدث.
         const clearInvoices = Array.from(new Set(
@@ -3360,24 +3210,24 @@ export default {
         ));
         const deletedPhotoCounts = {};
 
-        const releaseAuthorizations = Array.from(new Map(incomingReleaseOrders.map(function (o) {
-          const key = String(o.order_number).trim().toUpperCase() + "|" + String(o.delivery_date).slice(0, 10);
-          return [key, {
-            order_number: String(o.order_number).trim(),
-            delivery_date: String(o.delivery_date).slice(0, 10),
-            release_revision: Number(o._fa_release_revision) || 0
-          }];
-        })).values());
         const rpcResponse =
           await supabaseRequest(
-            "/rest/v1/rpc/faruj_sync_orders_from_excel_guarded",
+            "/rest/v1/rpc/sync_orders_from_excel",
             {
               method: "POST",
-              headers: Object.assign({}, withdrawalHeaders, { "Content-Type": "application/json" }),
+              headers: {
+                apikey:
+                  env.SUPABASE_ANON_KEY,
+                Authorization:
+                  "Bearer " +
+                  env.SUPABASE_ANON_KEY,
+                "Content-Type":
+                  "application/json"
+              },
               body:
                 JSON.stringify({
-                  p_orders: rpcOrders,
-                  p_release_authorizations: releaseAuthorizations
+                  p_orders:
+                    orders
                 })
             }
           );
@@ -3410,10 +3260,6 @@ export default {
           if (rawSkipped !== undefined && rawSkipped !== null && Number.isFinite(Number(rawSkipped))) {
             skippedOldRevision = Number(rawSkipped);
           }
-        }
-
-        if (incomingReleaseOrders.length) {
-          await broadcastOrdersChanged(env, "future_invoice_released");
         }
 
         let photosDeletionSkipped = false;
@@ -3456,67 +3302,6 @@ export default {
           return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر سحب حالات المندوبين" }, 502);
         }
         return json({ orders: rows });
-      }
-
-      if (path === "/api/excel-driver-daily-ledger" && request.method === "GET") {
-        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
-        if (!env.EXCEL_SYNC_SECRET || secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
-        const day = String(new URL(request.url).searchParams.get("date") || "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: "التاريخ غير صحيح" }, 400);
-        const start = new Date(day + "T00:00:00+04:00").toISOString();
-        const endDate = new Date(Date.parse(start) + 86400000).toISOString();
-        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
-        if (!svc) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
-        const H = { apikey: svc };
-        if (!svc.startsWith("sb_secret_")) H.Authorization = "Bearer " + svc;
-        // المصدر الأول: سجل التحصيل المستقل الذي تم تأكيده بعد إضافة الميزة.
-        const r = await supabaseRequest("/rest/v1/driver_delivery_ledger?event_status=eq.confirmed&delivered_at=gte." + encodeURIComponent(start) + "&delivered_at=lt." + encodeURIComponent(endDate) + "&select=order_id,request_id,invoice_number,delivered_by_user_id,delivered_by_name,payment_method,amount,requested_at,delivered_at&order=delivered_at.asc", { headers: H });
-        const ledgerRows = await r.json().catch(function () { return null; });
-        if (!r.ok || !Array.isArray(ledgerRows)) return json({ error: (ledgerRows && (ledgerRows.message || ledgerRows.hint || ledgerRows.error)) || "تعذر قراءة سجل التحصيل اليومي" }, 502);
-
-        // توافق رجعي: التسليمات التي اعتُمدت قبل إنشاء سجل التحصيل لا تُفقد.
-        // نقرأ الطلبات approved في نفس اليوم ونكمل بياناتها من orders دون تعديل أي سجل.
-        const reqRes = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?status=eq.approved&processed_at=gte." + encodeURIComponent(start) +
-          "&processed_at=lt." + encodeURIComponent(endDate) +
-          "&select=id,order_id,invoice_number,sheet_name,driver_user_id,driver_name,requested_at,processed_at&order=processed_at.asc",
-          { headers: H }
-        );
-        const approvedReqs = await reqRes.json().catch(function () { return null; });
-        if (!reqRes.ok || !Array.isArray(approvedReqs)) return json({ error: (approvedReqs && (approvedReqs.message || approvedReqs.hint || approvedReqs.error)) || "تعذر قراءة التسليمات المعتمدة القديمة" }, 502);
-
-        const missingReqs = approvedReqs.filter(function (q) {
-          return !ledgerRows.some(function (x) { return String(x.order_id) === String(q.order_id); });
-        });
-        const orderIds = Array.from(new Set(missingReqs.map(function (q) { return Number(q.order_id); }).filter(function (n) { return Number.isInteger(n) && n > 0; })));
-        let orderById = new Map();
-        if (orderIds.length) {
-          const orderRes = await supabaseRequest(
-            "/rest/v1/orders?id=in.(" + orderIds.join(",") + ")&select=id,order_number,customer_name,total,payment_method",
-            { headers: H }
-          );
-          const orderRows = await orderRes.json().catch(function () { return null; });
-          if (!orderRes.ok || !Array.isArray(orderRows)) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر استكمال بيانات الفواتير المعتمدة" }, 502);
-          orderById = new Map(orderRows.map(function (o) { return [String(o.id), o]; }));
-        }
-        const legacyRows = missingReqs.map(function (q) {
-          const o = orderById.get(String(q.order_id)) || {};
-          return {
-            order_id: q.order_id, request_id: q.id,
-            invoice_number: q.invoice_number || o.order_number || String(q.order_id),
-            delivered_by_user_id: q.driver_user_id || null,
-            delivered_by_name: q.driver_name || "",
-            payment_method: o.payment_method || "", amount: Number(o.total) || 0,
-            customer_name: o.customer_name || "",
-            requested_at: q.requested_at || null,
-            delivered_at: q.processed_at || q.requested_at || null,
-            legacy_approved: true
-          };
-        });
-        const rows = ledgerRows.concat(legacyRows).sort(function (a, b) {
-          return String(a.delivered_at || "").localeCompare(String(b.delivered_at || ""));
-        });
-        return json({ success: true, date: day, rows: rows, legacy_count: legacyRows.length });
       }
 
       if (
@@ -3587,7 +3372,7 @@ export default {
         const serviceHeaders = { apikey: serviceKey };
         if (!serviceKey.startsWith("sb_secret_")) serviceHeaders.Authorization = "Bearer " + serviceKey;
         const requestsResponse = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?select=id,order_id,invoice_number,sheet_name,driver_user_id,driver_name,requested_at,status&order=requested_at.asc",
+          "/rest/v1/driver_delivery_requests?select=id,order_id,invoice_number,sheet_name,driver_name,requested_at,status&order=requested_at.asc",
           { headers: serviceHeaders }
         );
         const allDeliveryRequests = await requestsResponse.json().catch(function () { return null; });
@@ -3619,7 +3404,7 @@ export default {
         if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
 
         const getRes = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending&select=id,order_id,invoice_number,sheet_name,driver_user_id,driver_name,requested_at&limit=1",
+          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending&select=id,order_id,invoice_number,sheet_name&limit=1",
           { headers: H }
         );
         const rows = await getRes.json().catch(function () { return null; });
@@ -3628,48 +3413,14 @@ export default {
         const req = rows[0];
 
         const orderRes = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,order_number,total,payment_method,delivery_date,delivery_status&limit=1",
+          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,delivery_date&limit=1",
           { headers: H }
         );
         const orderRows = await orderRes.json().catch(function () { return null; });
         if (!orderRes.ok || !Array.isArray(orderRows) || !orderRows.length) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة قبل اعتماد التسليم" }, 502);
         const approvalLock = rejectFutureDelivery(orderRows[0], dubaiDateKey(new Date()));
         if (approvalLock) return approvalLock;
-        const currentStatus = String(orderRows[0].delivery_status || "").trim().toLowerCase();
-        const deliveredAt = new Date().toISOString();
-        const order = orderRows[0];
-        const ledgerPayload = {
-          order_id: Number(req.order_id),
-          request_id: Number(req.id),
-          invoice_number: String(req.invoice_number || order.order_number || req.order_id),
-          delivered_by_user_id: req.driver_user_id || null,
-          delivered_by_name: String(req.driver_name || "").trim(),
-          payment_method: String(order.payment_method || "").trim().toLowerCase(),
-          amount: Number(order.total) || 0,
-          requested_at: req.requested_at || null,
-          delivered_at: deliveredAt,
-          event_status: "pending"
-        };
-        // سجل مستقل: لا يُحتسب إلا بعد تأكيد تحديث حالة الطلب.
-        const ledgerInsert = await supabaseRequest(
-          "/rest/v1/driver_delivery_ledger?on_conflict=order_id",
-          { method: "POST", headers: Object.assign({}, H, { Prefer: "resolution=ignore-duplicates,return=minimal" }), body: JSON.stringify(ledgerPayload) }
-        );
-        if (!ledgerInsert.ok) {
-          const ledgerErr = await ledgerInsert.json().catch(function () { return null; });
-          return json({ error: (ledgerErr && (ledgerErr.message || ledgerErr.hint || ledgerErr.error)) || "تعذر حفظ سجل التسليم المستقل؛ لم يتم اعتماد التسليم" }, 502);
-        }
-        if (currentStatus === "delivered" || currentStatus.includes("تم التسليم")) {
-          // لا ننسب تسليمًا قديمًا لمندوب جديد؛ لا نعتمد إلا سجلًا سبق إنشاؤه لهذا الطلب.
-          const existingLedger = await supabaseRequest(
-            "/rest/v1/driver_delivery_ledger?order_id=eq." + encodeURIComponent(req.order_id) + "&select=event_status,request_id&limit=1",
-            { headers: H }
-          );
-          const existingRows = await existingLedger.json().catch(function () { return []; });
-          if (!Array.isArray(existingRows) || !existingRows.length || Number(existingRows[0].request_id) !== Number(req.id)) {
-            return json({ error: "الفاتورة تم تسليمها بالفعل قبل تسجيل هذا الطلب؛ لم تُنسب لمندوب آخر", already_delivered: true }, 409);
-          }
-        } else {
+
         const updateRes = await supabaseRequest(
           "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name),
           { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=representation" }), body: JSON.stringify({ delivery_status: "delivered" }) }
@@ -3677,18 +3428,12 @@ export default {
         const changed = await updateRes.json().catch(function () { return null; });
         if (!updateRes.ok || !Array.isArray(changed) || !changed.length) return json({ error: (changed && (changed.message || changed.hint || changed.error)) || "تعذر اعتماد حالة التسليم في الفاتورة" }, 502);
 
-        }
-        const ledgerDone = await supabaseRequest(
-          "/rest/v1/driver_delivery_ledger?order_id=eq." + encodeURIComponent(req.order_id) + "&request_id=eq." + requestId + "&event_status=eq.pending",
-          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ event_status: "confirmed", delivered_at: deliveredAt }) }
-        );
-        if (!ledgerDone.ok) return json({ error: "تم تحديث حالة الفاتورة لكن تعذر تأكيد سجل التحصيل؛ سيظل غير محتسب حتى إتمام التأكيد" }, 502);
         const doneRes = await supabaseRequest(
           "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending",
-          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: deliveredAt }) }
+          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: new Date().toISOString() }) }
         );
-        if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة وسجل التحصيل لكن تعذر إغلاق طلب الاعتماد" }, 502);
-        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered", delivered_at: deliveredAt, delivered_by: ledgerPayload.delivered_by_name });
+        if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة لكن تعذر إغلاق طلب الاعتماد" }, 502);
+        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
       }
 
       if (path === "/api/resolve-map" && request.method === "POST") {
@@ -3821,13 +3566,7 @@ export default {
         } else if (foundOrders.rows.length) {
           archiveManagedByOrderTrigger = true;
         }
-        let cancelledDeliveryRequests = 0;
-        if (!delivered && (statusRaw === "out" || statusRaw === "pending" || statusRaw.includes("قيد التوصيل"))) {
-          const cr = await cancelPendingDeliveryRequests(env, foundOrders.rows.map(row => row.id), "master_identity_update");
-          if (!cr.success) return json({ error: "تم تحديث الفاتورة لكن تعذر إلغاء طلبات التسليم القديمة؛ أعد المحاولة قبل المزامنة.", details: cr.error }, 502);
-          cancelledDeliveryRequests = cr.cancelled;
-        }
-        // لا نرسل الإشعار إلا بعد تحديث الصفوف وإلغاء الطلبات القديمة.
+        // لا نرسل الإشعار إلا بعد تأكيد تحديث كل الصفوف المطابقة بنجاح.
         const liveNotified = await broadcastOrdersChanged(env, "desktop_invoice_update");
         return json({
           success: true,
@@ -3839,7 +3578,6 @@ export default {
           driver_assignment_preserved: hasMultipleDriverCopies,
           delivery_date: deliveryDate,
           live_notified: liveNotified,
-          cancelled_delivery_requests: cancelledDeliveryRequests,
           created_at_unchanged: true
         });
       }
@@ -3870,12 +3608,6 @@ export default {
         const isAdvance = patch.paid_in_advance === true || /مقدم/.test(pmRaw);
         if (isDriverChoice && !isDelivered) driverPatch.payment_method = "";
         if (isAdvance) { driverPatch.paid_in_advance = true; archivePatch.paid_in_advance = true; }
-        const orderIdsResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id", { headers: H });
-        const orderIdRows = await orderIdsResp.json().catch(function () { return null; });
-        if (!orderIdsResp.ok || !Array.isArray(orderIdRows)) return json({ error: "تعذر تحديد نسخ الفاتورة قبل تصحيح الحالة" }, 502);
-        const numberIdsResp = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id", { headers: H });
-        const numberIdRows = await numberIdsResp.json().catch(function () { return null; });
-        if (!numberIdsResp.ok || !Array.isArray(numberIdRows)) return json({ error: "تعذر تحديد نسخ الفاتورة قبل تعديل الحالة" }, 502);
         const r1 = await supabaseRequest("/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber), { method: "PATCH", headers: H, body: JSON.stringify(driverPatch) });
         if (!r1.ok) {
           const e1 = await r1.json().catch(function () { return null; });
@@ -3886,14 +3618,7 @@ export default {
           const e2 = await r2.json().catch(function () { return null; });
           return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
         }
-        let cancelledRequests = 0;
-        if (!isDelivered && (stRaw === "out" || stRaw === "pending" || stRaw.includes("قيد التوصيل"))) {
-          const cr = await cancelPendingDeliveryRequests(env, numberIdRows.map(row => row.id), "master_update_by_number");
-          if (!cr.success) return json({ error: "تم تحديث الحالة لكن تعذر إلغاء طلب التسليم القديم؛ أعد المحاولة قبل المزامنة.", details: cr.error }, 502);
-          cancelledRequests = cr.cancelled;
-        }
-        const liveNotified = await broadcastOrdersChanged(env, "master_update_by_number");
-        return json({ success: true, updated: orderNumber, cancelled_delivery_requests: cancelledRequests, live_notified: liveNotified });
+        return json({ success: true, updated: orderNumber });
       }
 
       /* تصحيح فوري من برنامج الكمبيوتر (بسر المزامنة): حالة تسليم / طريقة دفع / تأكيد تحويل.
@@ -3927,14 +3652,7 @@ export default {
           const e2 = await r2.json().catch(function () { return null; });
           return json({ error: (e2 && (e2.message || e2.hint || e2.error)) || "تم تحديث الطلبات وتعذر تحديث الأرشيف" }, 502);
         }
-        let cancelledRequests = 0;
-        if (!isDelivered && (stRaw === "out" || stRaw === "pending" || stRaw.includes("قيد التوصيل"))) {
-          const cr = await cancelPendingDeliveryRequests(env, orderIdRows.map(row => row.id), "excel_correct");
-          if (!cr.success) return json({ error: "تم تحديث الحالة لكن تعذر إلغاء طلب التسليم القديم؛ أعد المحاولة قبل المزامنة.", details: cr.error }, 502);
-          cancelledRequests = cr.cancelled;
-        }
-        const liveNotified = await broadcastOrdersChanged(env, "excel_correct");
-        return json({ success: true, updated: orderNumber, cancelled_delivery_requests: cancelledRequests, live_notified: liveNotified });
+        return json({ success: true, updated: orderNumber });
       }
 
       if (path === "/api/master/delete-by-date" && request.method === "POST") {
@@ -3975,99 +3693,48 @@ export default {
         return json({ success: true, orders: o, archive: a });
       }
 
-      /* تسجيل إذن رفع مستقبلي بمراجعة مركزية متزايدة؛ يمنع تساوي عدادات جهازين مختلفين. */
-      if (path === "/api/master/order/release-future" && request.method === "POST") {
-        const auth = await requireMaster(request, env);
-        if (auth.error) return json({ error: auth.error }, auth.status);
-        const body = await request.json().catch(function () { return {}; });
-        const orderNumber = String(body.order_number || "").trim();
-        const deliveryDate = String(body.delivery_date || "").slice(0, 10);
-        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) {
-          return json({ error: "رقم الفاتورة أو تاريخ التوصيل غير صحيح" }, 400);
-        }
-        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        if (!svc) return json({ error: "مفتاح SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار Worker" }, 500);
-        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json" };
-        const rpc = await supabaseRequest("/rest/v1/rpc/faruj_request_future_invoice_release", {
-          method: "POST",
-          headers: H,
-          body: JSON.stringify({ p_order_number: orderNumber, p_delivery_date: deliveryDate, p_requested_by: "desktop_master" })
-        });
-        const result = await rpc.json().catch(function () { return null; });
-        if (!rpc.ok || !result || result.success !== true || !Number(result.release_revision)) {
-          return json({ error: (result && (result.error || result.message || result.hint)) || "تعذر تسجيل إذن الرفع على السحابة", detail: result }, 502);
-        }
-        return json({ success: true, release_revision: Number(result.release_revision), order_number: orderNumber, delivery_date: deliveryDate });
-      }
-
-      /* سحب شامل لفاتورة مستقبلية: المناديب + الماستر + الأرشيف، مع سجل يمنع إعادة نشرها تلقائيًا. */
+      /* سحب فاتورة مستقبلية من قوائم المناديب مع الاحتفاظ بأرشيف الماستر */
       if (path === "/api/master/order/recall-future" && request.method === "POST") {
         const auth = await requireMaster(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
         const body = await request.json().catch(function () { return {}; });
         const orderNumber = String(body.order_number || "").trim();
+        const sheetName = String(body.sheet_name || "").trim();
         const requestedDate = String(body.delivery_date || "").slice(0, 10);
-        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
-          return json({ error: "رقم الفاتورة أو تاريخ التوصيل غير صحيح" }, 400);
+        const allSheets = sheetName.toUpperCase() === "ALL";
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !sheetName || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+          return json({ error: "بيانات الفاتورة أو تاريخ التوصيل غير صحيحة" }, 400);
         }
+        const dubaiToday = new Date(Date.now() + 4 * 3600 * 1000).toISOString().slice(0, 10);
+        if (requestedDate <= dubaiToday) return json({ error: "السحب مسموح للفواتير المستقبلية فقط", requested_date: requestedDate, dubai_today: dubaiToday }, 409);
         const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
         if (!svc) return json({ error: "مفتاح SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار Worker" }, 500);
-        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json" };
-        // اجمع مفاتيح ترتيب الفاتورة قبل حذف نسخ المناديب؛ هذه بيانات ترتيب تشغيلية فقط.
-        const sortSourceResp = await supabaseRequest(
-          "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&delivery_date=eq." + encodeURIComponent(requestedDate) +
-          "&select=order_number,created_at,customer_name,total,sheet_name",
-          { headers: H }
-        );
-        const sortSourceRows = await sortSourceResp.json().catch(function () { return null; });
-        if (!sortSourceResp.ok || !Array.isArray(sortSourceRows)) {
-          return json({ error: "تعذر قراءة مفاتيح ترتيب الفاتورة قبل السحب؛ لم يتم تنفيذ السحب", detail: sortSourceRows }, 502);
-        }
-        const sortKeys = [];
-        for (const row of sortSourceRows) sortKeys.push(await makeSharedInvoiceKey(row));
-
-        const rpc = await supabaseRequest("/rest/v1/rpc/faruj_withdraw_future_invoice", {
-          method: "POST",
-          headers: H,
-          body: JSON.stringify({
-            p_order_number: orderNumber,
-            p_delivery_date: requestedDate,
-            p_requested_by: "desktop_master"
-          })
+        const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=representation" };
+        let query = "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=id,order_number,sheet_name,delivery_date,created_at";
+        if (!allSheets) query += "&sheet_name=eq." + encodeURIComponent(sheetName);
+        const findResp = await supabaseRequest(query, { headers: H });
+        const found = await findResp.json().catch(function () { return null; });
+        if (!findResp.ok || !Array.isArray(found)) return json({ error: "تعذر البحث عن الفاتورة في جدول orders", details: found }, 502);
+        const futureRows = found.filter(function (row) {
+          const savedDate = String(row.delivery_date || "").slice(0, 10);
+          return savedDate === requestedDate && savedDate > dubaiToday && (allSheets || String(row.sheet_name || "") === sheetName);
         });
-        const result = await rpc.json().catch(function () { return null; });
-        if (!rpc.ok || !result || result.success !== true) {
-          return json({
-            error: (result && (result.error || result.message || result.hint)) || "تعذر تنفيذ السحب الشامل؛ لم نعتبر العملية ناجحة",
-            detail: result,
-            supabase_status: rpc.status
-          }, rpc.status === 409 ? 409 : 502);
+        if (!futureRows.length) {
+          return json({ error: "لم أجد نسخة مستقبلية مطابقة في قائمة المناديب؛ لم يتم حذف أي شيء.", requested: { order_number: orderNumber, sheet_name: sheetName, delivery_date: requestedDate }, database_rows: found }, 404);
         }
-        let removedSortMetadata = 0;
-        if (sortKeys.length) {
-          const uniqueSortKeys = Array.from(new Set(sortKeys));
-          const sortDelete = await supabaseRequest(
-            "/rest/v1/driver_invoice_order_shared?invoice_key=in.(" + uniqueSortKeys.map(encodeURIComponent).join(",") + ")",
-            { method: "DELETE", headers: Object.assign({}, H, { Prefer: "return=representation" }) }
-          );
-          const sortDeletedRows = await sortDelete.json().catch(function () { return [] });
-          if (sortDelete.ok && Array.isArray(sortDeletedRows)) removedSortMetadata = sortDeletedRows.length;
+        const ids = futureRows.map(function (row) { return Number(row.id); }).filter(function (id) { return Number.isInteger(id) && id > 0; });
+        if (!ids.length) return json({ error: "تعذر تحديد معرفات النسخ؛ لم يتم حذف أي شيء." }, 409);
+        const departureResp = await supabaseRequest("/rest/v1/driver_departures?order_id=in.(" + ids.join(",") + ")", { method: "DELETE", headers: H });
+        if (!departureResp.ok && departureResp.status !== 404) {
+          const err = await departureResp.json().catch(function () { return {}; });
+          return json({ error: "تعذر إزالة سجل تحرك المندوب؛ لم يتم السحب.", details: err }, 502);
         }
-        await broadcastOrdersChanged(env, "future_invoice_withdrawn");
-        return json({
-          success: true,
-          withdrawn: true,
-          removed_orders: Number(result.removed_orders) || 0,
-          removed_archive: Number(result.removed_archive) || 0,
-          removed_departures: Number(result.removed_departures) || 0,
-          cancelled_requests: Number(result.cancelled_requests) || 0,
-          removed_sort_metadata: removedSortMetadata,
-          release_revision: Number(result.release_revision) || 0,
-          order_number: orderNumber,
-          delivery_date: requestedDate,
-          retained_on_desktop: true
-        });
+        const delResp = await supabaseRequest("/rest/v1/orders?id=in.(" + ids.join(",") + ")", { method: "DELETE", headers: H });
+        const removedRows = await delResp.json().catch(function () { return null; });
+        if (!delResp.ok || !Array.isArray(removedRows) || removedRows.length !== ids.length) {
+          return json({ error: "تعذر سحب كل نسخ الفاتورة من المناديب؛ لم يتم اعتبار العملية ناجحة.", removed: Array.isArray(removedRows) ? removedRows.length : 0, expected: ids.length }, 502);
+        }
+        return json({ success: true, removed: removedRows.length, archive_preserved: true, order_number: orderNumber, sheet_names: Array.from(new Set(futureRows.map(function (row) { return row.sheet_name; }))), delivery_date: requestedDate });
       }
 
       if (path === "/api/master/order/delete-by-identity" && request.method === "POST") {
@@ -4341,108 +4008,11 @@ export default {
 
         const driversUpdated = Array.isArray(d1) ? d1.length : 0;
         const archiveUpdated = Array.isArray(d2) ? d2.length : 0;
-        let desktopStateUpdated = false;
         if (driversUpdated === 0 && archiveUpdated === 0) {
-          // بعض الفواتير القديمة قد تكون موجودة في نسخة الكمبيوتر المشتركة فقط.
-          // نحدّث علامة استلام التحويل داخل الفاتورة المطابقة فقط، مع CAS لمنع
-          // الكتابة فوق تعديل أحدث من جهاز آخر. لا ننشئ سجل orders ولا نغيّر Master.
-          // إعادة المحاولة عند تزاحم قفل PostgreSQL أو تغير إصدار النسخة المشتركة.
-          // في كل محاولة نقرأ أحدث payload من جديد ثم نغيّر tRec للفاتورة المطلوبة فقط.
-          const maxAttempts = 5;
-          let saved = false;
-          let lastFailure = null;
-          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            const stateResponse = await supabaseRequest(
-              "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=id,payload,updated_at",
-              { headers: H }
-            );
-            const stateRows = await stateResponse.json().catch(function () { return null; });
-            if (!stateResponse.ok || !Array.isArray(stateRows)) {
-              return json({ error: "تعذر فحص نسخة الكمبيوتر المشتركة؛ لم يتم تغيير أي بيانات", detail: stateRows, supabase_status: stateResponse.status }, 502);
-            }
-            if (stateRows.length !== 1 || !stateRows[0].payload || !Array.isArray(stateRows[0].payload.fa_invs)) {
-              return json({ error: "تعذر العثور على نسخة الكمبيوتر المشتركة أو قائمة الفواتير؛ لم يتم تغيير أي بيانات", order_number: orderNumber }, 404);
-            }
-
-            const shared = stateRows[0];
-            const matches = shared.payload.fa_invs.filter(function (inv) {
-              const id = String(inv && (inv.no || inv._dn || inv.invoice_number || inv.order_number) || "").trim().toUpperCase();
-              return id === orderNumber.toUpperCase();
-            });
-            if (matches.length === 0) {
-              return json({ error: "لم يتم العثور على الفاتورة في الطلبات أو أرشيف الماستر أو نسخة الكمبيوتر المشتركة", order_number: orderNumber }, 404);
-            }
-            if (matches.length !== 1) {
-              return json({ error: "رقم الفاتورة مكرر داخل نسخة الكمبيوتر المشتركة؛ أوقفنا التحديث لتجنب تعديل فاتورة خاطئة", order_number: orderNumber, matches: matches.length }, 409);
-            }
-            if (matches[0] && matches[0].tRec === received) {
-              saved = true; // العملية مطبقة بالفعل؛ لا داعي لقفل سجل JSONB الكبير.
-              break;
-            }
-
-            const nextPayload = JSON.parse(JSON.stringify(shared.payload));
-            const target = nextPayload.fa_invs.find(function (inv) {
-              const id = String(inv && (inv.no || inv._dn || inv.invoice_number || inv.order_number) || "").trim().toUpperCase();
-              return id === orderNumber.toUpperCase();
-            });
-            if (!target || typeof target !== "object") {
-              return json({ error: "تعذر تحديد سجل الفاتورة داخل النسخة المشتركة؛ لم يتم تغيير أي بيانات", order_number: orderNumber }, 409);
-            }
-            target.tRec = received;
-
-            const casResponse = await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_cas_update", {
-              method: "POST",
-              headers: H,
-              body: JSON.stringify({
-                p_expected_updated_at: shared.updated_at,
-                p_payload: nextPayload,
-                p_source_device: "excel-transfer-received"
-              })
-            });
-            const casRows = await casResponse.json().catch(function () { return null; });
-            const errorCode = String(casRows && (casRows.code || casRows.sqlstate || casRows.detail && casRows.detail.code) || "");
-            const errorText = String(casRows && (casRows.message || casRows.error || casRows.hint) || "");
-            const lockBusy = errorCode === "55P03" || /lock timeout|could not obtain lock|canceling statement due to lock/i.test(errorText);
-
-            if (casResponse.ok && Array.isArray(casRows) && casRows.length) {
-              const cas = casRows[0];
-              if (cas.success === true && cas.conflict !== true) {
-                saved = true;
-                break;
-              }
-              if (cas.conflict === true) {
-                lastFailure = { kind: "revision_conflict", updated_at: cas.updated_at || null };
-              } else {
-                return json({ error: "تعذر حفظ تأكيد التحويل في نسخة الكمبيوتر المشتركة؛ لم نؤكد نجاح التحديث", detail: cas, supabase_status: casResponse.status }, 502);
-              }
-            } else if (lockBusy) {
-              lastFailure = { kind: "lock_timeout", code: errorCode || "55P03", detail: casRows };
-            } else {
-              return json({ error: "تعذر حفظ تأكيد التحويل في نسخة الكمبيوتر المشتركة؛ لم نؤكد نجاح التحديث", detail: casRows, supabase_status: casResponse.status }, 502);
-            }
-
-            if (attempt < maxAttempts) {
-              // Backoff محدود: 350، 700، 1400، 2000 مللي ثانية.
-              const waitMs = Math.min(350 * Math.pow(2, attempt - 1), 2000);
-              await new Promise(function (resolve) { setTimeout(resolve, waitMs); });
-            }
-          }
-
-          if (!saved) {
-            return json({
-              success: false,
-              retryable: true,
-              code: lastFailure && lastFailure.kind === "lock_timeout" ? "DATABASE_LOCK_TIMEOUT" : "STATE_REVISION_CONFLICT",
-              error: "النسخة المشتركة مشغولة بعملية مزامنة أخرى؛ لم نغيّر بيانات الفاتورة. أعد المحاولة بعد انتهاء المزامنة.",
-              order_number: orderNumber,
-              attempts: maxAttempts,
-              detail: lastFailure
-            }, 503);
-          }
-          desktopStateUpdated = true;
+          return json({ error: "لم يتم العثور على الفاتورة في الطلبات أو أرشيف الماستر", order_number: orderNumber }, 404);
         }
 
-        // إشعار لحظي بعد نجاح التحديث في أي من مصادر الفاتورة.
+        // إشعار لحظي للماستر والمناديب بعد نجاح التحديثين.
         await broadcastOrdersChanged(env, "excel-transfer-received");
 
         return json({
@@ -4450,8 +4020,7 @@ export default {
           order_number: orderNumber,
           bank_transfer_received: received,
           drivers_updated: driversUpdated,
-          archive_updated: archiveUpdated,
-          desktop_state_updated: desktopStateUpdated
+          archive_updated: archiveUpdated
         });
       }
 
