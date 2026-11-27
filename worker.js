@@ -3474,23 +3474,19 @@ export default {
         const params = new URL(request.url).searchParams;
         const day = String(params.get("date") || "").trim();
         const month = String(params.get("month") || "").trim();
-        let periodStart, periodEnd, periodLabel;
-        if (month && /^\d{4}-\d{2}$/.test(month)) {
-          periodStart = month + "-01";
-          const [yy, mm] = month.split("-").map(Number);
-          const nextMonth = mm === 12 ? (yy + 1) + "-01" : yy + "-" + String(mm + 1).padStart(2, "0");
-          periodEnd = nextMonth + "-01";
-          periodLabel = month;
-        } else if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-          periodStart = day;
-          const nextDay = new Date(Date.parse(day + "T00:00:00+04:00") + 86400000);
-          periodEnd = nextDay.toISOString().slice(0, 10);
-          periodLabel = day;
+        let rangeStart, rangeEnd;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+          rangeStart = new Date(day + "T00:00:00+04:00");
+          rangeEnd = new Date(rangeStart.getTime() + 86400000);
+        } else if (/^\d{4}-\d{2}$/.test(month)) {
+          rangeStart = new Date(month + "-01T00:00:00+04:00");
+          const [year, monthNumber] = month.split("-").map(Number);
+          rangeEnd = new Date(Date.UTC(year, monthNumber, 1) - 4 * 60 * 60 * 1000);
         } else {
-          return json({ error: "أرسل date أو month بصيغة صحيحة" }, 400);
+          return json({ error: "يجب إرسال date بصيغة YYYY-MM-DD أو month بصيغة YYYY-MM" }, 400);
         }
-        const start = new Date(periodStart + "T00:00:00+04:00").toISOString();
-        const endDate = new Date(periodEnd + "T00:00:00+04:00").toISOString();
+        const start = rangeStart.toISOString();
+        const endDate = rangeEnd.toISOString();
         const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
         if (!svc) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
         const H = { apikey: svc };
@@ -3542,7 +3538,14 @@ export default {
         const rows = ledgerRows.concat(legacyRows).sort(function (a, b) {
           return String(a.delivered_at || "").localeCompare(String(b.delivered_at || ""));
         });
-        return json({ success: true, date: day || null, month: month || null, period: periodLabel, rows: rows, legacy_count: legacyRows.length });
+        return json({
+          success: true,
+          date: day || null,
+          month: month || null,
+          rows: rows,
+          legacy_count: legacyRows.length,
+          diagnostics: { ledger_count: ledgerRows.length, approved_request_count: approvedReqs.length, legacy_count: legacyRows.length }
+        });
       }
 
       if (
