@@ -3475,13 +3475,13 @@ export default {
         const day = String(params.get("date") || "").trim();
         const month = String(params.get("month") || "").trim();
         let periodStart, periodEnd, periodLabel;
-        if (month && /^\\d{4}-\\d{2}$/.test(month)) {
+        if (month && /^\d{4}-\d{2}$/.test(month)) {
           periodStart = month + "-01";
           const [yy, mm] = month.split("-").map(Number);
           const nextMonth = mm === 12 ? (yy + 1) + "-01" : yy + "-" + String(mm + 1).padStart(2, "0");
           periodEnd = nextMonth + "-01";
           periodLabel = month;
-        } else if (/^\\d{4}-\\d{2}-\\d{2}$/.test(day)) {
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
           periodStart = day;
           const nextDay = new Date(Date.parse(day + "T00:00:00+04:00") + 86400000);
           periodEnd = nextDay.toISOString().slice(0, 10);
