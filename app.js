@@ -550,10 +550,10 @@
       $('driver-name');
 
     if (driverName) {
-      driverName.textContent =
-        state.session?.mandoub_name ||
-        state.session?.username ||
-        'المندوب';
+      const driverSheet = String(state.session?.sheet_name || '').trim();
+      driverName.textContent = driverSheet === 'Mandoub' ? 'حسام أبو حور' :
+        driverSheet === 'Mandoub2' ? 'أبو زين' :
+        (state.session?.mandoub_name || state.session?.username || 'المندوب');
     }
 
     startDriverDubaiDayWatcher();
@@ -2529,8 +2529,8 @@
         .filter(Boolean)
     ));
     const labels = sheets.map((sheet) => {
-      if (sheet === 'Mandoub2') return 'مندوب 2';
-      if (sheet === 'Mandoub') return 'مندوب 1';
+      if (sheet === 'Mandoub2') return 'أبو زين';
+      if (sheet === 'Mandoub') return 'حسام أبو حور';
       return sheet;
     });
     return labels.length ? labels.join(' + ') : 'غير محدد';
@@ -3099,8 +3099,8 @@
               <label>المندوب</label>
               <select id="master-filter-driver">
                 <option value="">الكل</option>
-                <option value="Mandoub">مندوب 1</option>
-                <option value="Mandoub2">مندوب 2</option>
+                <option value="Mandoub">حسام أبو حور</option>
+                <option value="Mandoub2">أبو زين</option>
               </select>
             </div>
 
@@ -4039,8 +4039,8 @@
     const driverBody = $('master-home-driver-body');
     if (driverBody) {
       const driverDefs = [
-        { key: 'Mandoub', label: 'مندوب 1' },
-        { key: 'Mandoub2', label: 'مندوب 2' }
+        { key: 'Mandoub', label: 'حسام أبو حور' },
+        { key: 'Mandoub2', label: 'أبو زين' }
       ];
       driverBody.innerHTML = driverDefs.map((driver) => {
         const orders = todayOrders.filter((order) => String(order.sheet_name || '') === driver.key);
