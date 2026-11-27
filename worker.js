@@ -1782,7 +1782,7 @@ export default {
         }
         const saveResponse = await supabaseRequest(
           "/rest/v1/driver_invoice_order_shared?on_conflict=invoice_key",
-          { method: "POST", headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(sortRows) }
+          { method: "POST", headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify(sortRows) }
         );
         const savedRows = await saveResponse.json().catch(function () { return []; });
         if (!saveResponse.ok) return json({ error: "تعذر حفظ الترتيب المشترك - HTTP " + saveResponse.status, detail: savedRows }, 500);
@@ -2098,7 +2098,7 @@ export default {
         const insertResponse = await supabaseRequest("/rest/v1/driver_departures", {
           method: "POST",
           headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY, "Content-Type": "application/json", Prefer: "return=representation" },
-          body: JSON.stringify({ order_id: order.id, invoice_number: String(order.order_number || order.id), customer_name: String(order.customer_name || ""), phone: String(order.phone || ""), emirate: String(order.emirate || ""), area: String(order.area || ""), total: Number(order.total) || 0, sheet_name: String(auth.driver.sheet_name || ""), driver_name: String(auth.driver.mandoub_name || ""), driver_user_id: auth.user.id, departed_at: departedAt })
+          body: JSON.stringify({ order_id: order.id, invoice_number: String(order.order_number || order.id), customer_name: String(order.customer_name || ""), phone: String(order.phone || ""), emirate: String(order.emirate || ""), area: String(order.area || ""), total: Number(order.total) || 0, sheet_name: String(auth.driver.sheet_name || ""), driver_name: auth.driver.sheet_name === "Mandoub" ? "حسام أبو حور" : auth.driver.sheet_name === "Mandoub2" ? "أبو زين" : String(auth.driver.mandoub_name || ""), driver_user_id: auth.user.id, departed_at: departedAt })
         });
         const insertData = await insertResponse.json().catch(function () { return null; });
         if (!insertResponse.ok) {
@@ -2280,14 +2280,14 @@ export default {
             method: "POST",
             headers: Object.assign({}, serviceHeaders, {
               "Content-Type": "application/json",
-              Prefer: "resolution=merge-duplicates,return=representation"
+              Prefer: "resolution=ignore-duplicates,return=representation"
             }),
             body: JSON.stringify({
               order_id: order.id,
               invoice_number: String(order.order_number || order.id),
               sheet_name: String(auth.driver.sheet_name || ""),
               driver_user_id: auth.user.id,
-              driver_name: String(auth.driver.mandoub_name || ""),
+              driver_name: auth.driver.sheet_name === "Mandoub" ? "حسام أبو حور" : auth.driver.sheet_name === "Mandoub2" ? "أبو زين" : String(auth.driver.mandoub_name || ""),
               status: "pending",
               requested_at: requestedAt
             })
@@ -3468,6 +3468,23 @@ export default {
         return json({ orders: rows });
       }
 
+      if (path === "/api/excel-driver-daily-ledger" && request.method === "GET") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
+        const day = String(new URL(request.url).searchParams.get("date") || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: "التاريخ غير صحيح" }, 400);
+        const start = new Date(day + "T00:00:00+04:00").toISOString();
+        const endDate = new Date(Date.parse(start) + 86400000).toISOString();
+        const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
+        if (!svc) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
+        const H = { apikey: svc };
+        if (!svc.startsWith("sb_secret_")) H.Authorization = "Bearer " + svc;
+        const r = await supabaseRequest("/rest/v1/driver_delivery_ledger?event_status=eq.confirmed&delivered_at=gte." + encodeURIComponent(start) + "&delivered_at=lt." + encodeURIComponent(endDate) + "&select=order_id,request_id,invoice_number,delivered_by_user_id,delivered_by_name,payment_method,amount,requested_at,delivered_at&order=delivered_at.asc", { headers: H });
+        const rows = await r.json().catch(function () { return null; });
+        if (!r.ok || !Array.isArray(rows)) return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة سجل التحصيل اليومي" }, 502);
+        return json({ success: true, date: day, rows: rows });
+      }
+
       if (
         path === "/api/excel-status" &&
         request.method === "GET"
@@ -3536,7 +3553,7 @@ export default {
         const serviceHeaders = { apikey: serviceKey };
         if (!serviceKey.startsWith("sb_secret_")) serviceHeaders.Authorization = "Bearer " + serviceKey;
         const requestsResponse = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?select=id,order_id,invoice_number,sheet_name,driver_name,requested_at,status&order=requested_at.asc",
+          "/rest/v1/driver_delivery_requests?select=id,order_id,invoice_number,sheet_name,driver_user_id,driver_name,requested_at,status&order=requested_at.asc",
           { headers: serviceHeaders }
         );
         const allDeliveryRequests = await requestsResponse.json().catch(function () { return null; });
@@ -3568,7 +3585,7 @@ export default {
         if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
 
         const getRes = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending&select=id,order_id,invoice_number,sheet_name&limit=1",
+          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending&select=id,order_id,invoice_number,sheet_name,driver_user_id,driver_name,requested_at&limit=1",
           { headers: H }
         );
         const rows = await getRes.json().catch(function () { return null; });
@@ -3577,7 +3594,7 @@ export default {
         const req = rows[0];
 
         const orderRes = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,delivery_date,delivery_status&limit=1",
+          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,order_number,total,payment_method,delivery_date,delivery_status&limit=1",
           { headers: H }
         );
         const orderRows = await orderRes.json().catch(function () { return null; });
@@ -3585,10 +3602,40 @@ export default {
         const approvalLock = rejectFutureDelivery(orderRows[0], dubaiDateKey(new Date()));
         if (approvalLock) return approvalLock;
         const currentStatus = String(orderRows[0].delivery_status || "").trim().toLowerCase();
-        if (currentStatus === "delivered" || currentStatus.includes("تم التسليم")) {
-          return json({ error: "الفاتورة تم تسليمها بالفعل", already_delivered: true }, 409);
+        const deliveredAt = new Date().toISOString();
+        const order = orderRows[0];
+        const ledgerPayload = {
+          order_id: Number(req.order_id),
+          request_id: Number(req.id),
+          invoice_number: String(req.invoice_number || order.order_number || req.order_id),
+          delivered_by_user_id: req.driver_user_id || null,
+          delivered_by_name: String(req.driver_name || "").trim(),
+          payment_method: String(order.payment_method || "").trim().toLowerCase(),
+          amount: Number(order.total) || 0,
+          requested_at: req.requested_at || null,
+          delivered_at: deliveredAt,
+          event_status: "pending"
+        };
+        // سجل مستقل: لا يُحتسب إلا بعد تأكيد تحديث حالة الطلب.
+        const ledgerInsert = await supabaseRequest(
+          "/rest/v1/driver_delivery_ledger?on_conflict=order_id",
+          { method: "POST", headers: Object.assign({}, H, { Prefer: "resolution=ignore-duplicates,return=minimal" }), body: JSON.stringify(ledgerPayload) }
+        );
+        if (!ledgerInsert.ok) {
+          const ledgerErr = await ledgerInsert.json().catch(function () { return null; });
+          return json({ error: (ledgerErr && (ledgerErr.message || ledgerErr.hint || ledgerErr.error)) || "تعذر حفظ سجل التسليم المستقل؛ لم يتم اعتماد التسليم" }, 502);
         }
-
+        if (currentStatus === "delivered" || currentStatus.includes("تم التسليم")) {
+          // لا ننسب تسليمًا قديمًا لمندوب جديد؛ لا نعتمد إلا سجلًا سبق إنشاؤه لهذا الطلب.
+          const existingLedger = await supabaseRequest(
+            "/rest/v1/driver_delivery_ledger?order_id=eq." + encodeURIComponent(req.order_id) + "&select=event_status,request_id&limit=1",
+            { headers: H }
+          );
+          const existingRows = await existingLedger.json().catch(function () { return []; });
+          if (!Array.isArray(existingRows) || !existingRows.length || Number(existingRows[0].request_id) !== Number(req.id)) {
+            return json({ error: "الفاتورة تم تسليمها بالفعل قبل تسجيل هذا الطلب؛ لم تُنسب لمندوب آخر", already_delivered: true }, 409);
+          }
+        } else {
         const updateRes = await supabaseRequest(
           "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name),
           { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=representation" }), body: JSON.stringify({ delivery_status: "delivered" }) }
@@ -3596,12 +3643,18 @@ export default {
         const changed = await updateRes.json().catch(function () { return null; });
         if (!updateRes.ok || !Array.isArray(changed) || !changed.length) return json({ error: (changed && (changed.message || changed.hint || changed.error)) || "تعذر اعتماد حالة التسليم في الفاتورة" }, 502);
 
+        }
+        const ledgerDone = await supabaseRequest(
+          "/rest/v1/driver_delivery_ledger?order_id=eq." + encodeURIComponent(req.order_id) + "&request_id=eq." + requestId + "&event_status=eq.pending",
+          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ event_status: "confirmed", delivered_at: deliveredAt }) }
+        );
+        if (!ledgerDone.ok) return json({ error: "تم تحديث حالة الفاتورة لكن تعذر تأكيد سجل التحصيل؛ سيظل غير محتسب حتى إتمام التأكيد" }, 502);
         const doneRes = await supabaseRequest(
           "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending",
-          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: new Date().toISOString() }) }
+          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: deliveredAt }) }
         );
-        if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة لكن تعذر إغلاق طلب الاعتماد" }, 502);
-        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
+        if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة وسجل التحصيل لكن تعذر إغلاق طلب الاعتماد" }, 502);
+        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered", delivered_at: deliveredAt, delivered_by: ledgerPayload.delivered_by_name });
       }
 
       if (path === "/api/resolve-map" && request.method === "POST") {
