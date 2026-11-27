@@ -3479,10 +3479,54 @@ export default {
         if (!svc) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
         const H = { apikey: svc };
         if (!svc.startsWith("sb_secret_")) H.Authorization = "Bearer " + svc;
+        // المصدر الأول: سجل التحصيل المستقل الذي تم تأكيده بعد إضافة الميزة.
         const r = await supabaseRequest("/rest/v1/driver_delivery_ledger?event_status=eq.confirmed&delivered_at=gte." + encodeURIComponent(start) + "&delivered_at=lt." + encodeURIComponent(endDate) + "&select=order_id,request_id,invoice_number,delivered_by_user_id,delivered_by_name,payment_method,amount,requested_at,delivered_at&order=delivered_at.asc", { headers: H });
-        const rows = await r.json().catch(function () { return null; });
-        if (!r.ok || !Array.isArray(rows)) return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة سجل التحصيل اليومي" }, 502);
-        return json({ success: true, date: day, rows: rows });
+        const ledgerRows = await r.json().catch(function () { return null; });
+        if (!r.ok || !Array.isArray(ledgerRows)) return json({ error: (ledgerRows && (ledgerRows.message || ledgerRows.hint || ledgerRows.error)) || "تعذر قراءة سجل التحصيل اليومي" }, 502);
+
+        // توافق رجعي: التسليمات التي اعتُمدت قبل إنشاء سجل التحصيل لا تُفقد.
+        // نقرأ الطلبات approved في نفس اليوم ونكمل بياناتها من orders دون تعديل أي سجل.
+        const reqRes = await supabaseRequest(
+          "/rest/v1/driver_delivery_requests?status=eq.approved&processed_at=gte." + encodeURIComponent(start) +
+          "&processed_at=lt." + encodeURIComponent(endDate) +
+          "&select=id,order_id,invoice_number,sheet_name,driver_user_id,driver_name,requested_at,processed_at&order=processed_at.asc",
+          { headers: H }
+        );
+        const approvedReqs = await reqRes.json().catch(function () { return null; });
+        if (!reqRes.ok || !Array.isArray(approvedReqs)) return json({ error: (approvedReqs && (approvedReqs.message || approvedReqs.hint || approvedReqs.error)) || "تعذر قراءة التسليمات المعتمدة القديمة" }, 502);
+
+        const missingReqs = approvedReqs.filter(function (q) {
+          return !ledgerRows.some(function (x) { return String(x.order_id) === String(q.order_id); });
+        });
+        const orderIds = Array.from(new Set(missingReqs.map(function (q) { return Number(q.order_id); }).filter(function (n) { return Number.isInteger(n) && n > 0; })));
+        let orderById = new Map();
+        if (orderIds.length) {
+          const orderRes = await supabaseRequest(
+            "/rest/v1/orders?id=in.(" + orderIds.join(",") + ")&select=id,order_number,customer_name,total,payment_method",
+            { headers: H }
+          );
+          const orderRows = await orderRes.json().catch(function () { return null; });
+          if (!orderRes.ok || !Array.isArray(orderRows)) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر استكمال بيانات الفواتير المعتمدة" }, 502);
+          orderById = new Map(orderRows.map(function (o) { return [String(o.id), o]; }));
+        }
+        const legacyRows = missingReqs.map(function (q) {
+          const o = orderById.get(String(q.order_id)) || {};
+          return {
+            order_id: q.order_id, request_id: q.id,
+            invoice_number: q.invoice_number || o.order_number || String(q.order_id),
+            delivered_by_user_id: q.driver_user_id || null,
+            delivered_by_name: q.driver_name || "",
+            payment_method: o.payment_method || "", amount: Number(o.total) || 0,
+            customer_name: o.customer_name || "",
+            requested_at: q.requested_at || null,
+            delivered_at: q.processed_at || q.requested_at || null,
+            legacy_approved: true
+          };
+        });
+        const rows = ledgerRows.concat(legacyRows).sort(function (a, b) {
+          return String(a.delivered_at || "").localeCompare(String(b.delivered_at || ""));
+        });
+        return json({ success: true, date: day, rows: rows, legacy_count: legacyRows.length });
       }
 
       if (
