@@ -1209,176 +1209,42 @@ export default {
         return json({ success: true, saved_keys: keys.length, updated_at: rows[0].updated_at || new Date().toISOString(), message: "تم حفظ النسخة الأولية دون استبدال نسخة سابقة" });
       }
 
-      /* مزامنة حالة سطح المكتب ثنائية الاتجاه مع تحكم بالتعارض عبر updated_at CAS. */
+      /* Desktop sync v2: stream large JSON bodies directly to PostgreSQL; no large JSON.parse/stringify in the Free Worker. */
       if (path === "/api/desktop-state/sync" && (request.method === "GET" || request.method === "POST")) {
         const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
         if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
-
         const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
         if (!serviceKey) return json({ error: "مفتاح التخزين المركزي غير مضبوط في أسرار Worker" }, 500);
         const headers = { apikey: serviceKey, "Content-Type": "application/json" };
         if (!serviceKey.startsWith("sb_secret_")) headers.Authorization = "Bearer " + serviceKey;
 
+        if (request.method === "GET" && url.searchParams.get("meta") === "1") {
+          const metaResponse = await supabaseRequest("/rest/v1/faruj_desktop_shared_state?id=eq.1&select=id,updated_at,source_device", { headers });
+          const rows = await metaResponse.json().catch(() => null);
+          if (!metaResponse.ok || !Array.isArray(rows)) return json({ error: "تعذر قراءة بيانات مراجعة التخزين المشترك", detail: rows, supabase_status: metaResponse.status }, 502);
+          if (!rows.length) return json({ success: true, exists: false, updated_at: null, source_device: null });
+          return json({ success: true, exists: true, updated_at: rows[0].updated_at, source_device: rows[0].source_device });
+        }
+
         if (request.method === "GET") {
-          const metadataOnly = url.searchParams.get("meta") === "1";
-          if (metadataOnly) {
-            const response = await supabaseRequest(
-              "/rest/v1/faruj_desktop_shared_state?id=eq.1&select=id,updated_at,source_device",
-              { headers }
-            );
-            const rows = await response.json().catch(function () { return null; });
-            if (!response.ok || !Array.isArray(rows)) return json({ error: "تعذر قراءة بيانات مراجعة التخزين المشترك", detail: rows, supabase_status: response.status }, 502);
-            if (!rows.length) return json({ success: true, exists: false, updated_at: null, source_device: null });
-            return json({ success: true, exists: true, updated_at: rows[0].updated_at, source_device: rows[0].source_device });
-          }
-          try {
-            const row = await farujReadSharedStateChunked(env);
-            if (!row) return json({ success: true, exists: false, payload: null, updated_at: null, source_device: null });
-            return json({ success: true, exists: true, payload: row.payload, updated_at: row.updated_at, source_device: row.source_device });
-          } catch (error) {
-            return json({ error: "تعذر قراءة حالة التخزين المشترك", detail: String(error && error.message || error) }, 502);
-          }
+          // Stream the database response unchanged. The desktop parses it locally, not inside the CPU-limited Worker.
+          const upstream = await supabaseRequest("/rest/v1/faruj_desktop_shared_state?id=eq.1&select=payload,updated_at,source_device", { headers });
+          const outHeaders = new Headers(upstream.headers);
+          outHeaders.set("Access-Control-Allow-Origin", "*");
+          outHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Excel-Sync-Secret");
+          outHeaders.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+          return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
         }
 
-        const body = await request.json().catch(function () { return null; });
-        if (!body || typeof body.expected_updated_at !== "string" || !body.expected_updated_at.trim()) {
-          return json({ error: "رقم مراجعة النسخة المشتركة غير موجود" }, 400);
-        }
-        if (!body.payload || typeof body.payload !== "object" || Array.isArray(body.payload)) {
-          return json({ error: "محتوى النسخة غير صالح" }, 400);
-        }
-        const keys = Object.keys(body.payload);
-        if (!keys.length || keys.length > 100) return json({ error: "عدد مفاتيح النسخة غير صالح" }, 400);
-        const forbidden = ["fa_set", "fa_users", "fa_users_deleted", "fa_users_pending_delete", "fa_users_restore", "fa_theme", "fa_owner_pass_2010_migrated"];
-        for (const key of keys) {
-          // تسمح الشرطة بتاريخ مفاتيح التنبيهات مثل fa_wa_2026-10-31.
-          if (!/^fa_[a-zA-Z0-9_-]+$/.test(key) || forbidden.includes(key)) {
-            return json({ error: "النسخة تحتوي على مفتاح محظور: " + key }, 400);
-          }
-        }
-
-        // تجنب إنشاء نسخة نصية إضافية من حمولة الفواتير الكبيرة داخل Worker.
-        // Content-Length هو حجم الطلب الفعلي المرسل؛ إذا لم يرسله العميل نتركه غير معروف
-        // ولا نرفض الطلب بسبب قياس مكلف داخل Worker.
-        const declaredPayloadBytes = Number(request.headers.get("content-length") || 0);
-        const payloadBytes = Number.isFinite(declaredPayloadBytes) && declaredPayloadBytes > 0
-          ? declaredPayloadBytes : null;
-        if (payloadBytes !== null && payloadBytes > 20 * 1024 * 1024) {
-          return json({ error: "حجم بيانات النسخة أكبر من 20 ميجابايت" }, 413);
-        }
-
-        // حماية مركزية إضافية: لا نقبل لقطة ناقصة للفواتير ولا نستنتج الحذف من اختفاء سجل.
-        if (!Array.isArray(body.payload.fa_invs)) {
-          return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: "النسخة الواردة لا تحتوي على قائمة فواتير صالحة؛ لم يتم حفظ أي تغيير" }, 400);
-        }
-        let currentShared;
-        try {
-          currentShared = await farujReadSharedStateChunked(env);
-        } catch (error) {
-          return json({ success: false, code: "INVOICE_SNAPSHOT_CHECK_FAILED", error: "تعذر فحص النسخة الحالية قبل الحفظ؛ لم يتم استبدال أي بيانات", detail: String(error && error.message || error) }, 502);
-        }
-        if (currentShared) {
-          if (!currentShared.payload || !Array.isArray(currentShared.payload.fa_invs)) {
-            return json({ success: false, code: "INVOICE_BASE_INVALID", error: "النسخة السحابية الحالية لا تحتوي على قائمة فواتير صالحة؛ تم رفض الاستبدال لحماية البيانات" }, 409);
-          }
-          // إذا تغيرت النسخة منذ قراءتها، اترك CAS يعيد المحاولة من خلال دورة المزامنة بدل فحص لقطة قديمة.
-          if (String(currentShared.updated_at || "") !== body.expected_updated_at.trim()) {
-            return json({ success: false, conflict: true, code: "STATE_REVISION_CONFLICT", error: "تغيرت النسخة المشتركة قبل فحص الفواتير؛ أعد قراءتها وادمجها قبل الحفظ", updated_at: currentShared.updated_at || null }, 409);
-          }
-          // نفس أولوية هوية الفاتورة المستخدمة في دمج سطح المكتب: id ثم uuid ثم uid ثم رقم الفاتورة.
-          const invoiceId = inv => String(inv && (inv.id || inv.uuid || inv.uid || inv.no || inv.invoice_number || inv.order_number || inv._dn) || "").trim().toUpperCase();
-          const buildInvoiceMap = (rows, label) => {
-            const map = new Map();
-            for (const inv of rows) {
-              const id = invoiceId(inv);
-              if (!id || map.has(id)) return { error: label + " تحتوي على رقم فاتورة فارغ أو مكرر: " + (id || "بدون رقم") };
-              map.set(id, inv);
-            }
-            return { map };
-          };
-          const oldInvoices = buildInvoiceMap(currentShared.payload.fa_invs, "النسخة السحابية الحالية");
-          const newInvoices = buildInvoiceMap(body.payload.fa_invs, "النسخة الواردة");
-          if (oldInvoices.error) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: oldInvoices.error }, 409);
-          if (newInvoices.error) return json({ success: false, code: "INVOICE_SNAPSHOT_INVALID", error: newInvoices.error }, 409);
-          const explicitTrash = new Set((Array.isArray(body.payload.fa_trash) ? body.payload.fa_trash : [])
-            .map(item => String(item && (item.no || item._dn || item.invoice_number || item.order_number) || "").trim().toUpperCase())
-            .filter(Boolean));
-          const missingInvoices = [];
-          const partialInvoices = [];
-          for (const [id, oldInvoice] of oldInvoices.map) {
-            if (!newInvoices.map.has(id)) {
-              if (!explicitTrash.has(id)) missingInvoices.push(id);
-              continue;
-            }
-            const newInvoice = newInvoices.map.get(id);
-            if (oldInvoice && newInvoice && typeof oldInvoice === "object" && typeof newInvoice === "object") {
-              const missingFields = Object.keys(oldInvoice).filter(key => !Object.prototype.hasOwnProperty.call(newInvoice, key));
-              if (missingFields.length) partialInvoices.push({ invoice: id, fields: missingFields.slice(0, 5) });
-            }
-          }
-          if (missingInvoices.length) {
-            return json({
-              success: false, code: "INVOICE_SNAPSHOT_INCOMPLETE",
-              error: "تم رفض النسخة لأنها ستُسقط فواتير موجودة دون أمر حذف صريح مسجل في سلة المحذوفات",
-              current_invoice_count: oldInvoices.map.size, incoming_invoice_count: newInvoices.map.size,
-              missing_invoices: missingInvoices.slice(0, 30)
-            }, 409);
-          }
-          if (partialInvoices.length) {
-            return json({
-              success: false, code: "INVOICE_RECORD_INCOMPLETE",
-              error: "تم رفض النسخة لأنها تحتوي على فواتير ناقصة الحقول؛ لم يتم استبدال أي بيانات",
-              partial_invoices: partialInvoices.slice(0, 20)
-            }, 409);
-          }
-        }
-
-        // التحديث يتم عبر RPC ذرّي بقفل الصف والتحقق من updated_at داخل PostgreSQL.
-        // هذا يمنع الكتابة فوق تعديل جهاز آخر، ويمنح عملية JSONB الكبيرة مهلة 60 ثانية
-        // داخل الدالة فقط، بدل إرجاع حمولة 6+ MB من PostgREST بعد كل PATCH.
-        const expectedMillis = Date.parse(body.expected_updated_at.trim());
-        if (!Number.isFinite(expectedMillis)) return json({ error: "رقم مراجعة النسخة المشتركة غير صالح" }, 400);
-        const response = await supabaseRequest(
-          "/rest/v1/rpc/faruj_desktop_shared_state_cas_update",
-          {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              p_expected_updated_at: body.expected_updated_at.trim(),
-              p_payload: body.payload,
-              p_source_device: String(body.source_device || "desktop-device").slice(0, 80)
-            })
-          }
-        );
-        const rows = await response.json().catch(function () { return null; });
-        if (!response.ok || !Array.isArray(rows) || !rows.length) {
-          return json({
-            error: "تعذر حفظ تحديث التخزين المشترك",
-            detail: rows,
-            supabase_status: response.status,
-            hint: rows && rows.code === "57014"
-              ? "انتهت مهلة PostgreSQL حتى بعد استخدام مسار الحفظ الموسع؛ لم نؤكد نجاح الحفظ"
-              : undefined
-          }, 502);
-        }
-        const saved = rows[0];
-        if (saved.success !== true || saved.conflict === true) {
-          return json({
-            success: false,
-            conflict: true,
-            code: "STATE_REVISION_CONFLICT",
-            error: "تغيرت النسخة المشتركة على جهاز آخر؛ أعد قراءة التحديث ودمجه قبل الحفظ",
-            updated_at: saved.updated_at || null,
-            source_device: saved.source_device || null
-          }, 409);
-        }
-        return json({
-          success: true,
-          updated_at: saved.updated_at,
-          source_device: saved.source_device,
-          saved_keys: keys.length,
-          payload_bytes: payloadBytes
+        // Stream request.body to the single-argument JSONB RPC. SQL performs CAS and invoice safety checks.
+        const upstream = await supabaseRequest("/rest/v1/rpc/faruj_desktop_shared_state_sync_v2", {
+          method: "POST", headers, body: request.body
         });
+        const outHeaders = new Headers(upstream.headers);
+        outHeaders.set("Access-Control-Allow-Origin", "*");
+        outHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Excel-Sync-Secret");
+        outHeaders.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
       }
 
       if (
@@ -3471,22 +3337,10 @@ export default {
       if (path === "/api/excel-driver-daily-ledger" && request.method === "GET") {
         const secret = request.headers.get("X-Excel-Sync-Secret") || "";
         if (!env.EXCEL_SYNC_SECRET || secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
-        const params = new URL(request.url).searchParams;
-        const day = String(params.get("date") || "").trim();
-        const month = String(params.get("month") || "").trim();
-        let rangeStart, rangeEnd;
-        if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-          rangeStart = new Date(day + "T00:00:00+04:00");
-          rangeEnd = new Date(rangeStart.getTime() + 86400000);
-        } else if (/^\d{4}-\d{2}$/.test(month)) {
-          rangeStart = new Date(month + "-01T00:00:00+04:00");
-          const [year, monthNumber] = month.split("-").map(Number);
-          rangeEnd = new Date(Date.UTC(year, monthNumber, 1) - 4 * 60 * 60 * 1000);
-        } else {
-          return json({ error: "يجب إرسال date بصيغة YYYY-MM-DD أو month بصيغة YYYY-MM" }, 400);
-        }
-        const start = rangeStart.toISOString();
-        const endDate = rangeEnd.toISOString();
+        const day = String(new URL(request.url).searchParams.get("date") || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: "التاريخ غير صحيح" }, 400);
+        const start = new Date(day + "T00:00:00+04:00").toISOString();
+        const endDate = new Date(Date.parse(start) + 86400000).toISOString();
         const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
         if (!svc) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
         const H = { apikey: svc };
@@ -3538,14 +3392,7 @@ export default {
         const rows = ledgerRows.concat(legacyRows).sort(function (a, b) {
           return String(a.delivered_at || "").localeCompare(String(b.delivered_at || ""));
         });
-        return json({
-          success: true,
-          date: day || null,
-          month: month || null,
-          rows: rows,
-          legacy_count: legacyRows.length,
-          diagnostics: { ledger_count: ledgerRows.length, approved_request_count: approvedReqs.length, legacy_count: legacyRows.length }
-        });
+        return json({ success: true, date: day, rows: rows, legacy_count: legacyRows.length });
       }
 
       if (
