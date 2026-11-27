@@ -1724,101 +1724,33 @@ export default {
         });
       }
 
-      if (
-        path === "/api/master/orders" &&
-        request.method === "GET"
-      ) {
-        const auth =
-          await requireMaster(
-            request,
-            env
-          );
-
-        if (auth.error) {
-          return json(
-            {
-              error:
-                auth.error
-            },
-            auth.status
-          );
-        }
-
-        // قراءة مجزأة بمؤشر id لتجنب تجاوز حد CPU في Worker عند كبر الأرشيف.
-        // كل استدعاء يعيد حتى 250 صفًا من كل جدول، والواجهة تطلب الدفعات التالية.
-        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-        const masterReadHeaders = serviceKey
-          ? { apikey: serviceKey, Authorization: "Bearer " + serviceKey }
-          : { apikey: env.SUPABASE_ANON_KEY, Authorization: "Bearer " + auth.token };
-        const pageSize = 250;
-
-        function readCursor(name) {
-          const raw = url.searchParams.get(name);
+      if (path === "/api/master/orders" && request.method === "GET") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const serviceKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
+        const q = new URL(request.url).searchParams;
+        const cursor = name => {
+          const raw = q.get(name);
           if (raw === null || raw === "") return 0;
-          const value = Number(raw);
-          return Number.isSafeInteger(value) && value >= 0 ? value : null;
-        }
-
-        const activeAfter = readCursor("active_after");
-        const archiveAfter = readCursor("archive_after");
-        if (activeAfter === null || archiveAfter === null) {
-          return json({ error: "مؤشر تحميل الفواتير غير صالح." }, 400);
-        }
-
-        async function readMasterPage(tableName, afterId) {
-          const query = "?select=*&id=gt." + afterId + "&order=id.asc&limit=" + pageSize;
-          const response = await supabaseRequest("/rest/v1/" + tableName + query, {
-            headers: masterReadHeaders
-          });
-          const rows = await response.json().catch(function () { return null; });
-          if (!response.ok || !Array.isArray(rows)) {
-            return {
-              ok: false,
-              status: response.status,
-              error: rows && (rows.message || rows.details || rows.hint || rows.error)
-                ? (rows.message || rows.details || rows.hint || rows.error)
-                : "تعذر قراءة جدول " + tableName
-            };
-          }
-          const last = rows.length ? Number(rows[rows.length - 1].id) : afterId;
-          if (!Number.isSafeInteger(last) || last < afterId) {
-            return { ok: false, status: 502, error: "تعذر متابعة قراءة جدول " + tableName + " بسبب مؤشر غير صالح." };
-          }
-          return { ok: true, rows: rows, next: last, hasMore: rows.length === pageSize };
-        }
-
-        const [activeResult, archiveResult] = await Promise.all([
-          readMasterPage("orders", activeAfter),
-          readMasterPage("master_orders_archive", archiveAfter)
-        ]);
-
-        if (!activeResult.ok || !archiveResult.ok) {
-          return json({
-            error: "تعذر تحميل دفعة فواتير الماستر.",
-            orders_error: activeResult.ok ? null : activeResult.error,
-            archive_error: archiveResult.ok ? null : archiveResult.error
-          }, 502);
-        }
-
-        const activeRows = activeResult.rows.map(function (row) {
-          return Object.assign({}, row, { _master_source: "orders" });
+          const n = Number(raw);
+          return Number.isSafeInteger(n) && n >= 0 ? n : null;
+        };
+        const activeAfter = cursor("active_after"), archiveAfter = cursor("archive_after");
+        if (activeAfter === null || archiveAfter === null) return json({ error: "مؤشر تحميل الفواتير غير صالح." }, 400);
+        const pageSizeRaw = Number(q.get("page_size") || 250);
+        const pageSize = Number.isInteger(pageSizeRaw) ? Math.max(1, Math.min(250, pageSizeRaw)) : 250;
+        const headers = { apikey: serviceKey, "Content-Type": "application/json" };
+        if (!serviceKey.startsWith("sb_secret_")) headers.Authorization = "Bearer " + serviceKey;
+        const upstream = await supabaseRequest("/rest/v1/rpc/faruj_master_orders_page_v1", {
+          method: "POST", headers,
+          body: JSON.stringify({ p_active_after: activeAfter, p_archive_after: archiveAfter, p_page_size: pageSize, p_username: MASTER_USERNAME, p_email: MASTER_EMAIL })
         });
-        const archivedRows = archiveResult.rows.map(function (row) {
-          return Object.assign({}, row, { _master_source: "master_orders_archive" });
-        });
-
-        return json({
-          orders: activeRows.concat(archivedRows),
-          active_count: activeRows.length,
-          archived_count: archivedRows.length,
-          next_active_after: activeResult.next,
-          next_archive_after: archiveResult.next,
-          has_more_active: activeResult.hasMore,
-          has_more_archive: archiveResult.hasMore,
-          username: MASTER_USERNAME,
-          email: MASTER_EMAIL,
-          role: "master_admin"
-        });
+        const outHeaders = new Headers(upstream.headers);
+        outHeaders.set("Access-Control-Allow-Origin", "*");
+        outHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Excel-Sync-Secret");
+        outHeaders.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
       }
 
       if (
@@ -3250,21 +3182,37 @@ export default {
       if (path === "/api/excel-driver-daily-ledger" && request.method === "GET") {
         const secret = request.headers.get("X-Excel-Sync-Secret") || "";
         if (!env.EXCEL_SYNC_SECRET || secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
-        const day = String(new URL(request.url).searchParams.get("date") || "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: "التاريخ غير صحيح" }, 400);
-        const start = new Date(day + "T00:00:00+04:00").toISOString();
-        const endDate = new Date(Date.parse(start) + 86400000).toISOString();
+        const q = new URL(request.url).searchParams;
+        const day = String(q.get("date") || "").trim();
+        const month = String(q.get("month") || "").trim();
+        let startMs, endMs, periodLabel;
+        if (month) {
+          const m = /^(\d{4})-(\d{2})$/.exec(month);
+          if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return json({ error: "الشهر غير صحيح؛ استخدم YYYY-MM" }, 400);
+          const y = Number(m[1]), mo = Number(m[2]);
+          // Dubai local midnight is UTC+04:00.
+          startMs = Date.UTC(y, mo - 1, 1) - 4 * 60 * 60 * 1000;
+          endMs = Date.UTC(y, mo, 1) - 4 * 60 * 60 * 1000;
+          periodLabel = month;
+        } else {
+          const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+          if (!d) return json({ error: "التاريخ غير صحيح؛ استخدم YYYY-MM-DD" }, 400);
+          const y = Number(d[1]), mo = Number(d[2]), dd = Number(d[3]);
+          const check = new Date(Date.UTC(y, mo - 1, dd));
+          if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== dd) return json({ error: "التاريخ غير صحيح" }, 400);
+          startMs = Date.UTC(y, mo - 1, dd) - 4 * 60 * 60 * 1000;
+          endMs = startMs + 86400000;
+          periodLabel = day;
+        }
+        const start = new Date(startMs).toISOString();
+        const endDate = new Date(endMs).toISOString();
         const svc = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
         if (!svc) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
         const H = { apikey: svc };
         if (!svc.startsWith("sb_secret_")) H.Authorization = "Bearer " + svc;
-        // المصدر الأول: سجل التحصيل المستقل الذي تم تأكيده بعد إضافة الميزة.
         const r = await supabaseRequest("/rest/v1/driver_delivery_ledger?event_status=eq.confirmed&delivered_at=gte." + encodeURIComponent(start) + "&delivered_at=lt." + encodeURIComponent(endDate) + "&select=order_id,request_id,invoice_number,delivered_by_user_id,delivered_by_name,payment_method,amount,requested_at,delivered_at&order=delivered_at.asc", { headers: H });
         const ledgerRows = await r.json().catch(function () { return null; });
         if (!r.ok || !Array.isArray(ledgerRows)) return json({ error: (ledgerRows && (ledgerRows.message || ledgerRows.hint || ledgerRows.error)) || "تعذر قراءة سجل التحصيل اليومي" }, 502);
-
-        // توافق رجعي: التسليمات التي اعتُمدت قبل إنشاء سجل التحصيل لا تُفقد.
-        // نقرأ الطلبات approved في نفس اليوم ونكمل بياناتها من orders دون تعديل أي سجل.
         const reqRes = await supabaseRequest(
           "/rest/v1/driver_delivery_requests?status=eq.approved&processed_at=gte." + encodeURIComponent(start) +
           "&processed_at=lt." + encodeURIComponent(endDate) +
@@ -3273,39 +3221,22 @@ export default {
         );
         const approvedReqs = await reqRes.json().catch(function () { return null; });
         if (!reqRes.ok || !Array.isArray(approvedReqs)) return json({ error: (approvedReqs && (approvedReqs.message || approvedReqs.hint || approvedReqs.error)) || "تعذر قراءة التسليمات المعتمدة القديمة" }, 502);
-
-        const missingReqs = approvedReqs.filter(function (q) {
-          return !ledgerRows.some(function (x) { return String(x.order_id) === String(q.order_id); });
-        });
+        const ledgerOrderIds = new Set(ledgerRows.map(function (x) { return String(x.order_id); }));
+        const missingReqs = approvedReqs.filter(function (q) { return !ledgerOrderIds.has(String(q.order_id)); });
         const orderIds = Array.from(new Set(missingReqs.map(function (q) { return Number(q.order_id); }).filter(function (n) { return Number.isInteger(n) && n > 0; })));
         let orderById = new Map();
         if (orderIds.length) {
-          const orderRes = await supabaseRequest(
-            "/rest/v1/orders?id=in.(" + orderIds.join(",") + ")&select=id,order_number,customer_name,total,payment_method",
-            { headers: H }
-          );
+          const orderRes = await supabaseRequest("/rest/v1/orders?id=in.(" + orderIds.join(",") + ")&select=id,order_number,customer_name,total,payment_method", { headers: H });
           const orderRows = await orderRes.json().catch(function () { return null; });
           if (!orderRes.ok || !Array.isArray(orderRows)) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر استكمال بيانات الفواتير المعتمدة" }, 502);
           orderById = new Map(orderRows.map(function (o) { return [String(o.id), o]; }));
         }
         const legacyRows = missingReqs.map(function (q) {
           const o = orderById.get(String(q.order_id)) || {};
-          return {
-            order_id: q.order_id, request_id: q.id,
-            invoice_number: q.invoice_number || o.order_number || String(q.order_id),
-            delivered_by_user_id: q.driver_user_id || null,
-            delivered_by_name: q.driver_name || "",
-            payment_method: o.payment_method || "", amount: Number(o.total) || 0,
-            customer_name: o.customer_name || "",
-            requested_at: q.requested_at || null,
-            delivered_at: q.processed_at || q.requested_at || null,
-            legacy_approved: true
-          };
+          return { order_id: q.order_id, request_id: q.id, invoice_number: q.invoice_number || o.order_number || String(q.order_id), delivered_by_user_id: q.driver_user_id || null, delivered_by_name: q.driver_name || "", payment_method: o.payment_method || "", amount: Number(o.total) || 0, customer_name: o.customer_name || "", requested_at: q.requested_at || null, delivered_at: q.processed_at || q.requested_at || null, legacy_approved: true };
         });
-        const rows = ledgerRows.concat(legacyRows).sort(function (a, b) {
-          return String(a.delivered_at || "").localeCompare(String(b.delivered_at || ""));
-        });
-        return json({ success: true, date: day, rows: rows, legacy_count: legacyRows.length });
+        const rows = ledgerRows.concat(legacyRows).sort(function (a, b) { return String(a.delivered_at || "").localeCompare(String(b.delivered_at || "")); });
+        return json({ success: true, date: month ? null : day, month: month || null, period: periodLabel, rows: rows, legacy_count: legacyRows.length });
       }
 
       if (
