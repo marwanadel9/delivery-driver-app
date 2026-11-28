@@ -3624,9 +3624,9 @@ export default {
         if (!serviceKey) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
         const H = { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json", Prefer: "return=representation" };
         const lookupPath = "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&select=id,order_number,sheet_name,delivery_date,phone,customer_name&limit=1000";
+          "&select=id,order_number,sheet_name,delivery_date,phone,customer_name,delivery_status&limit=1000";
         const archiveLookupPath = "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&select=id,order_number,sheet_name,delivery_date,phone,customer_name&limit=1000";
+          "&select=id,order_number,sheet_name,delivery_date,phone,customer_name,delivery_status&limit=1000";
         const [ordersResp, archiveResp] = await Promise.all([
           supabaseRequest(lookupPath, { headers: H }),
           supabaseRequest(archiveLookupPath, { headers: H })
@@ -3667,7 +3667,7 @@ export default {
         const allowed = [
           "customer_name", "phone", "emirate", "area", "order_details",
           "chicken_weights", "chicken_qtys", "plate_names", "plate_qtys",
-          "total", "payment_method", "delivery_status", "delivery_fee",
+          "total", "payment_method", "delivery_fee",
           "delivery_date", "location_url", "note",
           "appointment_coordinator", "gate_photo_url", "gate_photo_urls",
           "paid_in_advance", "bank_transfer_received"
@@ -3690,12 +3690,16 @@ export default {
           ordersPatch.sync_revision = Math.max(0, Number(order.sync_revision) || 0);
         }
 
-        // نفس قاعدة الدفع الحالية: قرار المندوب لا يُفرض عليه قبل إتمام التسليم.
-        const statusRaw = String(ordersPatch.delivery_status || "").toLowerCase();
-        const delivered = statusRaw === "delivered" || statusRaw.includes("تم");
+        // حالة التسليم لا تتغير من شاشة تعديل بيانات الفاتورة.
+        // نقرأ الحالة الحالية فقط حتى لا نمسح طريقة دفع مندوب سبق أن سلّم الفاتورة.
+        // أي انتقال إلى delivered يمر حصريًا عبر اعتماد أول مندوب فائز.
+        const currentIsDelivered = foundOrders.rows.concat(foundArchive.rows).some(function (row) {
+          const st = String(row && row.delivery_status || "").trim().toLowerCase();
+          return st === "delivered" || st.includes("تم التسليم");
+        });
         const paymentRaw = String(ordersPatch.payment_method || "").trim();
         const driverPaymentChoice = paymentRaw === "cash" || paymentRaw === "bank_transfer" || paymentRaw === "كاش" || paymentRaw === "تحويل بنكي";
-        if (driverPaymentChoice && !delivered) ordersPatch.payment_method = "";
+        if (driverPaymentChoice && !currentIsDelivered) ordersPatch.payment_method = "";
         if (ordersPatch.paid_in_advance === true || /مقدم/.test(paymentRaw)) {
           ordersPatch.paid_in_advance = true;
           archivePatch.paid_in_advance = true;
@@ -3717,7 +3721,7 @@ export default {
         // إنشاء/تحديث نسخة الأرشيف عند التسليم أو إزالتها عند الرجوع إلى out.
         // لذلك لا نرسل PATCH إلى نسخة أرشيف قد يكون Trigger حذفها للتو.
         // نحدّث الأرشيف مباشرة فقط عندما لا توجد أي نسخة نشطة مطابقة.
-        const targetIsDelivered = statusRaw === "delivered" || statusRaw.includes("تم");
+        const targetIsDelivered = currentIsDelivered;
         let archiveManagedByOrderTrigger = false;
         if (archiveFilter && !foundOrders.rows.length) {
           if (!targetIsDelivered) {
@@ -3754,6 +3758,9 @@ export default {
         const orderNumber = String(body.order_number || "").trim();
         const patch = body.order && typeof body.order === "object" ? body.order : null;
         if (!orderNumber || !patch) return json({ error: "بيانات غير مكتملة" }, 400);
+        if (Object.prototype.hasOwnProperty.call(patch, "delivery_status")) {
+          return json({ error: "حالة التسليم لا تُعدّل من مسار تعديل بيانات الفاتورة؛ استخدم اعتماد طلب المندوب أو إجراء الرجوع المخصص." }, 409);
+        }
         delete patch.id;
         if (Object.prototype.hasOwnProperty.call(patch, "delivery_date") && patch.delivery_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(patch.delivery_date))) {
           return json({ error: "تاريخ التوصيل غير صحيح" }, 400);
@@ -3798,11 +3805,36 @@ export default {
         const set = body.set && typeof body.set === "object" ? body.set : null;
         if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !set) return json({ error: "بيانات غير صحيحة" }, 400);
         const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
+        const hasExplicitDeliveryState = Object.prototype.hasOwnProperty.call(set, "delivery_status");
+        const requestedState = String(set.delivery_status || "").trim().toLowerCase();
+        if (hasExplicitDeliveryState && (requestedState === "delivered" || requestedState.includes("تم التسليم"))) {
+          return json({ error: "لا يمكن تحويل الفاتورة إلى تم التسليم من التصحيح المباشر؛ يجب اعتماد طلب المندوب وتسجيل الفائز أولاً.", code: "winner_approval_required" }, 409);
+        }
+        const [statusLookup, archiveStatusLookup] = await Promise.all([
+          supabaseRequest(
+            "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=delivery_status&limit=1000",
+            { headers: { apikey: svc, Authorization: "Bearer " + svc } }
+          ),
+          supabaseRequest(
+            "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber) + "&select=delivery_status&limit=1000",
+            { headers: { apikey: svc, Authorization: "Bearer " + svc } }
+          )
+        ]);
+        const [statusRows, archiveStatusRows] = await Promise.all([
+          statusLookup.json().catch(function () { return null; }),
+          archiveStatusLookup.json().catch(function () { return null; })
+        ]);
+        if (!statusLookup.ok || !Array.isArray(statusRows) || !archiveStatusLookup.ok || !Array.isArray(archiveStatusRows)) {
+          return json({ error: "تعذر قراءة حالة الفاتورة من المناديب والماستر قبل التصحيح؛ لم يتم تعديلها." }, 502);
+        }
+        const currentIsDelivered = statusRows.concat(archiveStatusRows).some(function (row) {
+          const st = String(row && row.delivery_status || "").trim().toLowerCase();
+          return st === "delivered" || st.includes("تم التسليم");
+        });
         const driverPatch = Object.assign({}, set);
         const archivePatch = Object.assign({}, set);
         archivePatch.updated_at = new Date().toISOString();
-        const stRaw = String(set.delivery_status || "").toLowerCase();
-        const isDelivered = stRaw === "delivered" || stRaw.includes("تم");
+        const isDelivered = hasExplicitDeliveryState ? false : currentIsDelivered;
         const pmRaw = String(set.payment_method || "").trim();
         const isDriverChoice = pmRaw === "cash" || pmRaw === "bank_transfer" || pmRaw === "كاش" || pmRaw === "تحويل بنكي";
         if (isDriverChoice && !isDelivered) driverPatch.payment_method = "";
