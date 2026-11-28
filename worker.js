@@ -1940,6 +1940,30 @@ export default {
           return Object.assign({}, row, { _master_source: "master_orders_archive" });
         });
 
+        // Master display must follow the accepted winner for an invoice/day.
+        // Keep both underlying driver copies untouched; this only normalizes
+        // the status returned to the master UI.
+        const winnerResponse = await supabaseRequest(
+          "/rest/v1/delivery_winners?select=invoice_number,delivery_date,order_id,sheet_name&order=accepted_at.desc&limit=5000",
+          { headers: masterReadHeaders }
+        );
+        const winnerRows = await winnerResponse.json().catch(function () { return null; });
+        if (winnerResponse.ok && Array.isArray(winnerRows) && winnerRows.length) {
+          const normalizeInvoice = function (value) {
+            return String(value || "").trim().replace(/\\s+/g, "").toUpperCase();
+          };
+          const winnerKeys = new Set(winnerRows.map(function (winner) {
+            return normalizeInvoice(winner.invoice_number) + "|" + String(winner.delivery_date || "NO_DATE").slice(0, 10);
+          }));
+          for (const row of activeRows.concat(archivedRows)) {
+            const key = normalizeInvoice(row.order_number) + "|" + String(row.delivery_date || "NO_DATE").slice(0, 10);
+            if (winnerKeys.has(key)) {
+              row.delivery_status = "delivered";
+              row._delivery_winner_confirmed = true;
+            }
+          }
+        }
+
         return json({
           orders: activeRows.concat(archivedRows),
           active_count: activeRows.length,
@@ -3221,17 +3245,6 @@ export default {
               ? body.orders
               : [];
 
-        // حماية مركزية إضافية: المزامنة العامة لا تعتمد التسليم.
-        // حالة delivered لا تمر إلا عبر /api/excel-approve-delivery بعد تسجيل الفائز.
-        const syncOrders = orders.map(function (sourceOrder) {
-          const row = Object.assign({}, sourceOrder || {});
-          const deliveryState = String(row.delivery_status || "").trim().toLowerCase();
-          if (deliveryState === "delivered" || deliveryState.includes("تم التسليم")) {
-            delete row.delivery_status;
-          }
-          return row;
-        });
-
         // لا نحذف صور التخزين قبل نجاح حفظ المزامنة؛ حتى لا يؤدي طلب قديم
         // أو فاشل إلى حذف صور فاتورة أحدث.
         const clearInvoices = Array.from(new Set(
@@ -3259,7 +3272,7 @@ export default {
               body:
                 JSON.stringify({
                   p_orders:
-                    syncOrders
+                    orders
                 })
             }
           );
@@ -3559,57 +3572,37 @@ export default {
         const H = { apikey: serviceKey, "Content-Type": "application/json" };
         if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
 
-        // الاعتماد يتم داخل معاملة واحدة في PostgreSQL؛ أول مندوب يفوز
-        // على مستوى رقم الفاتورة + تاريخ التوصيل، دون حذف نسخة المندوب الآخر.
-        const approvalRes = await supabaseRequest(
-          "/rest/v1/rpc/faruj_approve_driver_delivery_first_wins",
-          {
-            method: "POST",
-            headers: Object.assign({}, H, { Prefer: "return=representation" }),
-            body: JSON.stringify({ p_request_id: requestId })
-          }
+        const getRes = await supabaseRequest(
+          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending&select=id,order_id,invoice_number,sheet_name&limit=1",
+          { headers: H }
         );
-        const approvalRaw = await approvalRes.text().catch(function () { return ""; });
-        let approvalData = null;
-        try { approvalData = approvalRaw ? JSON.parse(approvalRaw) : null; } catch (_) {}
-        if (!approvalRes.ok) {
-          // Diagnostic only: log the database response (never credentials) so the
-          // exact PostgREST/RPC failure is visible in Cloudflare invocation logs.
-          console.error("[delivery-approval-rpc-error]", JSON.stringify({
-            request_id: requestId,
-            http_status: approvalRes.status,
-            response_body: String(approvalRaw || "").slice(0, 1600)
-          }));
-          const upstreamMessage = approvalData && (approvalData.message || approvalData.hint || approvalData.error || approvalData.details);
-          return json({
-            error: "فشل اعتماد التسليم في قاعدة البيانات (HTTP " + approvalRes.status + "): " + String(upstreamMessage || approvalRaw || "استجابة فارغة").slice(0, 900),
-            code: "delivery_approval_failed",
-            upstream_status: approvalRes.status
-          }, 502);
-        }
-        const result = Array.isArray(approvalData) ? approvalData[0] : approvalData;
-        if (!result || typeof result !== "object") return json({ error: "استجابة اعتماد التسليم غير مفهومة" }, 502);
-        if (result.success === true && result.approved === true) {
-          return json({
-            success: true,
-            approved: true,
-            order_number: result.invoice_number || "",
-            sheet_name: result.sheet_name || "",
-            delivery_status: "delivered",
-            winner: true
-          });
-        }
-        if (result.conflict === true || result.approved === false) {
-          return json({
-            success: false,
-            approved: false,
-            conflict: result.conflict === true,
-            error: result.message || "تم اعتماد نسخة الفاتورة من المندوب الآخر بالفعل؛ لم يتم اعتماد هذه النسخة.",
-            order_number: result.invoice_number || "",
-            winner_sheet_name: result.winner_sheet_name || ""
-          }, 409);
-        }
-        return json({ error: result.message || "لم يتم اعتماد طلب التسليم", code: result.code || "not_approved" }, 409);
+        const rows = await getRes.json().catch(function () { return null; });
+        if (!getRes.ok) return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة طلب الاعتماد" }, 502);
+        if (!Array.isArray(rows) || !rows.length) return json({ error: "طلب الاعتماد غير موجود أو تمت معالجته مسبقًا" }, 404);
+        const req = rows[0];
+
+        const orderRes = await supabaseRequest(
+          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,delivery_date&limit=1",
+          { headers: H }
+        );
+        const orderRows = await orderRes.json().catch(function () { return null; });
+        if (!orderRes.ok || !Array.isArray(orderRows) || !orderRows.length) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة قبل اعتماد التسليم" }, 502);
+        const approvalLock = rejectFutureDelivery(orderRows[0], dubaiDateKey(new Date()));
+        if (approvalLock) return approvalLock;
+
+        const updateRes = await supabaseRequest(
+          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name),
+          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=representation" }), body: JSON.stringify({ delivery_status: "delivered" }) }
+        );
+        const changed = await updateRes.json().catch(function () { return null; });
+        if (!updateRes.ok || !Array.isArray(changed) || !changed.length) return json({ error: (changed && (changed.message || changed.hint || changed.error)) || "تعذر اعتماد حالة التسليم في الفاتورة" }, 502);
+
+        const doneRes = await supabaseRequest(
+          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending",
+          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: new Date().toISOString() }) }
+        );
+        if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة لكن تعذر إغلاق طلب الاعتماد" }, 502);
+        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
       }
 
       if (path === "/api/resolve-map" && request.method === "POST") {
@@ -3635,9 +3628,9 @@ export default {
         if (!serviceKey) return json({ error: "مفتاح الخدمة غير مضبوط في أسرار Worker" }, 500);
         const H = { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json", Prefer: "return=representation" };
         const lookupPath = "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&select=id,order_number,sheet_name,delivery_date,phone,customer_name,delivery_status&limit=1000";
+          "&select=id,order_number,sheet_name,delivery_date,phone,customer_name&limit=1000";
         const archiveLookupPath = "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber) +
-          "&select=id,order_number,sheet_name,delivery_date,phone,customer_name,delivery_status&limit=1000";
+          "&select=id,order_number,sheet_name,delivery_date,phone,customer_name&limit=1000";
         const [ordersResp, archiveResp] = await Promise.all([
           supabaseRequest(lookupPath, { headers: H }),
           supabaseRequest(archiveLookupPath, { headers: H })
@@ -3678,7 +3671,7 @@ export default {
         const allowed = [
           "customer_name", "phone", "emirate", "area", "order_details",
           "chicken_weights", "chicken_qtys", "plate_names", "plate_qtys",
-          "total", "payment_method", "delivery_fee",
+          "total", "payment_method", "delivery_status", "delivery_fee",
           "delivery_date", "location_url", "note",
           "appointment_coordinator", "gate_photo_url", "gate_photo_urls",
           "paid_in_advance", "bank_transfer_received"
@@ -3701,16 +3694,12 @@ export default {
           ordersPatch.sync_revision = Math.max(0, Number(order.sync_revision) || 0);
         }
 
-        // حالة التسليم لا تتغير من شاشة تعديل بيانات الفاتورة.
-        // نقرأ الحالة الحالية فقط حتى لا نمسح طريقة دفع مندوب سبق أن سلّم الفاتورة.
-        // أي انتقال إلى delivered يمر حصريًا عبر اعتماد أول مندوب فائز.
-        const currentIsDelivered = foundOrders.rows.concat(foundArchive.rows).some(function (row) {
-          const st = String(row && row.delivery_status || "").trim().toLowerCase();
-          return st === "delivered" || st.includes("تم التسليم");
-        });
+        // نفس قاعدة الدفع الحالية: قرار المندوب لا يُفرض عليه قبل إتمام التسليم.
+        const statusRaw = String(ordersPatch.delivery_status || "").toLowerCase();
+        const delivered = statusRaw === "delivered" || statusRaw.includes("تم");
         const paymentRaw = String(ordersPatch.payment_method || "").trim();
         const driverPaymentChoice = paymentRaw === "cash" || paymentRaw === "bank_transfer" || paymentRaw === "كاش" || paymentRaw === "تحويل بنكي";
-        if (driverPaymentChoice && !currentIsDelivered) ordersPatch.payment_method = "";
+        if (driverPaymentChoice && !delivered) ordersPatch.payment_method = "";
         if (ordersPatch.paid_in_advance === true || /مقدم/.test(paymentRaw)) {
           ordersPatch.paid_in_advance = true;
           archivePatch.paid_in_advance = true;
@@ -3732,7 +3721,7 @@ export default {
         // إنشاء/تحديث نسخة الأرشيف عند التسليم أو إزالتها عند الرجوع إلى out.
         // لذلك لا نرسل PATCH إلى نسخة أرشيف قد يكون Trigger حذفها للتو.
         // نحدّث الأرشيف مباشرة فقط عندما لا توجد أي نسخة نشطة مطابقة.
-        const targetIsDelivered = currentIsDelivered;
+        const targetIsDelivered = statusRaw === "delivered" || statusRaw.includes("تم");
         let archiveManagedByOrderTrigger = false;
         if (archiveFilter && !foundOrders.rows.length) {
           if (!targetIsDelivered) {
@@ -3769,9 +3758,6 @@ export default {
         const orderNumber = String(body.order_number || "").trim();
         const patch = body.order && typeof body.order === "object" ? body.order : null;
         if (!orderNumber || !patch) return json({ error: "بيانات غير مكتملة" }, 400);
-        if (Object.prototype.hasOwnProperty.call(patch, "delivery_status")) {
-          return json({ error: "حالة التسليم لا تُعدّل من مسار تعديل بيانات الفاتورة؛ استخدم اعتماد طلب المندوب أو إجراء الرجوع المخصص." }, 409);
-        }
         delete patch.id;
         if (Object.prototype.hasOwnProperty.call(patch, "delivery_date") && patch.delivery_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(patch.delivery_date))) {
           return json({ error: "تاريخ التوصيل غير صحيح" }, 400);
@@ -3816,36 +3802,11 @@ export default {
         const set = body.set && typeof body.set === "object" ? body.set : null;
         if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) || !set) return json({ error: "بيانات غير صحيحة" }, 400);
         const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" };
-        const hasExplicitDeliveryState = Object.prototype.hasOwnProperty.call(set, "delivery_status");
-        const requestedState = String(set.delivery_status || "").trim().toLowerCase();
-        if (hasExplicitDeliveryState && (requestedState === "delivered" || requestedState.includes("تم التسليم"))) {
-          return json({ error: "لا يمكن تحويل الفاتورة إلى تم التسليم من التصحيح المباشر؛ يجب اعتماد طلب المندوب وتسجيل الفائز أولاً.", code: "winner_approval_required" }, 409);
-        }
-        const [statusLookup, archiveStatusLookup] = await Promise.all([
-          supabaseRequest(
-            "/rest/v1/orders?order_number=eq." + encodeURIComponent(orderNumber) + "&select=delivery_status&limit=1000",
-            { headers: { apikey: svc, Authorization: "Bearer " + svc } }
-          ),
-          supabaseRequest(
-            "/rest/v1/master_orders_archive?order_number=eq." + encodeURIComponent(orderNumber) + "&select=delivery_status&limit=1000",
-            { headers: { apikey: svc, Authorization: "Bearer " + svc } }
-          )
-        ]);
-        const [statusRows, archiveStatusRows] = await Promise.all([
-          statusLookup.json().catch(function () { return null; }),
-          archiveStatusLookup.json().catch(function () { return null; })
-        ]);
-        if (!statusLookup.ok || !Array.isArray(statusRows) || !archiveStatusLookup.ok || !Array.isArray(archiveStatusRows)) {
-          return json({ error: "تعذر قراءة حالة الفاتورة من المناديب والماستر قبل التصحيح؛ لم يتم تعديلها." }, 502);
-        }
-        const currentIsDelivered = statusRows.concat(archiveStatusRows).some(function (row) {
-          const st = String(row && row.delivery_status || "").trim().toLowerCase();
-          return st === "delivered" || st.includes("تم التسليم");
-        });
         const driverPatch = Object.assign({}, set);
         const archivePatch = Object.assign({}, set);
         archivePatch.updated_at = new Date().toISOString();
-        const isDelivered = hasExplicitDeliveryState ? false : currentIsDelivered;
+        const stRaw = String(set.delivery_status || "").toLowerCase();
+        const isDelivered = stRaw === "delivered" || stRaw.includes("تم");
         const pmRaw = String(set.payment_method || "").trim();
         const isDriverChoice = pmRaw === "cash" || pmRaw === "bank_transfer" || pmRaw === "كاش" || pmRaw === "تحويل بنكي";
         if (isDriverChoice && !isDelivered) driverPatch.payment_method = "";
