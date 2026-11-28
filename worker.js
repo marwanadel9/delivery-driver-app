@@ -728,15 +728,37 @@ export default {
         if(path==="/api/customer-location/check"&&request.method==="POST"){
           const body=await request.json().catch(()=>null);if(!body)return json({ok:false,error:"بيانات الطلب غير صالحة"},400);
           const code=String(body.customer_code||"").trim();if(!code)return json({ok:false,error:"كود العميل مطلوب"},400);
-          // Customer records are local-only. This endpoint resolves the submitted
-          // Google Maps URL and claims/checks its exact coordinates in the dedicated
-          // location registry; it never reads or writes the shared customer list.
-          // Do not gate customer creation on legacy customer-list migration status.
+          const migration=await farujMigrationState(env);
+          const legacyIssues=Array.isArray(migration.issues)?migration.issues:[];
+          const existingEdit=body.allow_existing_customer_edit===true;
+          if(migration.status==="running")return json({ok:false,error:"هناك دفعة تهيئة تعمل الآن. انتظر انتهاء الدفعة قبل تغيير رابط الموقع حتى لا تتداخل عمليتا الفحص والحجز.",code:"MIGRATION_RUNNING"},409);
+          if(migration.status!=="complete"&&!existingEdit)return json({ok:false,error:"إضافة رابط موقع لعميل جديد تتطلب اكتمال تهيئة المواقع القديمة أولًا. يمكن تعديل رابط عميل موجود من نافذة التعديل.",code:"MIGRATION_REQUIRED"},409);
+          if(existingEdit){
+            const payload=await farujSharedPayload(env);
+            const customers=Array.isArray(payload.fa_custs)?payload.fa_custs:[];
+            const matches=customers.filter(c=>String(c&&c.code||"").trim()===code);
+            if(!matches.length)return json({ok:false,error:"العميل غير موجود في التخزين السحابي؛ لا يمكن استخدام مسار تعديل موقع عميل موجود",code:"CUSTOMER_NOT_FOUND"},409);
+            if(matches.length>1){
+              // Allow the location pre-check to proceed only when every cloud copy
+              // is byte-for-byte equivalent (stable JSON) to the exact record the
+              // user opened. The commit endpoint repeats this check before collapse.
+              const expected=body.expected_customer;
+              const expectedValid=expected&&typeof expected==="object"&&!Array.isArray(expected)&&String(expected.code||"").trim()===code;
+              const firstJson=farujStableJson(matches[0]);
+              const allExactCopies=matches.every(item=>farujStableJson(item)===firstJson);
+              const matchesOpenedRecord=expectedValid&&firstJson===farujStableJson(expected);
+              if(!allExactCopies||!matchesOpenedRecord){
+                return json({ok:false,error:"يوجد أكثر من سجل للعميل "+code+" في التخزين السحابي، لكن النسخ ليست متطابقة تمامًا أو لا تطابق السجل المفتوح. لم نغيّر أي سجل؛ حدّث قائمة العملاء وراجع السجلات أولًا.",code:"CUSTOMER_CODE_DUPLICATE_CONFLICT",customer_code:code,duplicate_count:matches.length},409);
+              }
+            }
+          }
           let resolved;try{resolved=await farujResolveGoogleMap(body.url);}catch(e){return json({ok:false,error:e.message,code:"LOCATION_RESOLVE_FAILED"},422);}
           const rows=await farujRpc(env,"faruj_check_customer_location_v4",{p_customer_code:code,p_latitude:resolved.lat,p_longitude:resolved.lng});
           const row=Array.isArray(rows)?rows[0]:rows;
           if(!row||row.available!==true)return json({ok:false,code:"CUSTOMER_LOCATION_DUPLICATE",other_customer_code:row&&row.other_customer_code||null,location_key:resolved.key,error:"الإحداثيات متطابقة مع موقع عميل مسجل"},409);
-          return json({ok:true,coords:[resolved.lat,resolved.lng],location_key:resolved.key,precision:6,match_mode:"exact",migration_pending:false,remaining_legacy_issues:0,unverified_legacy_customers:0,checked_against_registered_locations:true,customer_storage:"local_only"});
+          const otherIssues=legacyIssues.filter(x=>String(x&&x.customer_code||"").trim()!==code);
+          const unresolvedOther=otherIssues.filter(x=>String(x&&x.issue_type||"")==="unresolved").length;
+          return json({ok:true,coords:[resolved.lat,resolved.lng],location_key:resolved.key,precision:6,match_mode:"exact",migration_pending:migration.status==="running"||otherIssues.length>0,remaining_legacy_issues:otherIssues.length,unverified_legacy_customers:unresolvedOther,checked_against_registered_locations:true});
         }
         if(path==="/api/customer-location/migration/status"&&request.method==="GET"){
           const state=await farujMigrationState(env);return json({ok:true,state,issues:Array.isArray(state.issues)?state.issues:[]});
@@ -907,7 +929,6 @@ export default {
 
       // حفظ سجل عميل واحد مباشرة في التخزين السحابي، بهوية code فقط وCAS ذري.
       if (path === "/api/desktop-customers/commit" && request.method === "POST") {
-        return json({ ok: false, code: "CUSTOMER_CLOUD_STORAGE_DISABLED", error: "حفظ العملاء السحابي متوقف؛ يتم حفظ العملاء محليًا على الكمبيوتر. فحص إحداثيات الموقع متاح عبر المسار المستقل." }, 410);
         const supplied = request.headers.get("X-Excel-Sync-Secret") || "";
         if (!env.EXCEL_SYNC_SECRET || supplied !== env.EXCEL_SYNC_SECRET) return json({ ok: false, error: "غير مصرح" }, 401);
         const declaredLength = Number(request.headers.get("Content-Length") || 0);
@@ -3302,6 +3323,130 @@ export default {
           return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر سحب حالات المندوبين" }, 502);
         }
         return json({ orders: rows });
+      }
+
+      // حسابات المناديب اليومية وعدد التسليمات الشهري.
+      // يعتمد على طلبات التسليم التي اعتمدها الكمبيوتر (processed_at/status=approved)
+      // ويكمل تفاصيل الفاتورة من orders أو master_orders_archive دون تعديل أي بيانات.
+      if (path === "/api/excel-driver-daily-ledger" && request.method === "GET") {
+        const secret = request.headers.get("X-Excel-Sync-Secret") || "";
+        if (!env.EXCEL_SYNC_SECRET || secret !== env.EXCEL_SYNC_SECRET) {
+          return json({ error: "غير مصرح" }, 401);
+        }
+
+        const params = new URL(request.url).searchParams;
+        const day = String(params.get("date") || "").trim();
+        const month = String(params.get("month") || "").trim();
+        let startIso = "";
+        let endIso = "";
+
+        if (day && month) return json({ error: "أرسل date أو month وليس الاثنين معًا" }, 400);
+        if (day) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: "التاريخ غير صحيح" }, 400);
+          const check = new Date(day + "T00:00:00Z");
+          if (Number.isNaN(check.getTime()) || check.toISOString().slice(0, 10) !== day) {
+            return json({ error: "التاريخ غير صالح" }, 400);
+          }
+          const d = new Date(day + "T00:00:00+04:00");
+          const next = new Date(d.getTime() + 86400000);
+          startIso = d.toISOString();
+          endIso = next.toISOString();
+        } else if (month) {
+          if (!/^\d{4}-\d{2}$/.test(month)) return json({ error: "الشهر غير صحيح" }, 400);
+          const check = new Date(month + "-01T00:00:00Z");
+          if (Number.isNaN(check.getTime()) || check.toISOString().slice(0, 7) !== month) {
+            return json({ error: "الشهر غير صالح" }, 400);
+          }
+          const d = new Date(month + "-01T00:00:00+04:00");
+          const next = new Date(Date.UTC(check.getUTCFullYear(), check.getUTCMonth() + 1, 1, -4, 0, 0));
+          startIso = d.toISOString();
+          endIso = next.toISOString();
+        } else {
+          return json({ error: "يجب إرسال date أو month" }, 400);
+        }
+
+        const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
+        if (!serviceKey) return json({ error: "مفتاح خدمة Supabase غير مضبوط في Worker" }, 500);
+        const H = { apikey: serviceKey };
+        if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
+
+        // processed_at هو وقت اعتماد التسليم من الكمبيوتر، وليس وقت إنشاء الطلب.
+        const reqPath = "/rest/v1/driver_delivery_requests?status=eq.approved" +
+          "&processed_at=gte." + encodeURIComponent(startIso) +
+          "&processed_at=lt." + encodeURIComponent(endIso) +
+          "&select=id,order_id,invoice_number,sheet_name,driver_user_id,driver_name,requested_at,processed_at" +
+          "&order=processed_at.asc&limit=5000";
+        const reqRes = await supabaseRequest(reqPath, { headers: H });
+        const approved = await reqRes.json().catch(function () { return null; });
+        if (!reqRes.ok || !Array.isArray(approved)) {
+          return json({
+            error: (approved && (approved.message || approved.hint || approved.error)) ||
+              "تعذر قراءة طلبات التسليم المعتمدة",
+            source: "driver_delivery_requests",
+            status: reqRes.status
+          }, 502);
+        }
+
+        const ids = Array.from(new Set(approved.map(function (q) {
+          const n = Number(q.order_id);
+          return Number.isInteger(n) && n > 0 ? n : null;
+        }).filter(Boolean)));
+        const byId = new Map();
+
+        if (ids.length) {
+          const idList = ids.join(",");
+          const [ordersRes, archiveRes] = await Promise.all([
+            supabaseRequest("/rest/v1/orders?id=in.(" + idList + ")&select=id,order_number,customer_name,total,payment_method", { headers: H }),
+            supabaseRequest("/rest/v1/master_orders_archive?id=in.(" + idList + ")&select=id,order_number,customer_name,total,payment_method", { headers: H })
+          ]);
+          const [orders, archive] = await Promise.all([
+            ordersRes.json().catch(function () { return null; }),
+            archiveRes.json().catch(function () { return null; })
+          ]);
+          if (!ordersRes.ok || !Array.isArray(orders)) {
+            return json({ error: (orders && (orders.message || orders.hint || orders.error)) || "تعذر قراءة تفاصيل الفواتير النشطة", source: "orders", status: ordersRes.status }, 502);
+          }
+          if (!archiveRes.ok || !Array.isArray(archive)) {
+            return json({ error: (archive && (archive.message || archive.hint || archive.error)) || "تعذر قراءة تفاصيل الفواتير المؤرشفة", source: "master_orders_archive", status: archiveRes.status }, 502);
+          }
+          archive.forEach(function (o) { byId.set(String(o.id), o); });
+          orders.forEach(function (o) { byId.set(String(o.id), o); });
+        }
+
+        // صف واحد لكل فاتورة معتمدة؛ نزيل التكرار بحسب order_id احتياطًا.
+        const seen = new Set();
+        const rows = approved.filter(function (q) {
+          const key = String(q.order_id || "");
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).map(function (q) {
+          const o = byId.get(String(q.order_id)) || {};
+          return {
+            order_id: q.order_id,
+            request_id: q.id,
+            invoice_number: q.invoice_number || o.order_number || String(q.order_id || ""),
+            customer_name: o.customer_name || "",
+            sheet_name: q.sheet_name || "",
+            delivered_by_user_id: q.driver_user_id || null,
+            delivered_by_name: q.driver_name || "",
+            payment_method: o.payment_method || "",
+            amount: Number(o.total) || 0,
+            requested_at: q.requested_at || null,
+            delivered_at: q.processed_at || null,
+            legacy_approved: true,
+            invoice_details_found: !!Object.keys(o).length
+          };
+        });
+
+        return json({
+          success: true,
+          date: day || null,
+          month: month || null,
+          rows: rows,
+          count: rows.length,
+          source: "driver_delivery_requests.approved"
+        });
       }
 
       if (
