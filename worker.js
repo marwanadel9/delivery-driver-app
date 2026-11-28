@@ -1763,6 +1763,49 @@ export default {
           );
         }
 
+        /*
+         * الماستر/أبو زين يراجع تسليمات حسام والعكس:
+         * تبقى نسخة الفاتورة ظاهرة في حساب كل مندوب، لكن عند وجود فائز في
+         * delivery_winners نعرضها «تم التسليم» عند الاثنين ونوضح اسم من سلّمها.
+         * لا نحذف النسخة الأخرى ولا نغيّر orders أو هوية الفائز.
+         */
+        const winnerServiceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
+        if (safeOrders.length && winnerServiceKey) {
+          const invoiceNumbers = Array.from(new Set(safeOrders
+            .map(function (row) { return String(row.order_number || "").trim(); })
+            .filter(Boolean)));
+          if (invoiceNumbers.length) {
+            const winnerHeaders = { apikey: winnerServiceKey };
+            if (!winnerServiceKey.startsWith("sb_secret_")) winnerHeaders.Authorization = "Bearer " + winnerServiceKey;
+            const winnerPath = "/rest/v1/delivery_winners?delivery_date=gte." + encodeURIComponent(dubaiDay) +
+              "&invoice_number=in.(" + invoiceNumbers.map(function (value) { return encodeURIComponent(value); }).join(",") + ")" +
+              "&select=invoice_number,delivery_date,order_id,sheet_name,driver_user_id,driver_name,accepted_at&limit=10000";
+            const winnerResponse = await supabaseRequest(winnerPath, { headers: winnerHeaders });
+            const winnerRows = await winnerResponse.json().catch(function () { return null; });
+            if (!winnerResponse.ok || !Array.isArray(winnerRows)) {
+              return json({ error: "تعذر التحقق من سجل التسليم المشترك؛ لم يتم عرض حالات غير مؤكدة" }, 502);
+            }
+            const winnerMap = new Map();
+            for (const winner of winnerRows) {
+              const key = String(winner.invoice_number || "").trim().toUpperCase().replace(/\s+/g, "") + "|" + String(winner.delivery_date || "").slice(0, 10);
+              if (key !== "|") winnerMap.set(key, winner);
+            }
+            for (const row of safeOrders) {
+              const key = String(row.order_number || "").trim().toUpperCase().replace(/\s+/g, "") + "|" + String(row.delivery_date || "").slice(0, 10);
+              const winner = winnerMap.get(key);
+              if (!winner) continue; // لا نلمس الحالات القديمة التي لا تملك سجل فائز.
+              row.delivery_status = "delivered";
+              row._delivery_winner = {
+                driver_user_id: winner.driver_user_id || null,
+                driver_name: winner.driver_name || "",
+                accepted_at: winner.accepted_at || null,
+                sheet_name: winner.sheet_name || ""
+              };
+              row._delivered_by_other = String(winner.driver_user_id || "").toLowerCase() !== String(auth.user.id || "").toLowerCase();
+            }
+          }
+        }
+
         // إظهار أرقام الهاتف للمندوب المصرح له فقط؛ لا نغيّر البيانات المخزنة في قاعدة البيانات.
         const canCall = auth.user.email === DRIVER_EMAILS.zain2;
         const safeOrders = (Array.isArray(orders) ? orders : []).map(function (row) {
