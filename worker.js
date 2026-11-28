@@ -3221,6 +3221,17 @@ export default {
               ? body.orders
               : [];
 
+        // حماية مركزية إضافية: المزامنة العامة لا تعتمد التسليم.
+        // حالة delivered لا تمر إلا عبر /api/excel-approve-delivery بعد تسجيل الفائز.
+        const syncOrders = orders.map(function (sourceOrder) {
+          const row = Object.assign({}, sourceOrder || {});
+          const deliveryState = String(row.delivery_status || "").trim().toLowerCase();
+          if (deliveryState === "delivered" || deliveryState.includes("تم التسليم")) {
+            delete row.delivery_status;
+          }
+          return row;
+        });
+
         // لا نحذف صور التخزين قبل نجاح حفظ المزامنة؛ حتى لا يؤدي طلب قديم
         // أو فاشل إلى حذف صور فاتورة أحدث.
         const clearInvoices = Array.from(new Set(
@@ -3248,7 +3259,7 @@ export default {
               body:
                 JSON.stringify({
                   p_orders:
-                    orders
+                    syncOrders
                 })
             }
           );
