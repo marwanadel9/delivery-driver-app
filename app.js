@@ -171,6 +171,13 @@
       : (value ? String(value) : 'قيد التوصيل');
   };
 
+  const sharedDeliveryLabel = (order) => {
+    const winnerName = String(order?._delivery_winner?.driver_name || '').trim();
+    return order?._delivered_by_other && winnerName
+      ? `تم التسليم بواسطة ${winnerName}`
+      : statusLabel(order?.delivery_status);
+  };
+
   // تاريخ اليوم الرسمي للمندوب: تقويم الإمارات وليس توقيت الجهاز المحلي.
   function driverDubaiDateKey(date = new Date()) {
     const parts = new Intl.DateTimeFormat('en-CA', {
@@ -550,10 +557,10 @@
       $('driver-name');
 
     if (driverName) {
-      const driverSheet = String(state.session?.sheet_name || '').trim();
-      driverName.textContent = driverSheet === 'Mandoub' ? 'حسام أبو حور' :
-        driverSheet === 'Mandoub2' ? 'أبو زين' :
-        (state.session?.mandoub_name || state.session?.username || 'المندوب');
+      driverName.textContent =
+        state.session?.mandoub_name ||
+        state.session?.username ||
+        'المندوب';
     }
 
     startDriverDubaiDayWatcher();
@@ -1870,10 +1877,7 @@
         );
 
       if (status) {
-        status.textContent =
-          statusLabel(
-            order.delivery_status
-          );
+        status.textContent = sharedDeliveryLabel(order);
 
         status.classList.toggle(
           'ok',
@@ -2170,7 +2174,9 @@
           deliverButton.style.background = '#d97706';
         } else if (delivered) {
           deliverButton.disabled = true;
-          deliverButton.textContent = '✓ تم التسليم';
+          deliverButton.textContent = order._delivered_by_other && order._delivery_winner?.driver_name
+            ? `✓ تم التسليم بواسطة ${String(order._delivery_winner.driver_name).trim()}`
+            : '✓ تم التسليم';
         } else if (requestPending) {
           deliverButton.disabled = true;
           deliverButton.textContent = '⏳ تم إرسال طلب التسليم';
@@ -2529,8 +2535,8 @@
         .filter(Boolean)
     ));
     const labels = sheets.map((sheet) => {
-      if (sheet === 'Mandoub2') return 'أبو زين';
-      if (sheet === 'Mandoub') return 'حسام أبو حور';
+      if (sheet === 'Mandoub2') return 'مندوب 2';
+      if (sheet === 'Mandoub') return 'مندوب 1';
       return sheet;
     });
     return labels.length ? labels.join(' + ') : 'غير محدد';
@@ -3099,8 +3105,8 @@
               <label>المندوب</label>
               <select id="master-filter-driver">
                 <option value="">الكل</option>
-                <option value="Mandoub">حسام أبو حور</option>
-                <option value="Mandoub2">أبو زين</option>
+                <option value="Mandoub">مندوب 1</option>
+                <option value="Mandoub2">مندوب 2</option>
               </select>
             </div>
 
@@ -4039,8 +4045,8 @@
     const driverBody = $('master-home-driver-body');
     if (driverBody) {
       const driverDefs = [
-        { key: 'Mandoub', label: 'حسام أبو حور' },
-        { key: 'Mandoub2', label: 'أبو زين' }
+        { key: 'Mandoub', label: 'مندوب 1' },
+        { key: 'Mandoub2', label: 'مندوب 2' }
       ];
       driverBody.innerHTML = driverDefs.map((driver) => {
         const orders = todayOrders.filter((order) => String(order.sheet_name || '') === driver.key);
