@@ -3548,37 +3548,57 @@ export default {
         const H = { apikey: serviceKey, "Content-Type": "application/json" };
         if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
 
-        const getRes = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending&select=id,order_id,invoice_number,sheet_name&limit=1",
-          { headers: H }
+        // الاعتماد يتم داخل معاملة واحدة في PostgreSQL؛ أول مندوب يفوز
+        // على مستوى رقم الفاتورة + تاريخ التوصيل، دون حذف نسخة المندوب الآخر.
+        const approvalRes = await supabaseRequest(
+          "/rest/v1/rpc/faruj_approve_driver_delivery_first_wins",
+          {
+            method: "POST",
+            headers: Object.assign({}, H, { Prefer: "return=representation" }),
+            body: JSON.stringify({ p_request_id: requestId })
+          }
         );
-        const rows = await getRes.json().catch(function () { return null; });
-        if (!getRes.ok) return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة طلب الاعتماد" }, 502);
-        if (!Array.isArray(rows) || !rows.length) return json({ error: "طلب الاعتماد غير موجود أو تمت معالجته مسبقًا" }, 404);
-        const req = rows[0];
-
-        const orderRes = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,delivery_date&limit=1",
-          { headers: H }
-        );
-        const orderRows = await orderRes.json().catch(function () { return null; });
-        if (!orderRes.ok || !Array.isArray(orderRows) || !orderRows.length) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة قبل اعتماد التسليم" }, 502);
-        const approvalLock = rejectFutureDelivery(orderRows[0], dubaiDateKey(new Date()));
-        if (approvalLock) return approvalLock;
-
-        const updateRes = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name),
-          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=representation" }), body: JSON.stringify({ delivery_status: "delivered" }) }
-        );
-        const changed = await updateRes.json().catch(function () { return null; });
-        if (!updateRes.ok || !Array.isArray(changed) || !changed.length) return json({ error: (changed && (changed.message || changed.hint || changed.error)) || "تعذر اعتماد حالة التسليم في الفاتورة" }, 502);
-
-        const doneRes = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending",
-          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: new Date().toISOString() }) }
-        );
-        if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة لكن تعذر إغلاق طلب الاعتماد" }, 502);
-        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
+        const approvalRaw = await approvalRes.text().catch(function () { return ""; });
+        let approvalData = null;
+        try { approvalData = approvalRaw ? JSON.parse(approvalRaw) : null; } catch (_) {}
+        if (!approvalRes.ok) {
+          // Diagnostic only: log the database response (never credentials) so the
+          // exact PostgREST/RPC failure is visible in Cloudflare invocation logs.
+          console.error("[delivery-approval-rpc-error]", JSON.stringify({
+            request_id: requestId,
+            http_status: approvalRes.status,
+            response_body: String(approvalRaw || "").slice(0, 1600)
+          }));
+          const upstreamMessage = approvalData && (approvalData.message || approvalData.hint || approvalData.error || approvalData.details);
+          return json({
+            error: "فشل اعتماد التسليم في قاعدة البيانات (HTTP " + approvalRes.status + "): " + String(upstreamMessage || approvalRaw || "استجابة فارغة").slice(0, 900),
+            code: "delivery_approval_failed",
+            upstream_status: approvalRes.status
+          }, 502);
+        }
+        const result = Array.isArray(approvalData) ? approvalData[0] : approvalData;
+        if (!result || typeof result !== "object") return json({ error: "استجابة اعتماد التسليم غير مفهومة" }, 502);
+        if (result.success === true && result.approved === true) {
+          return json({
+            success: true,
+            approved: true,
+            order_number: result.invoice_number || "",
+            sheet_name: result.sheet_name || "",
+            delivery_status: "delivered",
+            winner: true
+          });
+        }
+        if (result.conflict === true || result.approved === false) {
+          return json({
+            success: false,
+            approved: false,
+            conflict: result.conflict === true,
+            error: result.message || "تم اعتماد نسخة الفاتورة من المندوب الآخر بالفعل؛ لم يتم اعتماد هذه النسخة.",
+            order_number: result.invoice_number || "",
+            winner_sheet_name: result.winner_sheet_name || ""
+          }, 409);
+        }
+        return json({ error: result.message || "لم يتم اعتماد طلب التسليم", code: result.code || "not_approved" }, 409);
       }
 
       if (path === "/api/resolve-map" && request.method === "POST") {
