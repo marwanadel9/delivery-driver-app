@@ -1599,8 +1599,13 @@ var worker_default = {
               return null;
             });
             if (!winnerResponse.ok || !Array.isArray(winnerRows)) {
-              return json({ error: "\u062A\u0639\u0630\u0631 \u0627\u0644\u062A\u062D\u0642\u0642 \u0645\u0646 \u0633\u062C\u0644 \u0627\u0644\u062A\u0633\u0644\u064A\u0645 \u0627\u0644\u0645\u0634\u062A\u0631\u0643\u061B \u0644\u0645 \u064A\u062A\u0645 \u0639\u0631\u0636 \u062D\u0627\u0644\u0627\u062A \u063A\u064A\u0631 \u0645\u0624\u0643\u062F\u0629" }, 502);
-            }
+              // فشل فحص سجل الفائزين لا يجب أن يعطل تحميل طلبات المندوب.
+              // نُبقي حالات orders الأصلية كما هي ولا نفرض حالة تسليم مشتركة غير مؤكدة.
+              console.error("delivery_winners lookup failed", {
+                status: winnerResponse.status,
+                response: winnerRows
+              });
+            } else {
             const winnerMap = /* @__PURE__ */ new Map();
             for (const winner of winnerRows) {
               const key = String(winner.invoice_number || "").trim().toUpperCase().replace(/\s+/g, "") + "|" + String(winner.delivery_date || "").slice(0, 10);
@@ -1618,6 +1623,7 @@ var worker_default = {
                 sheet_name: winner.sheet_name || ""
               };
               row._delivered_by_other = String(winner.driver_user_id || "").toLowerCase() !== String(auth.user.id || "").toLowerCase();
+            }
             }
           }
         }
