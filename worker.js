@@ -3558,11 +3558,22 @@ export default {
             body: JSON.stringify({ p_request_id: requestId })
           }
         );
-        const approvalData = await approvalRes.json().catch(function () { return null; });
+        const approvalRaw = await approvalRes.text().catch(function () { return ""; });
+        let approvalData = null;
+        try { approvalData = approvalRaw ? JSON.parse(approvalRaw) : null; } catch (_) {}
         if (!approvalRes.ok) {
+          // Diagnostic only: log the database response (never credentials) so the
+          // exact PostgREST/RPC failure is visible in Cloudflare invocation logs.
+          console.error("[delivery-approval-rpc-error]", JSON.stringify({
+            request_id: requestId,
+            http_status: approvalRes.status,
+            response_body: String(approvalRaw || "").slice(0, 1600)
+          }));
+          const upstreamMessage = approvalData && (approvalData.message || approvalData.hint || approvalData.error || approvalData.details);
           return json({
-            error: (approvalData && (approvalData.message || approvalData.hint || approvalData.error)) || "تعذر تنفيذ اعتماد التسليم الآمن",
-            code: "delivery_approval_failed"
+            error: "فشل اعتماد التسليم في قاعدة البيانات (HTTP " + approvalRes.status + "): " + String(upstreamMessage || approvalRaw || "استجابة فارغة").slice(0, 900),
+            code: "delivery_approval_failed",
+            upstream_status: approvalRes.status
           }, 502);
         }
         const result = Array.isArray(approvalData) ? approvalData[0] : approvalData;
