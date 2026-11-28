@@ -3420,6 +3420,34 @@ var worker_default = {
         const a = await dedupeTable("master_orders_archive", false);
         return json({ success: true, orders: o, archive: a });
       }
+      if (path === "/api/master/order/release-future" && request.method === "POST") {
+        const auth = await requireMaster(request, env);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        const body = await request.json().catch(function () { return null; });
+        const orderNumber = String(body && body.order_number || "").trim();
+        const deliveryDate = String(body && body.delivery_date || "").slice(0, 10);
+        if (!orderNumber || !/^[a-zA-Z0-9_-]{1,80}$/.test(orderNumber) ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) {
+          return json({ success: false, error: "رقم الفاتورة أو تاريخ التوصيل غير صحيح؛ لم يتم تغيير أي بيانات" }, 400);
+        }
+        const parsedDate = new Date(deliveryDate + "T00:00:00Z");
+        if (!Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== deliveryDate) {
+          return json({ success: false, error: "تاريخ التوصيل غير صالح؛ لم يتم تغيير أي بيانات" }, 400);
+        }
+        const dubaiToday = new Date(Date.now() + 4 * 3600 * 1000).toISOString().slice(0, 10);
+        if (deliveryDate <= dubaiToday) {
+          return json({ success: false, error: "إذن الرفع مخصص لفواتير الأيام القادمة فقط؛ لم يتم تغيير أي بيانات", delivery_date: deliveryDate, dubai_today: dubaiToday }, 409);
+        }
+        // Explicit master release acknowledgement only: no invoice row is inserted, updated, or deleted here.
+        return json({
+          success: true,
+          released: true,
+          order_number: orderNumber,
+          delivery_date: deliveryDate,
+          release_revision: Date.now(),
+          database_changed: false
+        });
+      }
       if (path === "/api/master/order/recall-future" && request.method === "POST") {
         const auth = await requireMaster(request, env);
         if (auth.error) return json({ error: auth.error }, auth.status);
