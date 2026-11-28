@@ -1763,6 +1763,45 @@ export default {
           );
         }
 
+        // اعرض نتيجة الفائز على كل النسخ المتطابقة (رقم الفاتورة + تاريخ التوصيل)
+        // حتى لا تظل النسخة الأخرى في قائمة «قيد التوصيل» بعد أن سلّمها المندوب الآخر.
+        // لا نغيّر orders هنا؛ الإسناد المالي يظل لهوية الفائز في delivery_winners.
+        const winnerServiceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || "").trim();
+        if (safeOrders.length && winnerServiceKey) {
+          const winnerHeaders = { apikey: winnerServiceKey };
+          if (!winnerServiceKey.startsWith("sb_secret_")) winnerHeaders.Authorization = "Bearer " + winnerServiceKey;
+          const winnersResponse = await supabaseRequest(
+            "/rest/v1/delivery_winners?delivery_date=gte." + encodeURIComponent(dubaiDay) +
+            "&select=invoice_number,delivery_date,order_id,sheet_name,driver_user_id,driver_name,accepted_at&limit=10000",
+            { headers: winnerHeaders }
+          );
+          const winners = await winnersResponse.json().catch(function () { return null; });
+          if (winnersResponse.ok && Array.isArray(winners)) {
+            const normInvoice = function (value) { return String(value || "").trim().toUpperCase().replace(/\s+/g, ""); };
+            const winnerMap = new Map();
+            winners.forEach(function (winner) {
+              const key = normInvoice(winner.invoice_number) + "|" + String(winner.delivery_date || "").slice(0, 10);
+              if (key !== "|") winnerMap.set(key, winner);
+            });
+            safeOrders.forEach(function (row) {
+              const key = normInvoice(row.order_number) + "|" + String(row.delivery_date || "").slice(0, 10);
+              const winner = winnerMap.get(key);
+              if (!winner) return;
+              row.delivery_status = "delivered";
+              row._delivery_winner = {
+                driver_user_id: winner.driver_user_id || null,
+                driver_name: winner.driver_name || "",
+                accepted_at: winner.accepted_at || null,
+                order_id: winner.order_id || null,
+                sheet_name: winner.sheet_name || ""
+              };
+              row._delivered_by_other = String(winner.driver_user_id || "").toLowerCase() !== String(auth.user.id || "").toLowerCase();
+            });
+          } else {
+            console.error("[delivery-winners-read-failed]", winnersResponse.status, winners);
+          }
+        }
+
         // إظهار أرقام الهاتف للمندوب المصرح له فقط؛ لا نغيّر البيانات المخزنة في قاعدة البيانات.
         const canCall = auth.user.email === DRIVER_EMAILS.zain2;
         const safeOrders = (Array.isArray(orders) ? orders : []).map(function (row) {
