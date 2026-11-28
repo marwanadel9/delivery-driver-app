@@ -1940,30 +1940,6 @@ export default {
           return Object.assign({}, row, { _master_source: "master_orders_archive" });
         });
 
-        // Master display must follow the accepted winner for an invoice/day.
-        // Keep both underlying driver copies untouched; this only normalizes
-        // the status returned to the master UI.
-        const winnerResponse = await supabaseRequest(
-          "/rest/v1/delivery_winners?select=invoice_number,delivery_date,order_id,sheet_name&order=accepted_at.desc&limit=5000",
-          { headers: masterReadHeaders }
-        );
-        const winnerRows = await winnerResponse.json().catch(function () { return null; });
-        if (winnerResponse.ok && Array.isArray(winnerRows) && winnerRows.length) {
-          const normalizeInvoice = function (value) {
-            return String(value || "").trim().replace(/\\s+/g, "").toUpperCase();
-          };
-          const winnerKeys = new Set(winnerRows.map(function (winner) {
-            return normalizeInvoice(winner.invoice_number) + "|" + String(winner.delivery_date || "NO_DATE").slice(0, 10);
-          }));
-          for (const row of activeRows.concat(archivedRows)) {
-            const key = normalizeInvoice(row.order_number) + "|" + String(row.delivery_date || "NO_DATE").slice(0, 10);
-            if (winnerKeys.has(key)) {
-              row.delivery_status = "delivered";
-              row._delivery_winner_confirmed = true;
-            }
-          }
-        }
-
         return json({
           orders: activeRows.concat(archivedRows),
           active_count: activeRows.length,
@@ -3560,7 +3536,8 @@ export default {
         });
       }
 
-      // اعتماد طلب التسليم من الكمبيوتر فقط. لا يتم تحديث الفاتورة إلا بعد ضغط المستخدم للموافقة.
+      // اعتماد طلب التسليم من الماستر فقط عبر first-wins داخل PostgreSQL.
+      // يمنع اعتماد نسختي المندوبين معًا، ولا يحذف أو يغيّر النسخة الأخرى.
       if (path === "/api/excel-approve-delivery" && request.method === "POST") {
         const secret = request.headers.get("X-Excel-Sync-Secret") || "";
         if (!env.EXCEL_SYNC_SECRET || secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
@@ -3572,37 +3549,41 @@ export default {
         const H = { apikey: serviceKey, "Content-Type": "application/json" };
         if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
 
-        const getRes = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending&select=id,order_id,invoice_number,sheet_name&limit=1",
-          { headers: H }
+        // الاعتماد يتم داخل معاملة واحدة في PostgreSQL؛ أول مندوب يفوز
+        // على مستوى رقم الفاتورة + تاريخ التوصيل.
+        const approvalRes = await supabaseRequest(
+          "/rest/v1/rpc/faruj_approve_driver_delivery_first_wins",
+          {
+            method: "POST",
+            headers: Object.assign({}, H, { Prefer: "return=representation" }),
+            body: JSON.stringify({ p_request_id: requestId })
+          }
         );
-        const rows = await getRes.json().catch(function () { return null; });
-        if (!getRes.ok) return json({ error: (rows && (rows.message || rows.hint || rows.error)) || "تعذر قراءة طلب الاعتماد" }, 502);
-        if (!Array.isArray(rows) || !rows.length) return json({ error: "طلب الاعتماد غير موجود أو تمت معالجته مسبقًا" }, 404);
-        const req = rows[0];
-
-        const orderRes = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name) + "&select=id,delivery_date&limit=1",
-          { headers: H }
-        );
-        const orderRows = await orderRes.json().catch(function () { return null; });
-        if (!orderRes.ok || !Array.isArray(orderRows) || !orderRows.length) return json({ error: (orderRows && (orderRows.message || orderRows.hint || orderRows.error)) || "تعذر التحقق من الفاتورة قبل اعتماد التسليم" }, 502);
-        const approvalLock = rejectFutureDelivery(orderRows[0], dubaiDateKey(new Date()));
-        if (approvalLock) return approvalLock;
-
-        const updateRes = await supabaseRequest(
-          "/rest/v1/orders?id=eq." + encodeURIComponent(req.order_id) + "&sheet_name=eq." + encodeURIComponent(req.sheet_name),
-          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=representation" }), body: JSON.stringify({ delivery_status: "delivered" }) }
-        );
-        const changed = await updateRes.json().catch(function () { return null; });
-        if (!updateRes.ok || !Array.isArray(changed) || !changed.length) return json({ error: (changed && (changed.message || changed.hint || changed.error)) || "تعذر اعتماد حالة التسليم في الفاتورة" }, 502);
-
-        const doneRes = await supabaseRequest(
-          "/rest/v1/driver_delivery_requests?id=eq." + requestId + "&status=eq.pending",
-          { method: "PATCH", headers: Object.assign({}, H, { Prefer: "return=minimal" }), body: JSON.stringify({ status: "approved", processed_at: new Date().toISOString() }) }
-        );
-        if (!doneRes.ok) return json({ error: "تم تحديث الفاتورة لكن تعذر إغلاق طلب الاعتماد" }, 502);
-        return json({ success: true, order_number: req.invoice_number, delivery_status: "delivered" });
+        const approvalRaw = await approvalRes.text().catch(function () { return ""; });
+        let approvalData = null;
+        try { approvalData = approvalRaw ? JSON.parse(approvalRaw) : null; } catch (_) {}
+        if (!approvalRes.ok) {
+          console.error("[delivery-approval-rpc-error]", JSON.stringify({
+            request_id: requestId,
+            http_status: approvalRes.status,
+            response_body: String(approvalRaw || "").slice(0, 1600)
+          }));
+          const upstreamMessage = approvalData && (approvalData.message || approvalData.hint || approvalData.error || approvalData.details);
+          return json({
+            error: "فشل اعتماد التسليم في قاعدة البيانات (HTTP " + approvalRes.status + "): " + String(upstreamMessage || approvalRaw || "استجابة فارغة").slice(0, 900),
+            code: "delivery_approval_failed",
+            upstream_status: approvalRes.status
+          }, 502);
+        }
+        const result = Array.isArray(approvalData) ? approvalData[0] : approvalData;
+        if (!result || typeof result !== "object") return json({ error: "استجابة اعتماد التسليم غير مفهومة" }, 502);
+        if (result.success === true && result.approved === true) {
+          return json({ success: true, approved: true, order_number: result.invoice_number || "", sheet_name: result.sheet_name || "", delivery_status: "delivered", winner: true });
+        }
+        if (result.conflict === true || result.approved === false) {
+          return json({ success: false, approved: false, conflict: result.conflict === true, error: result.message || "تم اعتماد نسخة الفاتورة من المندوب الآخر بالفعل؛ لم يتم اعتماد هذه النسخة.", order_number: result.invoice_number || "", winner_sheet_name: result.winner_sheet_name || "" }, 409);
+        }
+        return json({ error: result.message || "لم يتم اعتماد طلب التسليم", code: result.code || "not_approved" }, 409);
       }
 
       if (path === "/api/resolve-map" && request.method === "POST") {
