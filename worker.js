@@ -2167,10 +2167,11 @@ export default {
         const serviceHeaders = { apikey: serviceKey };
         if (!serviceKey.startsWith("sb_secret_")) serviceHeaders.Authorization = "Bearer " + serviceKey;
 
-        // تأكد أن الفاتورة تخص هذا المندوب، ولا تغيّر حالة الفاتورة هنا.
+        // اسمح للمندوب بطلب تسليم أي نسخة ظاهرة له، حتى لو كانت النسخة
+        // مسجلة تحت شيت المندوب الآخر. هوية المنفذ الفعلي تحفظ من جلسة الدخول.
+        // لا نغيّر حالة الفاتورة هنا؛ الاعتماد النهائي يمر عبر first-wins.
         const orderResponse = await supabaseRequest(
           "/rest/v1/orders?id=eq." + encodeURIComponent(orderId) +
-          "&sheet_name=eq." + encodeURIComponent(auth.driver.sheet_name) +
           "&select=id,order_number,customer_name,sheet_name,delivery_status,paid_in_advance,delivery_date&limit=1",
           { headers: serviceHeaders }
         );
@@ -2197,7 +2198,8 @@ export default {
             body: JSON.stringify({
               order_id: order.id,
               invoice_number: String(order.order_number || order.id),
-              sheet_name: String(auth.driver.sheet_name || ""),
+              // sheet_name = مالك نسخة الفاتورة في orders، وليس هوية من نفّذ التسليم.
+              sheet_name: String(order.sheet_name || ""),
               driver_user_id: auth.user.id,
               driver_name: String(auth.driver.mandoub_name || ""),
               status: "pending",
@@ -3537,7 +3539,8 @@ export default {
       }
 
       // اعتماد طلب التسليم من الماستر فقط عبر first-wins داخل PostgreSQL.
-      // يمنع اعتماد نسختي المندوبين معًا، ولا يحذف أو يغيّر النسخة الأخرى.
+      // صاحب نسخة الفاتورة (sheet_name) منفصل عن المندوب الذي نفّذ التسليم
+      // (driver_user_id / driver_name)، والفائز الفعلي هو من يُحتسب له التسليم.
       if (path === "/api/excel-approve-delivery" && request.method === "POST") {
         const secret = request.headers.get("X-Excel-Sync-Secret") || "";
         if (!env.EXCEL_SYNC_SECRET || secret !== env.EXCEL_SYNC_SECRET) return json({ error: "غير مصرح" }, 401);
@@ -3549,8 +3552,6 @@ export default {
         const H = { apikey: serviceKey, "Content-Type": "application/json" };
         if (!serviceKey.startsWith("sb_secret_")) H.Authorization = "Bearer " + serviceKey;
 
-        // الاعتماد يتم داخل معاملة واحدة في PostgreSQL؛ أول مندوب يفوز
-        // على مستوى رقم الفاتورة + تاريخ التوصيل.
         const approvalRes = await supabaseRequest(
           "/rest/v1/rpc/faruj_approve_driver_delivery_first_wins",
           {
@@ -3578,12 +3579,13 @@ export default {
         const result = Array.isArray(approvalData) ? approvalData[0] : approvalData;
         if (!result || typeof result !== "object") return json({ error: "استجابة اعتماد التسليم غير مفهومة" }, 502);
         if (result.success === true && result.approved === true) {
-          return json({ success: true, approved: true, order_number: result.invoice_number || "", sheet_name: result.sheet_name || "", delivery_status: "delivered", winner: true });
+          const liveNotified = await broadcastOrdersChanged(env, "driver_delivery_approved");
+          return json({ success: true, approved: true, order_number: result.invoice_number || "", sheet_name: result.sheet_name || "", delivery_status: "delivered", winner: true, attributed_driver: result.driver_name || "", live_notified: liveNotified });
         }
         if (result.conflict === true || result.approved === false) {
           return json({ success: false, approved: false, conflict: result.conflict === true, error: result.message || "تم اعتماد نسخة الفاتورة من المندوب الآخر بالفعل؛ لم يتم اعتماد هذه النسخة.", order_number: result.invoice_number || "", winner_sheet_name: result.winner_sheet_name || "" }, 409);
         }
-        return json({ error: result.message || "لم يتم اعتماد طلب التسليم", code: result.code || "not_approved" }, 409);
+        return json({ error: result.message || "تعذر اعتماد التسليم" }, 409);
       }
 
       if (path === "/api/resolve-map" && request.method === "POST") {
