@@ -2819,6 +2819,23 @@ var worker_default = {
           );
         }
         const orders = Array.isArray(body) ? body : Array.isArray(body.orders) ? body.orders : [];
+        /* حماية قبل لمس قاعدة البيانات: لا نقبل حمولة فارغة أو فاتورة بلا هوية أو نسخًا مكررة لنفس المندوب. */
+        if (!orders.length) return json({ success: false, error: "قائمة الفواتير فارغة؛ لم يتم تنفيذ أي تغيير" }, 400);
+        const uploadKeys = new Set();
+        for (let i = 0; i < orders.length; i++) {
+          const order = orders[i];
+          const number = String(order && (order.order_number || order.invoice_number) || "").trim().toUpperCase();
+          const sheet = String(order && order.sheet_name || "").trim();
+          if (!order || typeof order !== "object" || !number || !sheet) {
+            return json({ success: false, error: "بيانات الفاتورة رقم " + (i + 1) + " ناقصة (رقم الفاتورة أو اسم المندوب)؛ أُوقف الرفع بالكامل" }, 400);
+          }
+          if (!Number.isFinite(Number(order.total)) || Number(order.total) < 0) {
+            return json({ success: false, error: "إجمالي الفاتورة " + number + " غير صالح؛ أُوقف الرفع بالكامل" }, 400);
+          }
+          const key = number + "|" + sheet;
+          if (uploadKeys.has(key)) return json({ success: false, error: "الفاتورة " + number + " مكررة لنفس المندوب داخل الرفع؛ أُوقف الرفع بالكامل" }, 409);
+          uploadKeys.add(key);
+        }
         const clearInvoices = Array.from(new Set(
           orders.filter(function(order) {
             return order && (order.clear_gate_photos === true || order.clear_gate_photos === 1 || String(order.clear_gate_photos).toLowerCase() === "true");
@@ -2849,11 +2866,15 @@ var worker_default = {
         if (!rpcResponse.ok) {
           return json(
             {
-              error: rpcData && rpcData.message || rpcData && rpcData.hint || rpcData && rpcData.error || "\u0641\u0634\u0644 \u0645\u0632\u0627\u0645\u0646\u0629 Excel"
+              success: false,
+              error: rpcData && rpcData.message || rpcData && rpcData.hint || rpcData && rpcData.error || "\u0641\u0634\u0644 \u0645\u0632\u0627\u0645\u0646\u0629 Excel",
+              received: orders.length,
+              processed: 0
             },
             500
           );
         }
+        if (rpcData === null) return json({ success: false, error: "قاعدة البيانات لم تُرجع نتيجة مؤكدة؛ لن يتم اعتماد الرفع محليًا", received: orders.length, processed: 0 }, 502);
         let skippedOldRevision = null;
         if (rpcData && typeof rpcData === "object") {
           const rpcResult = Array.isArray(rpcData) ? rpcData[0] || {} : rpcData;
@@ -2861,6 +2882,9 @@ var worker_default = {
           if (rawSkipped !== void 0 && rawSkipped !== null && Number.isFinite(Number(rawSkipped))) {
             skippedOldRevision = Number(rawSkipped);
           }
+        }
+        if (skippedOldRevision !== null && skippedOldRevision > 0) {
+          return json({ success: false, error: "قاعدة البيانات تجاهلت " + skippedOldRevision + " فاتورة بسبب تعارض المراجعة. لم يعتمد الكمبيوتر الرفع؛ أعد فحص الفواتير قبل المحاولة مرة أخرى", received: orders.length, processed: Math.max(0, orders.length - skippedOldRevision), skipped_old_revision: skippedOldRevision, possible_partial_commit: true }, 409);
         }
         let photosDeletionSkipped = false;
         if (clearInvoices.length && skippedOldRevision === 0) {
@@ -2876,6 +2900,8 @@ var worker_default = {
         }
         return json({
           success: true,
+          received: orders.length,
+          processed: orders.length,
           data: rpcData,
           gate_photos_cleared: skippedOldRevision === 0 ? clearInvoices.length : 0,
           gate_photo_files_deleted: deletedPhotoCounts,
